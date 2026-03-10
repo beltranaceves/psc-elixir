@@ -1,10 +1,4 @@
 {
   "schemaVersion": 2,
-  "dockerfilePath": "./Dockerfile",
-  "containerHttpPort": 4000,
-  "environment": [
-    "PHX_SERVER=true",
-    "MIX_ENV=prod"
-  ],
-  "volumes": []
+  "dockerfilePath": "./Dockerfile"
 }
