@@ -1,5 +1,11 @@
 {
   "schemaVersion": 2,
   "dockerfilePath": "./Dockerfile",
-  "preDeploymentScript": "/app/bin/migrate"
+  "imageName": "psc",
+  "containerHttpPort": 4000,
+  "environment": [
+    "PHX_SERVER=true",
+    "MIX_ENV=prod"
+  ],
+  "volumes": []
 }
