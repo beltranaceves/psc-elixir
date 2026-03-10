@@ -1,7 +1,6 @@
 {
   "schemaVersion": 2,
   "dockerfilePath": "./Dockerfile",
-  "imageName": "psc",
   "containerHttpPort": 4000,
   "environment": [
     "PHX_SERVER=true",
