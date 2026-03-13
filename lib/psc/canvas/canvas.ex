@@ -6,7 +6,7 @@ defmodule Psc.Canvas.Canvas do
     field :name, :string
     field :description, :string
 
-    belongs_to :author, :users, type: :binary_id
+    belongs_to :author, Psc.Accounts.User, type: :binary_id
 
     embeds_many :permissions, Psc.Canvas.Permission, on_replace: :delete
 
