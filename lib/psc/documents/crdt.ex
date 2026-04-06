@@ -86,14 +86,14 @@ defmodule Psc.Documents.CRDT do
   defp find_insertion_point(old_text, new_text) do
     old_len = String.length(old_text)
     new_len = String.length(new_text)
-    
+
     # Find where the texts diverge
     pos = find_first_diff_position(old_text, new_text, 0)
-    
+
     # Get the inserted text
     inserted_length = new_len - old_len
     inserted_text = String.slice(new_text, pos, inserted_length)
-    
+
     # Create one insert operation per character
     inserted_text
     |> String.graphemes()
@@ -106,10 +106,10 @@ defmodule Psc.Documents.CRDT do
   defp find_deletion_point(old_text, new_text) do
     # Find where the texts diverge
     pos = find_first_diff_position(old_text, new_text, 0)
-    
+
     # How many characters were deleted
     deleted_count = String.length(old_text) - String.length(new_text)
-    
+
     # Create one delete operation per deleted character
     Enum.map(1..deleted_count, fn _ ->
       %{"type" => "delete", "pos" => pos}
@@ -119,7 +119,7 @@ defmodule Psc.Documents.CRDT do
   defp find_first_diff_position(str1, str2, pos) do
     len1 = String.length(str1)
     len2 = String.length(str2)
-    
+
     cond do
       pos >= len1 or pos >= len2 ->
         pos

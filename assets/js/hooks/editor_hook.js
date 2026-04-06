@@ -2,6 +2,13 @@ export default {
   mounted() {
     this.currentUserId = this.el.dataset.currentUserId;
     
+    // Initialize textarea with the value attribute from the server
+    // The textarea has phx-update="ignore" so we need to set it manually
+    const initialValue = this.el.getAttribute('value');
+    if (initialValue) {
+      this.el.value = initialValue;
+    }
+    
     this.handleEvent("content_updated", ({ newContent, fromUserId }) => {
       // Special case: resync from server (fromUserId = -1)
       // Always apply server resyncs regardless of focus state

@@ -7,6 +7,7 @@ defmodule Psc.Documents do
   alias Psc.Repo
   alias Psc.Documents.{Document, DocumentEvent}
   alias Psc.Documents.CRDT
+  alias Psc.Documents.SnapshotManager
 
   @pubsub_topic_prefix "document:"
 
@@ -107,6 +108,9 @@ defmodule Psc.Documents do
   The operation is a delta in the format:
   %{"type" => "insert", "pos" => pos, "char" => char}
   %{"type" => "delete", "pos" => pos}
+
+  NOTE: This only persists the event and broadcasts it.
+  Content is persisted separately via save_content_to_db/2 on idle/timer.
   """
   def apply_operation(document_id, user_id, operation) do
     # Get next sequence number
@@ -122,14 +126,9 @@ defmodule Psc.Documents do
 
     case Repo.insert(DocumentEvent.changeset(%DocumentEvent{}, event_attrs)) do
       {:ok, _event} ->
-        # Broadcast to all subscribers  
+        # Broadcast to all subscribers
         broadcast_operation(document_id, user_id, operation, seq)
-
-        # Rebuild and save current content to document
-        content = build_content_from_events(document_id)
-        update_document_content(document_id, content)
-
-        {:ok, content}
+        {:ok, seq}
 
       {:error, changeset} ->
         {:error, changeset}
@@ -148,27 +147,62 @@ defmodule Psc.Documents do
   end
 
   @doc """
-  Update the document's content snapshot.
+  Save content to database. Used on idle/timer triggers.
+  Also updates snapshot_seq to indicate the content is built through which event sequence.
+  This ensures proper loading: we load content + replay events after snapshot_seq.
   """
-  defp update_document_content(document_id, content) do
+  def save_content_to_db(document_id, content) do
+    # Get the current max sequence number so we know content is built through this point
+    max_seq =
+      Repo.one(
+        from(e in DocumentEvent,
+          where: e.document_id == ^document_id,
+          select: max(e.seq)
+        )
+      ) || 0
+
     document_id
     |> get_document()
-    |> Document.changeset(%{content: content})
+    |> Document.changeset(%{content: content, snapshot_seq: max_seq})
     |> Repo.update()
   end
 
   @doc """
-  Build content from all stored events using the CRDT module.
+  Build content from events using snapshots for efficiency.
+  If a snapshot exists, only replays events after it.
+  Much faster than replaying all events from the beginning.
   """
   def build_content_from_events(document_id) do
-    CRDT.rebuild_text(document_id)
+    SnapshotManager.load_with_snapshot(document_id)
   end
 
   @doc """
-  Get document content as a string from stored events.
+  Get document content - uses snapshots for faster loading.
   """
   def get_document_content(document_id) do
-    build_content_from_events(document_id)
+    SnapshotManager.load_with_snapshot(document_id)
+  end
+
+  @doc """
+  Create a snapshot of the document's current state.
+  Call periodically to reduce the number of events to replay.
+  """
+  def create_snapshot(document_id) do
+    SnapshotManager.create_snapshot(document_id)
+  end
+
+  @doc """
+  Check if document should be snapshotted based on event count.
+  """
+  def should_snapshot?(document_id) do
+    SnapshotManager.should_create_snapshot?(document_id)
+  end
+
+  @doc """
+  Get snapshot statistics for a document.
+  """
+  def get_snapshot_stats(document_id) do
+    SnapshotManager.get_stats(document_id)
   end
 
   @doc """

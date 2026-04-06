@@ -6,6 +6,9 @@ defmodule PscWeb.DocumentLive.Editor do
   alias PscWeb.Presence
 
   @consistency_check_interval 5000  # Check every 5 seconds
+  @snapshot_check_interval 10000    # Check if snapshot needed every 10 seconds
+  @idle_save_interval 1500          # Save after 1.5 seconds of inactivity
+  @periodic_save_interval 10000     # Save every 10 seconds as fallback
 
   @impl true
   def mount(%{"id" => document_id}, _session, socket) do
@@ -28,11 +31,15 @@ defmodule PscWeb.DocumentLive.Editor do
         |> assign(:presence, %{})
         |> assign(:content, content)
         |> assign(:last_saved_content, content)
+        |> assign(:save_state, :saved)  # :saved, :unsaved, :saving
+        |> assign(:idle_timer_ref, nil)
         |> subscribe_to_document(document_id)
 
-      # Schedule periodic consistency checks
+      # Schedule periodic consistency checks and snapshot checks
       if connected?(socket) do
         Process.send_after(self(), :check_consistency, @consistency_check_interval)
+        Process.send_after(self(), :check_snapshot, @snapshot_check_interval)
+        Process.send_after(self(), :periodic_save, @periodic_save_interval)
       end
 
       {:ok, socket}
@@ -84,7 +91,23 @@ defmodule PscWeb.DocumentLive.Editor do
       cursor_pos: String.length(new_content)
     })
 
-    {:noreply, assign(socket, content: new_content, last_saved_content: new_content)}
+    # Cancel any pending idle save timer
+    socket =
+      if socket.assigns.idle_timer_ref do
+        Process.cancel_timer(socket.assigns.idle_timer_ref)
+        assign(socket, idle_timer_ref: nil)
+      else
+        socket
+      end
+
+    # Schedule new idle save timer
+    idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
+
+    {:noreply,
+     socket
+     |> assign(:content, new_content)
+     |> assign(:save_state, :unsaved)
+     |> assign(:idle_timer_ref, idle_timer_ref)}
   end
 
   @impl true
@@ -136,17 +159,75 @@ defmodule PscWeb.DocumentLive.Editor do
   end
 
   @impl true
+  def handle_info(:idle_save, socket) do
+    # Save content after idle period
+    if socket.assigns.content != socket.assigns.last_saved_content do
+      socket = assign(socket, save_state: :saving)
+
+      case Documents.save_content_to_db(socket.assigns.document_id, socket.assigns.content) do
+        {:ok, _} ->
+          :telemetry.execute(
+            [:psc, :document, :content_saved],
+            %{document_id: socket.assigns.document_id, source: :idle}
+          )
+
+          {:noreply,
+           socket
+           |> assign(:last_saved_content, socket.assigns.content)
+           |> assign(:save_state, :saved)
+           |> assign(:idle_timer_ref, nil)}
+
+        {:error, _} ->
+          {:noreply,
+           socket
+           |> assign(:save_state, :unsaved)
+           |> assign(:idle_timer_ref, nil)}
+      end
+    else
+      {:noreply, assign(socket, idle_timer_ref: nil)}
+    end
+  end
+
+  @impl true
+  def handle_info(:periodic_save, socket) do
+    # Save content periodically as a safety net
+    socket =
+      if socket.assigns.content != socket.assigns.last_saved_content do
+        case Documents.save_content_to_db(socket.assigns.document_id, socket.assigns.content) do
+          {:ok, _} ->
+            :telemetry.execute(
+              [:psc, :document, :content_saved],
+              %{document_id: socket.assigns.document_id, source: :periodic}
+            )
+
+            socket
+            |> assign(:last_saved_content, socket.assigns.content)
+            |> assign(:save_state, :saved)
+
+          {:error, _} ->
+            socket
+        end
+      else
+        socket
+      end
+
+    # Reschedule periodic save
+    Process.send_after(self(), :periodic_save, @periodic_save_interval)
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info({:operation, user_id, operation, _seq}, socket) do
     # Only update if not from current user (avoid echoing back)
     if user_id != socket.assigns.user_id do
       # Apply the operation directly instead of rebuilding
       # This is more efficient and avoids race conditions
       new_content = CRDT.apply_operation(operation, socket.assigns.content)
-      
+
       # Push event to the hook to update the textarea
       # Include the user_id so the hook knows this is from another user
       socket = push_event(socket, "content_updated", %{"newContent" => new_content, "fromUserId" => user_id})
-      
+
       {:noreply, assign(socket, content: new_content)}
     else
       {:noreply, socket}
@@ -185,6 +266,29 @@ defmodule PscWeb.DocumentLive.Editor do
     end
   end
 
+  @impl true
+  def handle_info(:check_snapshot, socket) do
+    # Check if a snapshot should be created (after many operations)
+    if Documents.should_snapshot?(socket.assigns.document_id) do
+      case Documents.create_snapshot(socket.assigns.document_id) do
+        {:ok, _document} ->
+          # Snapshot created successfully
+          :telemetry.execute(
+            [:psc, :document, :snapshot_created],
+            %{document_id: socket.assigns.document_id}
+          )
+
+        {:error, _changeset} ->
+          # Snapshot creation failed - not critical, will retry next interval
+          :ok
+      end
+    end
+
+    # Schedule next snapshot check
+    Process.send_after(self(), :check_snapshot, @snapshot_check_interval)
+    {:noreply, socket}
+  end
+
   defp handle_presence_change(socket, document_id) do
     presence_list = Presence.list("presence:#{document_id}")
     assign(socket, presence: presence_list)
@@ -198,13 +302,31 @@ defmodule PscWeb.DocumentLive.Editor do
         <%!-- Header --%>
         <div class="border-b border-gray-300 bg-white px-6 py-4 shadow-sm">
           <div class="flex items-center justify-between">
-            <div>
+            <div class="flex items-center gap-4">
               <input
                 type="text"
                 value={@document.title}
                 class="text-2xl font-bold text-gray-900 bg-white border-b-2 border-transparent hover:border-blue-300 focus:outline-none focus:border-blue-500 px-2"
                 placeholder="Untitled Document"
               />
+              <%!-- Save Status Indicator --%>
+              <%= cond do %>
+                <% @save_state == :saving -> %>
+                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-amber-700 bg-amber-100">
+                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin"></div>
+                    <span>Saving...</span>
+                  </div>
+                <% @save_state == :saved -> %>
+                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-green-700 bg-green-100">
+                    <.icon name="hero-check-circle" class="w-4 h-4" />
+                    <span>Saved</span>
+                  </div>
+                <% true -> %>
+                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-gray-700 bg-gray-100">
+                    <.icon name="hero-exclamation-circle" class="w-4 h-4" />
+                    <span>Unsaved changes</span>
+                  </div>
+              <% end %>
             </div>
             <.link
               navigate={~p"/documents"}
