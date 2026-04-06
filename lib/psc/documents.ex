@@ -6,6 +6,7 @@ defmodule Psc.Documents do
   import Ecto.Query, warn: false
   alias Psc.Repo
   alias Psc.Documents.{Document, DocumentEvent}
+  alias Psc.Documents.CRDT
 
   @pubsub_topic_prefix "document:"
 
@@ -103,6 +104,9 @@ defmodule Psc.Documents do
 
   @doc """
   Apply an operation to the document and broadcast it.
+  The operation is a delta in the format:
+  %{"type" => "insert", "pos" => pos, "char" => char}
+  %{"type" => "delete", "pos" => pos}
   """
   def apply_operation(document_id, user_id, operation) do
     # Get next sequence number
@@ -116,32 +120,48 @@ defmodule Psc.Documents do
       user_id: user_id
     }
 
-    {:ok, _event} = Repo.insert(DocumentEvent.changeset(%DocumentEvent{}, event_attrs))
+    case Repo.insert(DocumentEvent.changeset(%DocumentEvent{}, event_attrs)) do
+      {:ok, _event} ->
+        # Broadcast to all subscribers  
+        broadcast_operation(document_id, user_id, operation, seq)
 
-    # Broadcast to all subscribers
+        # Rebuild and save current content to document
+        content = build_content_from_events(document_id)
+        update_document_content(document_id, content)
+
+        {:ok, content}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  @doc """
+  Broadcast an operation to all subscribers.
+  """
+  defp broadcast_operation(document_id, user_id, operation, seq) do
     Phoenix.PubSub.broadcast(
       Psc.PubSub,
       pubsub_topic(document_id),
       {:operation, user_id, operation, seq}
     )
-
-    {:ok, build_content_from_events(document_id)}
   end
 
   @doc """
-  Build content from all stored events.
+  Update the document's content snapshot.
+  """
+  defp update_document_content(document_id, content) do
+    document_id
+    |> get_document()
+    |> Document.changeset(%{content: content})
+    |> Repo.update()
+  end
+
+  @doc """
+  Build content from all stored events using the CRDT module.
   """
   def build_content_from_events(document_id) do
-    events =
-      from(e in DocumentEvent,
-        where: e.document_id == ^document_id,
-        order_by: [asc: e.seq]
-      )
-      |> Repo.all()
-
-    Enum.reduce(events, "", fn event, content ->
-      apply_operation_to_content(content, event.operation)
-    end)
+    CRDT.rebuild_text(document_id)
   end
 
   @doc """
@@ -149,6 +169,13 @@ defmodule Psc.Documents do
   """
   def get_document_content(document_id) do
     build_content_from_events(document_id)
+  end
+
+  @doc """
+  Convert text changes to delta operations.
+  """
+  def text_to_operations(old_text, new_text) do
+    CRDT.text_to_deltas(old_text, new_text)
   end
 
   @doc """
@@ -165,31 +192,4 @@ defmodule Psc.Documents do
       max_seq -> max_seq + 1
     end
   end
-
-  @doc """
-  Apply an operation to the content string.
-  """
-  defp apply_operation_to_content(content, %{"type" => "insert", "pos" => pos, "char" => char}) do
-    # Ensure pos is within bounds
-    pos = min(pos, String.length(content))
-    pos = max(0, pos)
-
-    before = String.slice(content, 0..pos - 1)
-    after_part = String.slice(content, pos..-1)
-
-    before <> char <> after_part
-  end
-
-  defp apply_operation_to_content(content, %{"type" => "delete", "pos" => pos}) do
-    # Ensure pos is within bounds
-    if pos >= 0 and pos < String.length(content) do
-      before = String.slice(content, 0..pos - 1)
-      after_part = String.slice(content, (pos + 1)..-1)
-      before <> after_part
-    else
-      content
-    end
-  end
-
-  defp apply_operation_to_content(content, _), do: content
 end

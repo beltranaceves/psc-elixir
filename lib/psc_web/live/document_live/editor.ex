@@ -1,7 +1,11 @@
 defmodule PscWeb.DocumentLive.Editor do
   use PscWeb, :live_view
   alias Psc.Documents
+  alias Psc.Documents.CRDT
+  alias Psc.Documents.ConsistencyManager
   alias PscWeb.Presence
+
+  @consistency_check_interval 5000  # Check every 5 seconds
 
   @impl true
   def mount(%{"id" => document_id}, _session, socket) do
@@ -11,8 +15,10 @@ defmodule PscWeb.DocumentLive.Editor do
     user_email = socket.assigns.current_scope.user.email
 
     if Documents.can_access_document?(document, user_email) do
-      {
-        :ok,
+      # Load initial content from database
+      content = Documents.get_document_content(document_id)
+
+      socket =
         socket
         |> assign(:document, document)
         |> assign(:document_id, document_id)
@@ -20,9 +26,16 @@ defmodule PscWeb.DocumentLive.Editor do
         |> assign(:username, socket.assigns.current_scope.user.email)
         |> assign(:cursor_pos, 0)
         |> assign(:presence, %{})
-        |> assign(:content, "")
+        |> assign(:content, content)
+        |> assign(:last_saved_content, content)
         |> subscribe_to_document(document_id)
-      }
+
+      # Schedule periodic consistency checks
+      if connected?(socket) do
+        Process.send_after(self(), :check_consistency, @consistency_check_interval)
+      end
+
+      {:ok, socket}
     else
       {:ok, redirect(socket, to: ~p"/documents")}
     end
@@ -54,15 +67,15 @@ defmodule PscWeb.DocumentLive.Editor do
   end
 
   @impl true
-  def handle_event("update_content", %{"value" => new_content}, socket) do
+  def handle_event("update_content", %{"content" => new_content}, socket) do
     old_content = socket.assigns.content
 
-    # Detect changes (simple diff)
-    changes = diff_content(old_content, new_content)
+    # Detect changes using CRDT delta diff
+    operations = Documents.text_to_operations(old_content, new_content)
 
-    # Apply each change and broadcast
-    Enum.each(changes, fn change ->
-      Documents.apply_operation(socket.assigns.document_id, socket.assigns.user_id, change)
+    # Apply each operation and broadcast
+    Enum.each(operations, fn operation ->
+      Documents.apply_operation(socket.assigns.document_id, socket.assigns.user_id, operation)
     end)
 
     # Update presence with cursor position
@@ -71,7 +84,7 @@ defmodule PscWeb.DocumentLive.Editor do
       cursor_pos: String.length(new_content)
     })
 
-    {:noreply, assign(socket, content: new_content)}
+    {:noreply, assign(socket, content: new_content, last_saved_content: new_content)}
   end
 
   @impl true
@@ -123,13 +136,18 @@ defmodule PscWeb.DocumentLive.Editor do
   end
 
   @impl true
-  def handle_info({:operation, user_id, _operation, _seq}, socket) do
-    # Rebuild content from events
-    content = Documents.get_document_content(socket.assigns.document_id)
-
+  def handle_info({:operation, user_id, operation, _seq}, socket) do
     # Only update if not from current user (avoid echoing back)
     if user_id != socket.assigns.user_id do
-      {:noreply, assign(socket, content: content)}
+      # Apply the operation directly instead of rebuilding
+      # This is more efficient and avoids race conditions
+      new_content = CRDT.apply_operation(operation, socket.assigns.content)
+      
+      # Push event to the hook to update the textarea
+      # Include the user_id so the hook knows this is from another user
+      socket = push_event(socket, "content_updated", %{"newContent" => new_content, "fromUserId" => user_id})
+      
+      {:noreply, assign(socket, content: new_content)}
     else
       {:noreply, socket}
     end
@@ -138,6 +156,33 @@ defmodule PscWeb.DocumentLive.Editor do
   @impl true
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
     {:noreply, handle_presence_change(socket, socket.assigns.document_id)}
+  end
+
+  @impl true
+  def handle_info(:check_consistency, socket) do
+    # Verify that client state matches server state
+    case ConsistencyManager.verify_consistency(socket.assigns.document_id, socket.assigns.content) do
+      :ok ->
+        # Client is consistent with server, schedule next check
+        Process.send_after(self(), :check_consistency, @consistency_check_interval)
+        {:noreply, socket}
+
+      {:diverged, server_text} ->
+        # Client has diverged from server - resync to authoritative state
+        socket = push_event(socket, "content_updated", %{
+          "newContent" => server_text,
+          "fromUserId" => -1  # Special ID indicating server resync
+        })
+
+        # Log the divergence for debugging
+        :telemetry.execute(
+          [:psc, :document, :consistency_divergence],
+          %{document_id: socket.assigns.document_id, user_id: socket.assigns.user_id}
+        )
+
+        Process.send_after(self(), :check_consistency, @consistency_check_interval)
+        {:noreply, assign(socket, content: server_text)}
+    end
   end
 
   defp handle_presence_change(socket, document_id) do
@@ -174,13 +219,18 @@ defmodule PscWeb.DocumentLive.Editor do
         <div class="flex flex-1 overflow-hidden bg-gray-50">
           <%!-- Editor --%>
           <div class="flex-1 flex flex-col">
-            <textarea
-              phx-change="update_content"
-              id="editor"
-              class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
-              placeholder="Start typing..."
-              value={@content}
-            ></textarea>
+            <.form for={%{}} id="editor-form" phx-change="update_content" class="flex-1 flex flex-col">
+              <textarea
+                name="content"
+                id="editor"
+                phx-hook="EditorHook"
+                phx-update="ignore"
+                data-current-user-id={@user_id}
+                class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                placeholder="Start typing..."
+                value={@content}
+              ></textarea>
+            </.form>
           </div>
 
           <%!-- Presence Sidebar --%>
@@ -268,38 +318,5 @@ defmodule PscWeb.DocumentLive.Editor do
   defp document_url(assigns) do
     # Build a shareable URL - in production, use the actual host
     "/documents/#{assigns.document_id}"
-  end
-
-  # Simple text diffing to detect insertions/deletions
-  defp diff_content(old_text, new_text) when old_text == new_text do
-    []
-  end
-
-  defp diff_content(old_text, new_text) when byte_size(new_text) > byte_size(old_text) do
-    # Insertion detected
-    old_len = String.length(old_text)
-    new_len = String.length(new_text)
-    pos = find_first_diff(old_text, new_text, 0)
-
-    [%{"type" => "insert", "pos" => pos, "char" => String.slice(new_text, pos..(pos + 1))}]
-  end
-
-  defp diff_content(old_text, new_text) do
-    # Deletion detected
-    pos = find_first_diff(old_text, new_text, 0)
-    [%{"type" => "delete", "pos" => pos}]
-  end
-
-  defp find_first_diff(str1, str2, pos) do
-    cond do
-      pos >= String.length(str1) or pos >= String.length(str2) ->
-        pos
-
-      String.at(str1, pos) == String.at(str2, pos) ->
-        find_first_diff(str1, str2, pos + 1)
-
-      true ->
-        pos
-    end
   end
 end
