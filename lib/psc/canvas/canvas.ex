@@ -2,13 +2,14 @@ defmodule Psc.Canvas.Canvas do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @primary_key {:id, :binary_id, autogenerate: true}
+
   schema "canvases" do
     field :name, :string
     field :description, :string
+    field :shared_with, {:array, :string}, default: []
 
-    belongs_to :author, Psc.Accounts.User, type: :binary_id
-
-    embeds_many :permissions, Psc.Canvas.Permission, on_replace: :delete
+    belongs_to :author, Psc.Accounts.User, type: :id
 
     # All 12 cells
     embeds_one :problem, Psc.Canvas.Problem, on_replace: :delete
@@ -29,9 +30,8 @@ defmodule Psc.Canvas.Canvas do
 
   def changeset(canvas, attrs) do
     canvas
-    |> cast(attrs, [:name, :description, :author_id])
+    |> cast(attrs, [:name, :description, :author_id, :shared_with])
     |> validate_required([:name, :author_id])
-    |> cast_embed(:permissions)
     |> cast_embed(:problem)
     |> cast_embed(:leverage)
     |> cast_embed(:solution_cluster)
