@@ -68,7 +68,8 @@ defmodule Psc.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:mishka_chelekom, "~> 0.0.8", only: :dev}
+      {:mishka_chelekom, "~> 0.0.8", only: :dev},
+      {:justify, "~> 1.2"}
     ]
   end
 
