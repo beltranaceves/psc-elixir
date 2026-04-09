@@ -14,6 +14,5 @@ defmodule Psc.Canvas.Leverage do
   def changeset(cell, attrs) do
     cell
     |> cast(attrs, [:row, :column, :technology, :components, :information, :human_resources])
-    |> validate_required([:row, :column, :technology, :components, :information, :human_resources])
   end
 end

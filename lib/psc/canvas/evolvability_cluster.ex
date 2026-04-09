@@ -13,6 +13,5 @@ defmodule Psc.Canvas.EvolvabilityCluster do
   def changeset(cell, attrs) do
     cell
     |> cast(attrs, [:row, :column, :evolvability, :diffusibility, :adoptability])
-    |> validate_required([:row, :column, :evolvability, :diffusibility, :adoptability])
   end
 end

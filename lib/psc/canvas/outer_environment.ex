@@ -14,6 +14,5 @@ defmodule Psc.Canvas.OuterEnvironment do
   def changeset(cell, attrs) do
     cell
     |> cast(attrs, [:row, :column, :external_services, :external_implements, :external_repositories, :external_people])
-    |> validate_required([:row, :column, :external_services, :external_implements, :external_repositories, :external_people])
   end
 end

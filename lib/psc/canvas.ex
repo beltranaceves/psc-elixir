@@ -4,9 +4,22 @@ defmodule Psc.Canvas do
   Supports collaborative editing with cell-level operations.
   """
 
+  require Logger
   import Ecto.Query, warn: false
   alias Psc.Repo
   alias Psc.Canvas.Canvas
+  alias Psc.Canvas.Problem
+  alias Psc.Canvas.Leverage
+  alias Psc.Canvas.SolutionCluster
+  alias Psc.Canvas.Horizon
+  alias Psc.Canvas.OuterEnvironment
+  alias Psc.Canvas.InnerEnvironment
+  alias Psc.Canvas.EvolvabilityCluster
+  alias Psc.Canvas.Potential
+  alias Psc.Canvas.Manifestations
+  alias Psc.Canvas.Capabilities
+  alias Psc.Canvas.MeritCluster
+  alias Psc.Canvas.Mission
 
   @doc """
   List all canvases authored by a user.
@@ -40,26 +53,92 @@ defmodule Psc.Canvas do
   Get a canvas with author preloaded.
   """
   def get_canvas_with_author(id) do
-    Canvas
-    |> preload(:author)
-    |> Repo.get(id)
+    result =
+      Canvas
+      |> preload(:author)
+      |> Repo.get(id)
+
+    if result do
+      Logger.info("[DB LOAD] Canvas #{id} loaded from database")
+      Logger.info("[DB LOAD - PROBLEM] #{inspect(result.problem, label: "problem")}")
+      Logger.info("[DB LOAD - LEVERAGE] #{inspect(result.leverage, label: "leverage")}")
+      Logger.info("[DB LOAD - SOLUTION] #{inspect(result.solution_cluster, label: "solution_cluster")}")
+      Logger.info("[DB LOAD - HORIZON] #{inspect(result.horizon, label: "horizon")}")
+      Logger.info("[DB LOAD - OUTER_ENV] #{inspect(result.outer_environment, label: "outer_environment")}")
+      Logger.info("[DB LOAD - INNER_ENV] #{inspect(result.inner_environment, label: "inner_environment")}")
+      Logger.info("[DB LOAD - EVOLVABILITY] #{inspect(result.evolvability_cluster, label: "evolvability_cluster")}")
+      Logger.info("[DB LOAD - POTENTIAL] #{inspect(result.potential, label: "potential")}")
+      Logger.info("[DB LOAD - MANIFESTATIONS] #{inspect(result.manifestations, label: "manifestations")}")
+      Logger.info("[DB LOAD - CAPABILITIES] #{inspect(result.capabilities, label: "capabilities")}")
+      Logger.info("[DB LOAD - MERIT] #{inspect(result.merit_cluster, label: "merit_cluster")}")
+      Logger.info("[DB LOAD - MISSION] #{inspect(result.mission, label: "mission")}")
+    else
+      Logger.warn("[DB LOAD] Canvas #{id} NOT FOUND in database")
+    end
+
+    result
   end
 
   @doc """
-  Create a new canvas.
+  Create a new canvas with all cell structs initialized.
   """
   def create_canvas(user_id, attrs \\ %{}) do
-    Canvas.changeset(%Canvas{}, Map.merge(attrs, %{author_id: user_id}))
-    |> Repo.insert()
+    # Explicitly initialize all cells and include them in attrs so they're persisted
+    cell_attrs = %{
+      problem: %{},
+      leverage: %{},
+      solution_cluster: %{},
+      horizon: %{},
+      outer_environment: %{},
+      inner_environment: %{},
+      evolvability_cluster: %{},
+      potential: %{},
+      manifestations: %{},
+      capabilities: %{},
+      merit_cluster: %{},
+      mission: %{}
+    }
+
+    all_attrs =
+      Map.merge(cell_attrs, attrs)
+      |> Map.put(:author_id, user_id)
+
+    Logger.info("[DB SAVE - CREATE] Canvas attrs being saved: #{inspect(all_attrs, limit: :infinity)}")
+
+    result =
+      %Canvas{}
+      |> Canvas.changeset(all_attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, canvas} ->
+        Logger.info("[DB SAVE - CREATE SUCCESS] Canvas created: #{inspect(canvas, label: "created_canvas", limit: :infinity)}")
+        {:ok, canvas}
+      {:error, changeset} ->
+        Logger.error("[DB SAVE - CREATE FAILED] Changeset error: #{inspect(changeset)}")
+        {:error, changeset}
+    end
   end
 
   @doc """
   Update a canvas.
   """
   def update_canvas(canvas, attrs) do
-    canvas
-    |> Canvas.changeset(attrs)
-    |> Repo.update()
+    Logger.info("[DB SAVE - UPDATE] Canvas ID: #{canvas.id}, cells being saved: #{inspect(Map.keys(attrs))}, full attrs: #{inspect(attrs, limit: :infinity)}")
+
+    result =
+      canvas
+      |> Canvas.changeset(attrs)
+      |> Repo.update()
+
+    case result do
+      {:ok, updated_canvas} ->
+        Logger.info("[DB SAVE - UPDATE SUCCESS] Canvas updated: #{inspect(updated_canvas, label: "updated_canvas", limit: :infinity)}")
+        {:ok, updated_canvas}
+      {:error, changeset} ->
+        Logger.error("[DB SAVE - UPDATE FAILED] Changeset error: #{inspect(changeset)}")
+        {:error, changeset}
+    end
   end
 
   @doc """

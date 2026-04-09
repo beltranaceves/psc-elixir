@@ -11,6 +11,5 @@ defmodule Psc.Canvas.Capabilities do
   def changeset(cell, attrs) do
     cell
     |> cast(attrs, [:row, :column, :content])
-    |> validate_required([:row, :column, :content])
   end
 end

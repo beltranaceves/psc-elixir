@@ -14,6 +14,5 @@ defmodule Psc.Canvas.MeritCluster do
   def changeset(cell, attrs) do
     cell
     |> cast(attrs, [:row, :column, :merit, :value, :reservation, :rebuttal])
-    |> validate_required([:row, :column, :merit, :value, :reservation, :rebuttal])
   end
 end

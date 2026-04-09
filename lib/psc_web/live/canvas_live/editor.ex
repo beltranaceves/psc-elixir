@@ -1,5 +1,6 @@
 defmodule PscWeb.CanvasLive.Editor do
   use PscWeb, :live_view
+  require Logger
   alias Psc.Canvas
   alias Psc.Canvas.Canvas, as: CanvasSchema
   alias PscWeb.Presence
@@ -9,9 +10,17 @@ defmodule PscWeb.CanvasLive.Editor do
 
   @impl true
   def mount(%{"id" => canvas_id}, _session, socket) do
+    Logger.info("---------- [MOUNT] Loading canvas_id: #{canvas_id} ----------")
+
     canvas = Canvas.get_canvas_with_author(canvas_id)
     user_email = socket.assigns.current_scope.user.email
     user_id = socket.assigns.current_scope.user.id
+
+    if canvas do
+      Logger.info("[MOUNT] Canvas loaded successfully, will be displayed in template")
+    else
+      Logger.warn("[MOUNT] Canvas is nil - will redirect")
+    end
 
     if canvas && Canvas.can_access_canvas?(canvas, user_email) do
       socket =
@@ -68,37 +77,102 @@ defmodule PscWeb.CanvasLive.Editor do
     {:noreply, socket}
   end
 
+  # Map cell names to their struct modules for instantiation
+  defp cell_struct_module(cell_name) do
+    case cell_name do
+      "problem" -> Psc.Canvas.Problem
+      "leverage" -> Psc.Canvas.Leverage
+      "solution_cluster" -> Psc.Canvas.SolutionCluster
+      "horizon" -> Psc.Canvas.Horizon
+      "outer_environment" -> Psc.Canvas.OuterEnvironment
+      "inner_environment" -> Psc.Canvas.InnerEnvironment
+      "evolvability_cluster" -> Psc.Canvas.EvolvabilityCluster
+      "potential" -> Psc.Canvas.Potential
+      "manifestations" -> Psc.Canvas.Manifestations
+      "capabilities" -> Psc.Canvas.Capabilities
+      "merit_cluster" -> Psc.Canvas.MeritCluster
+      "mission" -> Psc.Canvas.Mission
+      _ -> nil
+    end
+  end
+
   @impl true
-  def handle_event("update_cell", %{"cell" => cell_name, "field" => field, "value" => value}, socket) do
+  def handle_event("update_cell", params, socket) do
     canvas = socket.assigns.canvas
 
-    # Update the nested cell data
-    cell_atom = String.to_atom(cell_name)
-    cell_data = Map.get(canvas, cell_atom) || %{}
+    # Extract the field that was changed from params
+    field_key =
+      params
+      |> Map.drop(["_target"])
+      |> Map.keys()
+      |> List.first()
 
-    field_atom = String.to_atom(field)
-    updated_cell = Map.put(cell_data, field_atom, value)
+    if field_key do
+      value = Map.get(params, field_key, "")
 
-    updated_canvas =
-      canvas
-      |> Map.put(cell_atom, updated_cell)
+      cell_field_map = %{
+        "problem_content" => {"problem", "content"},
+        "leverage_technology" => {"leverage", "technology"},
+        "leverage_components" => {"leverage", "components"},
+        "leverage_information" => {"leverage", "information"},
+        "leverage_human_resources" => {"leverage", "human_resources"},
+        "solution_cluster_content" => {"solution_cluster", "content"},
+        "horizon_content" => {"horizon", "content"},
+        "outer_environment_external_services" => {"outer_environment", "external_services"},
+        "outer_environment_external_implements" => {"outer_environment", "external_implements"},
+        "outer_environment_external_repositories" => {"outer_environment", "external_repositories"},
+        "outer_environment_external_people" => {"outer_environment", "external_people"},
+        "inner_environment_content" => {"inner_environment", "content"},
+        "evolvability_cluster_evolvability" => {"evolvability_cluster", "evolvability"},
+        "evolvability_cluster_diffusibility" => {"evolvability_cluster", "diffusibility"},
+        "evolvability_cluster_adoptability" => {"evolvability_cluster", "adoptability"},
+        "potential_content" => {"potential", "content"},
+        "manifestations_content" => {"manifestations", "content"},
+        "capabilities_content" => {"capabilities", "content"},
+        "merit_cluster_merit" => {"merit_cluster", "merit"},
+        "merit_cluster_value" => {"merit_cluster", "value"},
+        "merit_cluster_reservation" => {"merit_cluster", "reservation"},
+        "merit_cluster_rebuttal" => {"merit_cluster", "rebuttal"},
+        "mission_content" => {"mission", "content"}
+      }
 
-    # Cancel pending idle save and schedule new one
-    socket =
-      if socket.assigns.idle_timer_ref do
-        Process.cancel_timer(socket.assigns.idle_timer_ref)
-        assign(socket, idle_timer_ref: nil)
-      else
-        socket
+      case Map.get(cell_field_map, field_key) do
+        {cell_name, field_name} ->
+          cell_atom = String.to_atom(cell_name)
+          # Get existing cell or create a new struct of the correct type
+          cell_data =
+            case Map.get(canvas, cell_atom) do
+              nil -> struct(cell_struct_module(cell_name))
+              existing -> existing
+            end
+
+          field_atom = String.to_atom(field_name)
+          updated_cell = Map.put(cell_data, field_atom, value)
+          updated_canvas = Map.put(canvas, cell_atom, updated_cell)
+
+          # Cancel pending idle save and schedule new one
+          socket =
+            if socket.assigns.idle_timer_ref do
+              Process.cancel_timer(socket.assigns.idle_timer_ref)
+              assign(socket, idle_timer_ref: nil)
+            else
+              socket
+            end
+
+          idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
+
+          {:noreply,
+           socket
+           |> assign(:canvas, updated_canvas)
+           |> assign(:save_state, :unsaved)
+           |> assign(:idle_timer_ref, idle_timer_ref)}
+
+        nil ->
+          {:noreply, socket}
       end
-
-    idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
-
-    {:noreply,
-     socket
-     |> assign(:canvas, updated_canvas)
-     |> assign(:save_state, :unsaved)
-     |> assign(:idle_timer_ref, idle_timer_ref)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -158,64 +232,76 @@ defmodule PscWeb.CanvasLive.Editor do
     {:noreply, handle_presence_change(socket, socket.assigns.canvas_id)}
   end
 
+  defp build_canvas_update_attrs(canvas) do
+    attrs = %{name: canvas.name, description: canvas.description}
+    |> Map.merge(
+      [
+        :problem, :leverage, :solution_cluster, :horizon,
+        :outer_environment, :inner_environment, :evolvability_cluster,
+        :potential, :manifestations, :capabilities, :merit_cluster, :mission
+      ]
+      |> Enum.reduce(%{}, fn cell_field, acc ->
+        case Map.get(canvas, cell_field) do
+          nil ->
+            acc
+          value ->
+            # Convert struct to map for cast_embed (which expects maps, not structs)
+            map_value = if is_struct(value), do: Map.from_struct(value), else: value
+            Map.put(acc, cell_field, map_value)
+        end
+      end)
+    )
+
+    Logger.info("[BUILD ATTRS] Canvas ID: #{canvas.id}, attrs being prepared for DB update: #{inspect(attrs, limit: :infinity)}")
+    attrs
+  end
+
   @impl true
   def handle_info(:idle_save, socket) do
     if has_changes?(socket.assigns.canvas, socket.assigns.original_canvas) do
+      Logger.info("[IDLE SAVE] Saving changes for canvas_id: #{socket.assigns.canvas_id}")
       socket = assign(socket, save_state: :saving)
+      canvas = socket.assigns.canvas
+      attrs = build_canvas_update_attrs(canvas)
 
-      case Canvas.update_canvas(socket.assigns.canvas, %{
-             name: socket.assigns.canvas.name,
-             description: socket.assigns.canvas.description,
-             problem: socket.assigns.canvas.problem,
-             leverage: socket.assigns.canvas.leverage,
-             solution_cluster: socket.assigns.canvas.solution_cluster,
-             horizon: socket.assigns.canvas.horizon,
-             outer_environment: socket.assigns.canvas.outer_environment,
-             inner_environment: socket.assigns.canvas.inner_environment,
-             evolvability_cluster: socket.assigns.canvas.evolvability_cluster,
-             potential: socket.assigns.canvas.potential,
-             manifestations: socket.assigns.canvas.manifestations,
-             capabilities: socket.assigns.canvas.capabilities,
-             merit_cluster: socket.assigns.canvas.merit_cluster,
-             mission: socket.assigns.canvas.mission
-           }) do
+      case Canvas.update_canvas(canvas, attrs) do
         {:ok, updated_canvas} ->
+          Logger.info("[IDLE SAVE SUCCESS] Canvas saved: #{inspect(updated_canvas, label: "saved_canvas", limit: :infinity)}")
           {:noreply,
            socket
            |> assign(:original_canvas, updated_canvas)
            |> assign(:save_state, :saved)
            |> assign(:idle_timer_ref, nil)}
 
-        {:error, _} ->
+        {:error, error} ->
+          Logger.error("[IDLE SAVE FAILED] Error: #{inspect(error)}")
           {:noreply,
            socket
            |> assign(:save_state, :unsaved)
            |> assign(:idle_timer_ref, nil)}
       end
     else
-      {:noreply, assign(socket, idle_timer_ref: nil)}
+      Logger.debug("[IDLE SAVE] No changes detected, skipping save")
+      {:noreply, assign(socket, :idle_timer_ref, nil)}
     end
   end
 
   @impl true
   def handle_info(:periodic_save, socket) do
     if has_changes?(socket.assigns.canvas, socket.assigns.original_canvas) do
-      Canvas.update_canvas(socket.assigns.canvas, %{
-        name: socket.assigns.canvas.name,
-        description: socket.assigns.canvas.description,
-        problem: socket.assigns.canvas.problem,
-        leverage: socket.assigns.canvas.leverage,
-        solution_cluster: socket.assigns.canvas.solution_cluster,
-        horizon: socket.assigns.canvas.horizon,
-        outer_environment: socket.assigns.canvas.outer_environment,
-        inner_environment: socket.assigns.canvas.inner_environment,
-        evolvability_cluster: socket.assigns.canvas.evolvability_cluster,
-        potential: socket.assigns.canvas.potential,
-        manifestations: socket.assigns.canvas.manifestations,
-        capabilities: socket.assigns.canvas.capabilities,
-        merit_cluster: socket.assigns.canvas.merit_cluster,
-        mission: socket.assigns.canvas.mission
-      })
+      Logger.info("[PERIODIC SAVE] Saving changes for canvas_id: #{socket.assigns.canvas_id}")
+      attrs = build_canvas_update_attrs(socket.assigns.canvas)
+
+      case Canvas.update_canvas(socket.assigns.canvas, attrs) do
+        {:ok, updated_canvas} ->
+          Logger.info("[PERIODIC SAVE SUCCESS] Canvas saved: #{inspect(updated_canvas, label: "saved_canvas", limit: :infinity)}")
+          :ok
+        {:error, error} ->
+          Logger.error("[PERIODIC SAVE FAILED] Error: #{inspect(error)}")
+          :ok
+      end
+    else
+      Logger.debug("[PERIODIC SAVE] No changes detected, skipping save")
     end
 
     Process.send_after(self(), :periodic_save, @periodic_save_interval)
@@ -270,7 +356,8 @@ defmodule PscWeb.CanvasLive.Editor do
           <div class="flex gap-6 min-h-0">
             <%!-- Canvas Grid --%>
             <div class="flex-1 min-w-0 overflow-x-auto">
-              <table class="w-full border-collapse table-fixed">
+              <.form for={%{}} id="canvas-form">
+                <table class="w-full border-collapse table-fixed">
                 <tbody>
                   <%!-- Row 1: Rationale --%>
                   <tr>
@@ -281,12 +368,11 @@ defmodule PscWeb.CanvasLive.Editor do
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Problem</h3>
                       <textarea
+                        name="problem_content"
                         phx-change="update_cell"
-                        phx-value-cell="problem"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the problem..."
-                      ><%= @canvas.problem && @canvas.problem.content %></textarea>
+                      ><%= Map.get(@canvas.problem || %{}, :content, "") %></textarea>
                     </td>
                     <%!-- Form: Leverage --%>
                     <td class="border border-gray-300 bg-white p-3">
@@ -294,38 +380,34 @@ defmodule PscWeb.CanvasLive.Editor do
                       <div class="space-y-2 text-sm">
                         <input
                           type="text"
+                          name="leverage_technology"
                           placeholder="Technology..."
-                          value={@canvas.leverage && @canvas.leverage.technology}
+                          value={Map.get(@canvas.leverage || %{}, :technology, "")}
                           phx-change="update_cell"
-                          phx-value-cell="leverage"
-                          phx-value-field="technology"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="leverage_components"
                           placeholder="Components..."
-                          value={@canvas.leverage && @canvas.leverage.components}
+                          value={Map.get(@canvas.leverage || %{}, :components, "")}
                           phx-change="update_cell"
-                          phx-value-cell="leverage"
-                          phx-value-field="components"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="leverage_information"
                           placeholder="Information..."
-                          value={@canvas.leverage && @canvas.leverage.information}
+                          value={Map.get(@canvas.leverage || %{}, :information, "")}
                           phx-change="update_cell"
-                          phx-value-cell="leverage"
-                          phx-value-field="information"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="leverage_human_resources"
                           placeholder="Human Resources..."
-                          value={@canvas.leverage && @canvas.leverage.human_resources}
+                          value={Map.get(@canvas.leverage || %{}, :human_resources, "")}
                           phx-change="update_cell"
-                          phx-value-cell="leverage"
-                          phx-value-field="human_resources"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                       </div>
@@ -334,23 +416,21 @@ defmodule PscWeb.CanvasLive.Editor do
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Solution</h3>
                       <textarea
+                        name="solution_cluster_content"
                         phx-change="update_cell"
-                        phx-value-cell="solution_cluster"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the solution..."
-                      ><%= @canvas.solution_cluster && @canvas.solution_cluster.content %></textarea>
+                      ><%= Map.get(@canvas.solution_cluster || %{}, :content, "") %></textarea>
                     </td>
                     <%!-- Learn: Horizon --%>
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Horizon</h3>
                       <textarea
+                        name="horizon_content"
                         phx-change="update_cell"
-                        phx-value-cell="horizon"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the horizon..."
-                      ><%= @canvas.horizon && @canvas.horizon.content %></textarea>
+                      ><%= Map.get(@canvas.horizon || %{}, :content, "") %></textarea>
                     </td>
                   </tr>
 
@@ -365,38 +445,34 @@ defmodule PscWeb.CanvasLive.Editor do
                       <div class="space-y-2 text-sm">
                         <input
                           type="text"
+                          name="outer_environment_external_services"
                           placeholder="External Services..."
-                          value={@canvas.outer_environment && @canvas.outer_environment.external_services}
+                          value={Map.get(@canvas.outer_environment || %{}, :external_services, "")}
                           phx-change="update_cell"
-                          phx-value-cell="outer_environment"
-                          phx-value-field="external_services"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="outer_environment_external_implements"
                           placeholder="External Implements..."
-                          value={@canvas.outer_environment && @canvas.outer_environment.external_implements}
+                          value={Map.get(@canvas.outer_environment || %{}, :external_implements, "")}
                           phx-change="update_cell"
-                          phx-value-cell="outer_environment"
-                          phx-value-field="external_implements"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="outer_environment_external_repositories"
                           placeholder="External Repositories..."
-                          value={@canvas.outer_environment && @canvas.outer_environment.external_repositories}
+                          value={Map.get(@canvas.outer_environment || %{}, :external_repositories, "")}
                           phx-change="update_cell"
-                          phx-value-cell="outer_environment"
-                          phx-value-field="external_repositories"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="outer_environment_external_people"
                           placeholder="External People..."
-                          value={@canvas.outer_environment && @canvas.outer_environment.external_people}
+                          value={Map.get(@canvas.outer_environment || %{}, :external_people, "")}
                           phx-change="update_cell"
-                          phx-value-cell="outer_environment"
-                          phx-value-field="external_people"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                       </div>
@@ -405,12 +481,11 @@ defmodule PscWeb.CanvasLive.Editor do
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Inner Environment</h3>
                       <textarea
+                        name="inner_environment_content"
                         phx-change="update_cell"
-                        phx-value-cell="inner_environment"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the inner environment..."
-                      ><%= @canvas.inner_environment && @canvas.inner_environment.content %></textarea>
+                      ><%= Map.get(@canvas.inner_environment || %{}, :content, "") %></textarea>
                     </td>
                     <%!-- Consolidate: Evolvability Cluster --%>
                     <td class="border border-gray-300 bg-white p-3">
@@ -418,29 +493,26 @@ defmodule PscWeb.CanvasLive.Editor do
                       <div class="space-y-2 text-sm">
                         <input
                           type="text"
+                          name="evolvability_cluster_evolvability"
                           placeholder="Evolvability..."
-                          value={@canvas.evolvability_cluster && @canvas.evolvability_cluster.evolvability}
+                          value={Map.get(@canvas.evolvability_cluster || %{}, :evolvability, "")}
                           phx-change="update_cell"
-                          phx-value-cell="evolvability_cluster"
-                          phx-value-field="evolvability"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="evolvability_cluster_diffusibility"
                           placeholder="Diffusibility..."
-                          value={@canvas.evolvability_cluster && @canvas.evolvability_cluster.diffusibility}
+                          value={Map.get(@canvas.evolvability_cluster || %{}, :diffusibility, "")}
                           phx-change="update_cell"
-                          phx-value-cell="evolvability_cluster"
-                          phx-value-field="diffusibility"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="evolvability_cluster_adoptability"
                           placeholder="Adoptability..."
-                          value={@canvas.evolvability_cluster && @canvas.evolvability_cluster.adoptability}
+                          value={Map.get(@canvas.evolvability_cluster || %{}, :adoptability, "")}
                           phx-change="update_cell"
-                          phx-value-cell="evolvability_cluster"
-                          phx-value-field="adoptability"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                       </div>
@@ -449,12 +521,11 @@ defmodule PscWeb.CanvasLive.Editor do
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Potential</h3>
                       <textarea
+                        name="potential_content"
                         phx-change="update_cell"
-                        phx-value-cell="potential"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the potential..."
-                      ><%= @canvas.potential && @canvas.potential.content %></textarea>
+                      ><%= Map.get(@canvas.potential || %{}, :content, "") %></textarea>
                     </td>
                   </tr>
 
@@ -467,23 +538,21 @@ defmodule PscWeb.CanvasLive.Editor do
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Manifestations</h3>
                       <textarea
+                        name="manifestations_content"
                         phx-change="update_cell"
-                        phx-value-cell="manifestations"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the manifestations..."
-                      ><%= @canvas.manifestations && @canvas.manifestations.content %></textarea>
+                      ><%= Map.get(@canvas.manifestations || %{}, :content, "") %></textarea>
                     </td>
                     <%!-- Form: Capabilities --%>
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Capabilities</h3>
                       <textarea
+                        name="capabilities_content"
                         phx-change="update_cell"
-                        phx-value-cell="capabilities"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the capabilities..."
-                      ><%= @canvas.capabilities && @canvas.capabilities.content %></textarea>
+                      ><%= Map.get(@canvas.capabilities || %{}, :content, "") %></textarea>
                     </td>
                     <%!-- Consolidate: Merit Cluster --%>
                     <td class="border border-gray-300 bg-white p-3">
@@ -491,38 +560,34 @@ defmodule PscWeb.CanvasLive.Editor do
                       <div class="space-y-2 text-sm">
                         <input
                           type="text"
+                          name="merit_cluster_merit"
                           placeholder="Merit..."
-                          value={@canvas.merit_cluster && @canvas.merit_cluster.merit}
+                          value={Map.get(@canvas.merit_cluster || %{}, :merit, "")}
                           phx-change="update_cell"
-                          phx-value-cell="merit_cluster"
-                          phx-value-field="merit"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="merit_cluster_value"
                           placeholder="Value..."
-                          value={@canvas.merit_cluster && @canvas.merit_cluster.value}
+                          value={Map.get(@canvas.merit_cluster || %{}, :value, "")}
                           phx-change="update_cell"
-                          phx-value-cell="merit_cluster"
-                          phx-value-field="value"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="merit_cluster_reservation"
                           placeholder="Reservation..."
-                          value={@canvas.merit_cluster && @canvas.merit_cluster.reservation}
+                          value={Map.get(@canvas.merit_cluster || %{}, :reservation, "")}
                           phx-change="update_cell"
-                          phx-value-cell="merit_cluster"
-                          phx-value-field="reservation"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                         <input
                           type="text"
+                          name="merit_cluster_rebuttal"
                           placeholder="Rebuttal..."
-                          value={@canvas.merit_cluster && @canvas.merit_cluster.rebuttal}
+                          value={Map.get(@canvas.merit_cluster || %{}, :rebuttal, "")}
                           phx-change="update_cell"
-                          phx-value-cell="merit_cluster"
-                          phx-value-field="rebuttal"
                           class="w-full border border-gray-300 rounded px-2 py-1 text-black"
                         />
                       </div>
@@ -531,16 +596,16 @@ defmodule PscWeb.CanvasLive.Editor do
                     <td class="border border-gray-300 bg-white p-3">
                       <h3 class="text-sm font-bold text-gray-900 mb-2">Mission</h3>
                       <textarea
+                        name="mission_content"
                         phx-change="update_cell"
-                        phx-value-cell="mission"
-                        phx-value-field="content"
                         class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
                         placeholder="Describe the mission..."
-                      ><%= @canvas.mission && @canvas.mission.content %></textarea>
+                      ><%= Map.get(@canvas.mission || %{}, :content, "") %></textarea>
                     </td>
                   </tr>
                 </tbody>
               </table>
+              </.form>
             </div>
 
             <%!-- Sidebar --%>
