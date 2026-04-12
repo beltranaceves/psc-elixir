@@ -8,6 +8,7 @@ defmodule Psc.Canvas do
   import Ecto.Query, warn: false
   alias Psc.Repo
   alias Psc.Canvas.Canvas
+  alias Psc.Canvas.UnstrCanvas
   alias Psc.Canvas.Problem
   alias Psc.Canvas.Leverage
   alias Psc.Canvas.SolutionCluster
@@ -191,5 +192,109 @@ defmodule Psc.Canvas do
   """
   def delete_canvas(canvas) do
     Repo.delete(canvas)
+  end
+
+  ## Unstructured Canvas Functions
+
+  @doc """
+  List all unstructured canvases authored by a user.
+  """
+  def list_user_unstr_canvases(user_id) do
+    from(c in UnstrCanvas, where: c.author_id == ^user_id, order_by: [desc: c.updated_at])
+    |> preload(:author)
+    |> Repo.all()
+  end
+
+  @doc """
+  List all unstructured canvases shared with a user by email.
+  """
+  def list_shared_unstr_canvases(user_email) do
+    from(c in UnstrCanvas,
+      where: fragment("? = ANY(?)", ^user_email, c.shared_with),
+      order_by: [desc: c.updated_at]
+    )
+    |> preload(:author)
+    |> Repo.all()
+  end
+
+  @doc """
+  Get a single unstructured canvas by id.
+  """
+  def get_unstr_canvas(id) do
+    Repo.get(UnstrCanvas, id)
+  end
+
+  @doc """
+  Get an unstructured canvas with author preloaded.
+  """
+  def get_unstr_canvas_with_author(id) do
+    UnstrCanvas
+    |> preload(:author)
+    |> Repo.get(id)
+  end
+
+  @doc """
+  Create a new unstructured canvas with default PSC structure.
+  """
+  def create_unstr_canvas(user_id, attrs \\ %{}) do
+    all_attrs =
+      attrs
+      |> Map.put(:author_id, user_id)
+
+    %UnstrCanvas{}
+    |> UnstrCanvas.changeset(all_attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Update an unstructured canvas.
+  """
+  def update_unstr_canvas(canvas, attrs) do
+    canvas
+    |> UnstrCanvas.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Delete an unstructured canvas.
+  """
+  def delete_unstr_canvas(canvas) do
+    Repo.delete(canvas)
+  end
+
+  @doc """
+  Share an unstructured canvas with a user by email.
+  """
+  def share_unstr_canvas_with(canvas, email) do
+    new_shared_with =
+      (canvas.shared_with || [])
+      |> Enum.uniq()
+      |> then(&(&1 ++ [email]))
+      |> Enum.uniq()
+
+    canvas
+    |> UnstrCanvas.changeset(%{shared_with: new_shared_with})
+    |> Repo.update()
+  end
+
+  @doc """
+  Remove a user's access to an unstructured canvas.
+  """
+  def unshare_unstr_canvas(canvas, email) do
+    new_shared_with =
+      canvas.shared_with
+      |> Enum.reject(&(&1 == email))
+
+    canvas
+    |> UnstrCanvas.changeset(%{shared_with: new_shared_with})
+    |> Repo.update()
+  end
+
+  @doc """
+  Check if a user can access an unstructured canvas (author or shared with them).
+  """
+  def can_access_unstr_canvas?(canvas, user_email) do
+    canvas = Repo.preload(canvas, :author)
+    canvas.author.email == user_email || Enum.any?(canvas.shared_with, &(&1 == user_email))
   end
 end

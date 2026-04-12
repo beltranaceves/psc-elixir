@@ -33,7 +33,7 @@ defmodule PscWeb.Endpoint do
     socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket
     plug Phoenix.LiveReloader
     plug Phoenix.CodeReloader
-    plug Phoenix.Ecto.CheckRepoStatus, otp_app: :psc
+    # plug Phoenix.Ecto.CheckRepoStatus, otp_app: :psc
   end
 
   plug Phoenix.LiveDashboard.RequestLogger,
