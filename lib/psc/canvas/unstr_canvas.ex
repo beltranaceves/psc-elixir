@@ -12,19 +12,93 @@ defmodule Psc.Canvas.UnstrCanvas do
       belongs_to :author, Psc.Accounts.User, type: :id
 
       field :cells, :map, default: %{
-        layout: [[], [], []],
-        capabilities: nil,
-        evolvability_cluster: nil,
-        horizon: nil,
-        inner_environment: nil,
-        leverage: nil,
-        manifestations: nil,
-        merit_cluster: nil,
-        mission: nil,
-        outer_environment: nil,
-        potential: nil,
-        problem: nil,
-        solution_cluster: nil,
+        "columns" => [
+          %{"id" => "perceive", "label" => "Perceive"},
+          %{"id" => "form", "label" => "Form"},
+          %{"id" => "consolidate", "label" => "Consolidate"},
+          %{"id" => "learn", "label" => "Learn"}
+        ],
+        "rows" => [
+          %{"id" => "rationale", "label" => "Rationale"},
+          %{"id" => "strategy", "label" => "Strategy"},
+          %{"id" => "tactics", "label" => "Tactics"}
+        ],
+        "layout" => [
+          ["problem", "leverage", "solution_cluster", "horizon"],
+          ["outer_environment", "inner_environment", "evolvability_cluster", "potential"],
+          ["manifestations", "capabilities", "merit_cluster", "mission"]
+        ],
+        "problem" => %{
+          "row" => "rationale",
+          "column" => "perceive",
+          "content" => ""
+        },
+        "leverage" => %{
+          "row" => "rationale",
+          "column" => "form",
+          "technology" => "",
+          "components" => "",
+          "information" => "",
+          "human_resources" => ""
+        },
+        "solution_cluster" => %{
+          "row" => "rationale",
+          "column" => "consolidate",
+          "content" => ""
+        },
+        "horizon" => %{
+          "row" => "rationale",
+          "column" => "learn",
+          "content" => ""
+        },
+        "outer_environment" => %{
+          "row" => "strategy",
+          "column" => "perceive",
+          "external_services" => "",
+          "external_implements" => "",
+          "external_repositories" => "",
+          "external_people" => ""
+        },
+        "inner_environment" => %{
+          "row" => "strategy",
+          "column" => "form",
+          "content" => ""
+        },
+        "evolvability_cluster" => %{
+          "row" => "strategy",
+          "column" => "consolidate",
+          "evolvability" => "",
+          "diffusibility" => "",
+          "adoptability" => ""
+        },
+        "potential" => %{
+          "row" => "strategy",
+          "column" => "learn",
+          "content" => ""
+        },
+        "manifestations" => %{
+          "row" => "tactics",
+          "column" => "perceive",
+          "content" => ""
+        },
+        "capabilities" => %{
+          "row" => "tactics",
+          "column" => "form",
+          "content" => ""
+        },
+        "merit_cluster" => %{
+          "row" => "tactics",
+          "column" => "consolidate",
+          "merit" => "",
+          "value" => "",
+          "reservation" => "",
+          "rebuttal" => ""
+        },
+        "mission" => %{
+          "row" => "tactics",
+          "column" => "learn",
+          "content" => ""
+        }
       }
       timestamps()
     end
@@ -38,13 +112,18 @@ defmodule Psc.Canvas.UnstrCanvas do
     end
 
     defp validate_cells_structure(changeset) do
-      # Validates that the cells field contains all the keys outlines in the layout 2d array
+      # Validates that the cells field contains all the keys outlined in the layout 2d array
       validate_change(changeset, :cells, fn :cells, cells ->
         layout = get_in(cells, ["layout"])
         if is_list(layout) and Enum.all?(layout, &is_list/1) do
           # Flatten the layout to get all cell keys
           cell_keys = layout |> List.flatten() |> Enum.uniq()
-          missing_keys = cell_keys -- Map.keys(cells)
+
+          # Metadata keys that should be excluded from cell validation
+          metadata_keys = ["columns", "rows", "layout"]
+          all_cell_keys = cells |> Map.keys() |> Enum.reject(&(&1 in metadata_keys))
+
+          missing_keys = cell_keys -- all_cell_keys
 
           if missing_keys == [] do
             []
