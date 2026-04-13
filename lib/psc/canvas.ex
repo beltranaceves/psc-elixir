@@ -21,6 +21,7 @@ defmodule Psc.Canvas do
   alias Psc.Canvas.Capabilities
   alias Psc.Canvas.MeritCluster
   alias Psc.Canvas.Mission
+  alias Psc.Canvas.Layout
 
   @doc """
   List all canvases authored by a user.
@@ -195,6 +196,38 @@ defmodule Psc.Canvas do
   end
 
   ## Unstructured Canvas Functions
+
+  @doc """
+  List saved canvas layouts.
+  """
+  def list_canvas_layouts do
+    Layout
+    |> order_by([l], desc: l.inserted_at)
+    |> Repo.all()
+  end
+
+  @doc """
+  Get a single canvas layout by id.
+  """
+  def get_canvas_layout(id) do
+    Repo.get(Layout, id)
+  end
+
+  @doc """
+  Create a canvas layout.
+  """
+  def create_canvas_layout(attrs \\ %{}) do
+    %Layout{}
+    |> Layout.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Delete a canvas layout.
+  """
+  def delete_canvas_layout(layout) do
+    Repo.delete(layout)
+  end
 
   @doc """
   List all unstructured canvases authored by a user.

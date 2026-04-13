@@ -9,19 +9,37 @@ defmodule PscWeb.UnstrCanvasLive.Index do
 
     my_canvases = Canvas.list_user_unstr_canvases(user_id)
     shared_canvases = Canvas.list_shared_unstr_canvases(user_email)
+     layouts = Canvas.list_canvas_layouts()
 
     {:ok,
      socket
      |> assign(:my_canvases, my_canvases)
      |> assign(:shared_canvases, shared_canvases)
-     |> assign(:new_canvas_form, to_form(%{}))}
+      |> assign(:new_canvas_form, to_form(%{}))
+      |> assign(:layouts, layouts)}
   end
 
   @impl true
-  def handle_event("create_canvas", %{"name" => name, "description" => description}, socket) do
+  def handle_event("create_canvas", params, socket) do
+    name = params["name"]
+    description = params["description"]
+    layout_id = params["layout_id"]
+
     user_id = socket.assigns.current_scope.user.id
 
-    case Canvas.create_unstr_canvas(user_id, %{name: name, description: description}) do
+    attrs = %{"name" => name, "description" => description}
+
+    attrs =
+      if is_binary(layout_id) and layout_id != "" do
+        case Canvas.get_canvas_layout(layout_id) do
+          %{} = layout -> Map.put(attrs, "cells", layout.layout_map || %{})
+          _ -> attrs
+        end
+      else
+        attrs
+      end
+
+    case Canvas.create_unstr_canvas(user_id, attrs) do
       {:ok, _canvas} ->
         my_canvases = Canvas.list_user_unstr_canvases(user_id)
         {:noreply,
@@ -80,6 +98,15 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               label="Description"
               placeholder="Enter canvas description..."
             />
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Layout</label>
+              <select name="layout_id" id="layout_id" class="mt-1 block w-full rounded border px-3 py-2">
+                <option value="">Default</option>
+                <%= for l <- @layouts do %>
+                  <option value={l.id}><%= l.name %></option>
+                <% end %>
+              </select>
+            </div>
             <button
               type="submit"
               class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition"
