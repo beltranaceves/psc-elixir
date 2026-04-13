@@ -76,8 +76,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="max-w-7xl mx-auto px-4 py-8">
+    <Layouts.app flash={@flash} current_scope={@current_scope} container_class={"w-full mx-auto max-w-screen-xl space-y-4"}>
+      <div class="w-full max-w-screen-xl mx-auto px-4 py-8">
         <%!-- Header --%>
         <div class="flex items-center justify-between mb-8">
           <div class="flex-1">
@@ -107,7 +107,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         </div>
 
         <%!-- Canvas Grid --%>
-        <div class="bg-white rounded-lg shadow p-8">
+        <div class="bg-white rounded-lg shadow p-8 w-full">
           <h2 class="text-2xl font-bold text-gray-900 mb-6">Canvas Structure</h2>
 
           <%!-- Display columns and rows --%>
