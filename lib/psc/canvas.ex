@@ -270,9 +270,10 @@ defmodule Psc.Canvas do
   Create a new unstructured canvas with default PSC structure.
   """
   def create_unstr_canvas(user_id, attrs \\ %{}) do
+    # Ensure params use string keys (avoid mixing atom and string keys)
     all_attrs =
       attrs
-      |> Map.put(:author_id, user_id)
+      |> Map.put("author_id", user_id)
 
     %UnstrCanvas{}
     |> UnstrCanvas.changeset(all_attrs)
