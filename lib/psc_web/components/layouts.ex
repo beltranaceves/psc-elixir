@@ -64,7 +64,7 @@ defmodule PscWeb.Layouts do
               <.link navigate={~p"/canvas-designer"} class="btn btn-ghost">Canvas Designer</.link>
             </li>
             <li>
-              <.link navigate={~p"/canvas-layouts/new"} class="btn btn-ghost">New Layout</.link>
+              <.link navigate={~p"/canvas-layouts"} class="btn btn-ghost">New Layout</.link>
             </li>
           <li>
             <.theme_toggle />

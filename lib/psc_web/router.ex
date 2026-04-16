@@ -58,7 +58,8 @@ defmodule PscWeb.Router do
       live "/canvases/:id", CanvasLive.Editor, :edit
       live "/canvas-designer", UnstrCanvasLive.Index, :index
       live "/canvas-designer/:id", UnstrCanvasLive.Editor, :edit
-      live "/canvas-layouts/new", CanvasLayoutLive.New, :new
+      live "/canvas-layouts", CanvasLayoutLive.Index, :index
+      live "/canvas-layouts/new", CanvasLayoutLive.Editor, :new
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end

@@ -1,4 +1,4 @@
-defmodule PscWeb.CanvasLayoutLive.New do
+defmodule PscWeb.CanvasLayoutLive.Editor do
   use PscWeb, :live_view
   alias Psc.Canvas
 
@@ -224,8 +224,8 @@ defmodule PscWeb.CanvasLayoutLive.New do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="w-full max-w-4xl mx-auto px-4 py-8">
-        <h1 class="text-2xl font-bold mb-4 text-gray-900">Graphical Layout Editor</h1>
+      <div class="max-w-6xl mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-4 text-gray-900">Graphical Layout Editor</h1>
 
         <div class="bg-white rounded-lg shadow p-6 mb-6">
           <.form for={@new_layout_form} id="new-layout-form" phx-submit="save_layout" class="space-y-4">
@@ -247,9 +247,9 @@ defmodule PscWeb.CanvasLayoutLive.New do
             />
 
             <div class="flex gap-2">
-              <button type="button" phx-click="add_column" class="px-3 py-1 bg-blue-600 text-white rounded">Add Column</button>
-              <button type="button" phx-click="add_row" class="px-3 py-1 bg-green-600 text-white rounded">Add Row</button>
-              <button type="submit" class="ml-auto px-4 py-1 bg-indigo-600 text-white rounded">Save Layout</button>
+              <button type="button" phx-click="add_column" class="px-3 py-2 bg-blue-600 text-white font-medium rounded-lg">Add Column</button>
+              <button type="button" phx-click="add_row" class="px-3 py-2 bg-green-600 text-white font-medium rounded-lg">Add Row</button>
+              <button type="submit" class="ml-auto px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg">Save Layout</button>
             </div>
           </.form>
         </div>
