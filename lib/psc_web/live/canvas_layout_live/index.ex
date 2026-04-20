@@ -74,7 +74,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
                     <div class="text-sm text-gray-600"><%= l.description %></div>
                   </div>
                   <div class="flex items-center gap-2">
-                    <.link navigate={~p"/canvas-layouts/new"} class="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Edit</.link>
+                    <.link navigate={~p"/canvas-layouts/#{l.id}"} class="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Edit</.link>
                     <button phx-click="delete_layout" phx-value-id={l.id} onclick="return confirm('Delete this layout?')" class="px-3 py-1 bg-red-600 text-white rounded text-sm">Delete</button>
                   </div>
                 </div>

@@ -3,7 +3,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   alias Psc.Canvas
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     layouts = Canvas.list_canvas_layouts()
 
     # initialize an empty editor layout structure
@@ -15,11 +15,34 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
     layout_map = ensure_matrix_keys(layout_map)
 
-    {:ok,
-     socket
-     |> assign(:layouts, layouts)
-     |> assign(:new_layout_form, to_form(%{}))
-     |> assign(:layout_map, layout_map)}
+    socket =
+      socket
+      |> assign(:layouts, layouts)
+      |> assign(:new_layout_form, to_form(%{}))
+
+    # If an id param is present, load the layout from DB for editing
+    socket =
+      case Map.get(params, "id") do
+        nil ->
+          assign(socket, :layout_map, layout_map)
+
+        id ->
+          case Canvas.get_canvas_layout(id) do
+            %{} = layout ->
+              lm = layout.layout_map || %{}
+              lm = ensure_matrix_keys(lm)
+
+              socket
+              |> assign(:layout_map, lm)
+              |> assign(:editing_layout_id, id)
+              |> assign(:new_layout_form, to_form(%{"name" => layout.name, "description" => layout.description}))
+
+            _ ->
+              assign(socket, :layout_map, layout_map)
+          end
+      end
+
+    {:ok, socket}
   end
 
   @impl true
@@ -210,13 +233,32 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   def handle_event("save_layout", %{"name" => name, "description" => description}, socket) do
     attrs = %{"name" => name, "description" => description, "layout_map" => socket.assigns.layout_map}
 
-    case Canvas.create_canvas_layout(attrs) do
-      {:ok, _layout} ->
-        layouts = Canvas.list_canvas_layouts()
-        {:noreply, socket |> assign(:layouts, layouts) |> put_flash(:info, "Layout created")}
+    case Map.get(socket.assigns, :editing_layout_id) do
+      nil ->
+        case Canvas.create_canvas_layout(attrs) do
+          {:ok, _layout} ->
+            layouts = Canvas.list_canvas_layouts()
+            {:noreply, socket |> assign(:layouts, layouts) |> put_flash(:info, "Layout created")}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to create layout")}
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Failed to create layout")}
+        end
+
+      id ->
+        case Canvas.get_canvas_layout(id) do
+          %{} = layout ->
+            case Canvas.update_canvas_layout(layout, attrs) do
+              {:ok, _updated} ->
+                layouts = Canvas.list_canvas_layouts()
+                {:noreply, socket |> assign(:layouts, layouts) |> put_flash(:info, "Layout updated")}
+
+              {:error, _changeset} ->
+                {:noreply, put_flash(socket, :error, "Failed to update layout")}
+            end
+
+          _ ->
+            {:noreply, put_flash(socket, :error, "Layout not found")}
+        end
     end
   end
 

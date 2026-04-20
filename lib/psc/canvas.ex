@@ -223,6 +223,15 @@ defmodule Psc.Canvas do
   end
 
   @doc """
+  Update a canvas layout.
+  """
+  def update_canvas_layout(layout, attrs) do
+    layout
+    |> Layout.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
   Delete a canvas layout.
   """
   def delete_canvas_layout(layout) do
