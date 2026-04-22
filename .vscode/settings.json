@@ -1,0 +1,22 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "mix": true,
+        "/^cmd /c mix ecto\\.gen\\.migration add_event_sourcing_to_unstr_canvases$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cmd /c mix ecto\\.migrate$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cmd /c mix compile$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cmd /c dir /s /b \\*document\\*editor\\.ex\\*$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "type": true
+    }
+}

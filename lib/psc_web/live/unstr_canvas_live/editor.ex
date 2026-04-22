@@ -1,6 +1,11 @@
 defmodule PscWeb.UnstrCanvasLive.Editor do
   use PscWeb, :live_view
   alias Psc.Canvas
+  alias PscWeb.Presence
+  require Logger
+
+  @idle_save_interval 1500
+  @periodic_save_interval 10000
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -8,10 +13,33 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     user_email = socket.assigns.current_scope.user.email
 
     if canvas && Canvas.can_access_unstr_canvas?(canvas, user_email) do
-      {:ok,
-       socket
-       |> assign(:canvas, canvas)
-       |> assign(:page_title, canvas.name)}
+      # Make sure cells are completely up to date with events
+      cells = Canvas.get_unstr_canvas_content(id)
+
+      # For text attributes tracked in CRDT map, merge if present
+      c_name = Map.get(cells, "$name", canvas.name)
+      c_desc = Map.get(cells, "$description", canvas.description)
+
+      socket =
+        socket
+        |> assign(:canvas, canvas)
+        |> assign(:canvas_id, id)
+        |> assign(:user_id, socket.assigns.current_scope.user.id)
+        |> assign(:username, user_email)
+        |> assign(:cells, cells)
+        |> assign(:c_name, c_name)
+        |> assign(:c_desc, c_desc)
+        |> assign(:presence, %{})
+        |> assign(:page_title, c_name)
+        |> assign(:last_saved_cells, cells)
+        |> assign(:idle_timer_ref, nil)
+        |> subscribe_to_canvas(id)
+
+      if connected?(socket) do
+        Process.send_after(self(), :periodic_save, @periodic_save_interval)
+      end
+
+      {:ok, socket}
     else
       {:ok,
        socket
@@ -20,57 +48,172 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  defp subscribe_to_canvas(socket, canvas_id) do
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Psc.PubSub, Canvas.pubsub_topic_unstr(canvas_id))
+      Phoenix.PubSub.subscribe(Psc.PubSub, "presence_unstr:#{canvas_id}")
+
+      Presence.track(self(), "presence_unstr:#{canvas_id}", socket.assigns.user_id, %{
+        username: socket.assigns.username,
+        cursor_pos: nil
+      })
+
+      handle_presence_change(socket, canvas_id)
+    else
+      socket
+    end
+  end
+
+  defp process_operation(socket, operation) do
+    Canvas.apply_unstr_canvas_operation(socket.assigns.canvas_id, socket.assigns.user_id, operation)
+    cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
+
+    Logger.debug("[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}")
+
+    c_name = Map.get(cells, "$name", socket.assigns.c_name)
+    c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
+
+    socket =
+      if socket.assigns.idle_timer_ref do
+        Process.cancel_timer(socket.assigns.idle_timer_ref)
+        assign(socket, idle_timer_ref: nil)
+      else
+        socket
+      end
+
+    idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
+
+    socket
+    |> assign(:cells, cells)
+    |> assign(:c_name, c_name)
+    |> assign(:c_desc, c_desc)
+    |> assign(:idle_timer_ref, idle_timer_ref)
+  end
+
+  @impl true
+  def handle_event("share_canvas", %{"email" => email}, socket) do
+    if socket.assigns.canvas.author_id == socket.assigns.user_id do
+      case Canvas.share_unstr_canvas_with(socket.assigns.canvas, email) do
+        {:ok, updated_canvas} ->
+          {:noreply,
+           socket
+           |> assign(:canvas, updated_canvas)
+           |> put_flash(:info, "Canvas shared with #{email}")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to share canvas")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only canvas owner can share")}
+    end
+  end
+
+  @impl true
+  def handle_event("remove_access", %{"email" => email}, socket) do
+    if socket.assigns.canvas.author_id == socket.assigns.user_id do
+      case Canvas.unshare_unstr_canvas(socket.assigns.canvas, email) do
+        {:ok, updated_canvas} ->
+          {:noreply,
+           socket
+           |> assign(:canvas, updated_canvas)
+           |> put_flash(:info, "Access removed for #{email}")}
+
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to remove access")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only canvas owner can remove access")}
+    end
+  end
+
   @impl true
   def handle_event("update_name", %{"value" => name}, socket) do
-    canvas = socket.assigns.canvas
-
-    case Canvas.update_unstr_canvas(canvas, %{name: name}) do
-      {:ok, updated_canvas} ->
-        {:noreply,
-         socket
-         |> assign(:canvas, updated_canvas)
-         |> put_flash(:info, "Canvas name updated")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update canvas")}
-    end
+    operation = %{"type" => "update_name", "value" => name}
+    socket = process_operation(socket, operation)
+    {:noreply, socket}
   end
 
   @impl true
   def handle_event("update_description", %{"value" => description}, socket) do
-    canvas = socket.assigns.canvas
+    operation = %{"type" => "update_description", "value" => description}
+    socket = process_operation(socket, operation)
+    {:noreply, socket}
+  end
 
-    case Canvas.update_unstr_canvas(canvas, %{description: description}) do
-      {:ok, updated_canvas} ->
-        {:noreply,
-         socket
-         |> assign(:canvas, updated_canvas)
-         |> put_flash(:info, "Canvas description updated")}
+  @impl true
+  def handle_event("update_cell", %{"cell_key" => cell_key, "values" => values}, socket) do
+    socket =
+      values
+      |> Enum.reject(fn {field, _value} -> String.starts_with?(field, "_unused_") end)
+      |> Enum.reduce(socket, fn {field, value}, acc ->
+        operation = %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value}
+        process_operation(acc, operation)
+      end)
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update canvas")}
+    {:noreply, socket}
+  end
+
+  def handle_event("update_cell", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
+    operation = %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value}
+    socket = process_operation(socket, operation)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info({:operation, user_id, operation, _seq}, socket) do
+    if user_id != socket.assigns.user_id do
+      cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
+      c_name = Map.get(cells, "$name", socket.assigns.c_name)
+      c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
+
+      {:noreply,
+       socket
+       |> assign(:cells, cells)
+       |> assign(:c_name, c_name)
+       |> assign(:c_desc, c_desc)}
+    else
+      {:noreply, socket}
     end
   end
 
   @impl true
-  def handle_event("update_cell", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
-    canvas = socket.assigns.canvas
-    cells = canvas.cells || %{}
-    cell_data = cells[cell_key] || %{}
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
+    {:noreply, handle_presence_change(socket, socket.assigns.canvas_id)}
+  end
 
-    updated_cell = Map.put(cell_data, field, value)
-    updated_cells = Map.put(cells, cell_key, updated_cell)
+  @impl true
+  def handle_info(:idle_save, socket) do
+    if socket.assigns.cells != socket.assigns.last_saved_cells do
+      Canvas.update_unstr_canvas(socket.assigns.canvas, %{name: socket.assigns.c_name, description: socket.assigns.c_desc})
+      Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
 
-    case Canvas.update_unstr_canvas(canvas, %{cells: updated_cells}) do
-      {:ok, updated_canvas} ->
-        {:noreply,
-         socket
-         |> assign(:canvas, updated_canvas)
-         |> put_flash(:info, "Cell updated")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to update cell")}
+      {:noreply,
+       socket
+       |> assign(:last_saved_cells, socket.assigns.cells)
+       |> assign(:idle_timer_ref, nil)}
+    else
+      {:noreply, assign(socket, idle_timer_ref: nil)}
     end
+  end
+
+  @impl true
+  def handle_info(:periodic_save, socket) do
+    if socket.assigns.cells != socket.assigns.last_saved_cells do
+      Canvas.update_unstr_canvas(socket.assigns.canvas, %{name: socket.assigns.c_name, description: socket.assigns.c_desc})
+      Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
+      socket = assign(socket, :last_saved_cells, socket.assigns.cells)
+
+      Process.send_after(self(), :periodic_save, @periodic_save_interval)
+      {:noreply, socket}
+    else
+      Process.send_after(self(), :periodic_save, @periodic_save_interval)
+      {:noreply, socket}
+    end
+  end
+
+  defp handle_presence_change(socket, canvas_id) do
+    presence_list = Presence.list("presence_unstr:#{canvas_id}")
+    assign(socket, presence: presence_list)
   end
 
   @impl true
@@ -81,32 +224,92 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <%!-- Header --%>
         <div class="flex items-center justify-between mb-8">
           <div class="flex-1">
-            <input
-              type="text"
-              value={@canvas.name}
-              phx-change="update_name"
-              phx-debounce="1000"
-              class="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none w-full"
-              placeholder="Canvas name"
-            />
+            <.form for={%{}} phx-change="update_name">
+              <input
+                name="value"
+                type="text"
+                value={@c_name}
+                phx-debounce="1000"
+                class="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none w-full"
+                placeholder="Canvas name"
+              />
+            </.form>
           </div>
           <.link navigate={~p"/canvas-designer"} class="text-sm text-blue-600 hover:text-blue-700">
             Back to Canvases
           </.link>
         </div>
 
-        <%!-- Description --%>
-        <div class="mb-8">
-          <textarea
-            phx-change="update_description"
-            phx-debounce="1000"
-            class="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Canvas description..."
-            rows="2"
-          ><%= @canvas.description %></textarea>
+        <%!-- Presence Sidebar --%>
+        <div class="flex flex-col gap-4 mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <div>
+            <div class="text-xs text-gray-500 self-center mr-2 mb-2">Active Users:</div>
+            <div class="flex gap-2">
+              <%= for {_user_id, %{metas: metas}} <- @presence do %>
+                <% meta = List.first(metas) %>
+                <div class="text-sm font-medium px-2 py-1 bg-blue-100 text-blue-800 rounded-md">
+                  <%= meta[:username] %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-gray-200">
+            <h4 class="font-semibold text-gray-900 mb-3">Share Canvas</h4>
+
+            <%= if @canvas.author_id == @user_id do %>
+              <.form for={%{}} id="share-form" phx-submit="share_canvas" class="flex gap-2 mb-4">
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="Enter email..."
+                  class="flex-1 text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  class="px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition"
+                >
+                  Share
+                </button>
+              </.form>
+            <% end %>
+
+            <%= if @canvas.shared_with && Enum.any?(@canvas.shared_with) do %>
+              <div class="mb-4">
+                <p class="text-xs font-medium text-gray-600 mb-2">Shared with:</p>
+                <div class="space-y-1">
+                  <%= for email <- @canvas.shared_with do %>
+                    <div class="text-xs text-gray-700 px-3 py-2 bg-green-50 rounded border border-green-200 flex items-center justify-between">
+                      <span>{email}</span>
+                      <%= if @canvas.author_id == @user_id do %>
+                        <button
+                          phx-click="remove_access"
+                          phx-value-email={email}
+                          class="ml-2 px-2 py-1 text-white text-xs font-bold bg-red-600 border border-red-700 rounded hover:bg-red-700 transition"
+                        >
+                          ×
+                        </button>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
         </div>
 
-        <%!-- Canvas Grid --%>
+        <%!-- Description --%>
+        <div class="mb-8">
+          <.form for={%{}} phx-change="update_description">
+            <textarea
+              name="value"
+              phx-debounce="1000"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Canvas description..."
+              rows="2"
+            ><%= @c_desc %></textarea>
+          </.form>
+        </div>
         <div class="bg-white rounded-lg shadow p-8 w-full">
           <h2 class="text-2xl font-bold text-gray-900 mb-6">Canvas Structure</h2>
 
@@ -114,7 +317,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           <div class="mb-8">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Columns</h3>
             <div class="flex flex-wrap gap-2">
-              <%= for column <- @canvas.cells["columns"] || [] do %>
+              <%= for column <- @cells["columns"] || [] do %>
                 <div class="px-3 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
                   <%= column["label"] %>
                 </div>
@@ -125,7 +328,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           <div class="mb-8">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Rows</h3>
             <div class="flex flex-wrap gap-2">
-              <%= for row <- @canvas.cells["rows"] || [] do %>
+              <%= for row <- @cells["rows"] || [] do %>
                 <div class="px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
                   <%= row["label"] %>
                 </div>
@@ -139,7 +342,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <thead>
                 <tr>
                   <th class="px-4 py-2 border border-gray-300 bg-gray-100"></th>
-                  <%= for column <- @canvas.cells["columns"] || [] do %>
+                  <%= for column <- @cells["columns"] || [] do %>
                     <th class="px-4 py-2 border border-gray-300 bg-gray-100 font-semibold text-gray-900">
                       <%= column["label"] %>
                     </th>
@@ -147,38 +350,40 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 </tr>
               </thead>
               <tbody>
-                <%= for {row, row_index} <- Enum.with_index(@canvas.cells["rows"] || []) do %>
+                <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
                   <tr>
                     <td class="px-4 py-2 border border-gray-300 bg-gray-100 font-semibold text-gray-900">
                       <%= row["label"] %>
                     </td>
-                    <%= for {_column, col_index} <- Enum.with_index(@canvas.cells["columns"] || []) do %>
-                      <% layout = @canvas.cells["layout"] || [] %>
+                    <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
+                      <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
                       <td class="px-4 py-2 border border-gray-300">
                         <%= if cell_key do %>
                           <div class="text-sm font-medium text-gray-900">
                             <%= cell_key %>
                           </div>
-                          <% cell_data = @canvas.cells[cell_key] || %{} %>
-                          <div class="mt-2 space-y-2 text-xs">
-                            <%= for {field, value} <- cell_data do %>
-                              <%= if field not in ["row", "column"] do %>
-                                <div>
-                                  <label class="block text-gray-600"><%= field %>:</label>
-                                  <input
-                                    type="text"
-                                    value={value}
-                                    phx-change="update_cell"
-                                    phx-value-cell_key={cell_key}
-                                    phx-value-field={field}
-                                    class="w-full px-2 py-1 border border-gray-300 rounded text-gray-900"
-                                    placeholder="Enter value..."
-                                  />
-                                </div>
+                          <% cell_data = (get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{}) %>
+                          <.form for={%{}} phx-change="update_cell">
+                            <input type="hidden" name="cell_key" value={cell_key} />
+                            <div class="mt-2 space-y-2 text-xs">
+                              <%= for {field, value} <- cell_data do %>
+                                <%= if field not in ["row", "column"] do %>
+                                  <div>
+                                    <label class="block text-gray-600"><%= field %>:</label>
+                                    <input
+                                      name={"values[" <> field <> "]"}
+                                      type="text"
+                                      value={value}
+                                      phx-debounce="150"
+                                      class="w-full px-2 py-1 border border-gray-300 rounded text-gray-900"
+                                      placeholder="Enter value..."
+                                    />
+                                  </div>
+                                <% end %>
                               <% end %>
-                            <% end %>
-                          </div>
+                            </div>
+                          </.form>
                         <% end %>
                       </td>
                     <% end %>

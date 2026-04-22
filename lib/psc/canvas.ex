@@ -340,4 +340,75 @@ defmodule Psc.Canvas do
     canvas = Repo.preload(canvas, :author)
     canvas.author.email == user_email || Enum.any?(canvas.shared_with, &(&1 == user_email))
   end
+
+  @doc """
+  Get the next seq number for the given unstr_canvas
+  """
+  defp next_unstr_canvas_sequence(canvas_id) do
+    case Repo.one(
+           from(e in Psc.Canvas.UnstrCanvasEvent,
+             where: e.unstr_canvas_id == ^canvas_id,
+             select: max(e.seq)
+           )
+         ) do
+      nil -> 1
+      max_seq -> max_seq + 1
+    end
+  end
+
+  def pubsub_topic_unstr(canvas_id), do: "unstr_canvas:#{canvas_id}"
+
+  def get_unstr_canvas_content(canvas_id) do
+    canvas = Repo.get!(UnstrCanvas, canvas_id)
+    cells = canvas.cells || %{}
+    snapshot_seq = canvas.snapshot_seq || 0
+
+    events =
+      from(e in Psc.Canvas.UnstrCanvasEvent,
+        where: e.unstr_canvas_id == ^canvas_id and e.seq > ^snapshot_seq,
+        order_by: [asc: e.seq]
+      )
+      |> Repo.all()
+
+    Enum.reduce(events, cells, &Psc.Canvas.UnstrCanvasCRDT.apply_operation/2)
+  end
+
+  def apply_unstr_canvas_operation(canvas_id, user_id, operation) do
+    seq = next_unstr_canvas_sequence(canvas_id)
+
+    event_attrs = %{
+      operation: operation,
+      seq: seq,
+      unstr_canvas_id: canvas_id,
+      user_id: user_id
+    }
+
+    case Repo.insert(Psc.Canvas.UnstrCanvasEvent.changeset(%Psc.Canvas.UnstrCanvasEvent{}, event_attrs)) do
+      {:ok, _event} ->
+        Phoenix.PubSub.broadcast(
+          Psc.PubSub,
+          pubsub_topic_unstr(canvas_id),
+          {:operation, user_id, operation, seq}
+        )
+        {:ok, seq}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  def save_unstr_canvas_content_to_db(canvas_id, cells) do
+    max_seq =
+      Repo.one(
+        from(e in Psc.Canvas.UnstrCanvasEvent,
+          where: e.unstr_canvas_id == ^canvas_id,
+          select: max(e.seq)
+        )
+      ) || 0
+
+    canvas_id
+    |> get_unstr_canvas()
+    |> UnstrCanvas.changeset(%{cells: cells, snapshot_seq: max_seq})
+    |> Repo.update()
+  end
 end

@@ -11,6 +11,9 @@ defmodule Psc.Canvas.UnstrCanvas do
 
       belongs_to :author, Psc.Accounts.User, type: :id
 
+      field :snapshot_seq, :integer, default: 0
+      has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
+
       field :cells, :map, default: %{
         "columns" => [
           %{"id" => "perceive", "label" => "Perceive"},
@@ -106,7 +109,7 @@ defmodule Psc.Canvas.UnstrCanvas do
     def changeset(unstr_canvas, attrs) do
       # Add a step to validate that cells has the correct structure
       unstr_canvas
-      |> cast(attrs, [:name, :description, :author_id, :shared_with, :cells])
+      |> cast(attrs, [:name, :description, :author_id, :shared_with, :cells, :snapshot_seq])
       |> validate_required([:name, :author_id, :cells])
       |> validate_cells_structure()
     end
