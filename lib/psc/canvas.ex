@@ -397,6 +397,33 @@ defmodule Psc.Canvas do
     end
   end
 
+  @doc """
+  Apply operation and broadcast with a per-client id.
+  """
+  def apply_unstr_canvas_operation(canvas_id, user_id, client_id, operation) do
+    seq = next_unstr_canvas_sequence(canvas_id)
+
+    event_attrs = %{
+      operation: operation,
+      seq: seq,
+      unstr_canvas_id: canvas_id,
+      user_id: user_id
+    }
+
+    case Repo.insert(Psc.Canvas.UnstrCanvasEvent.changeset(%Psc.Canvas.UnstrCanvasEvent{}, event_attrs)) do
+      {:ok, _event} ->
+        Phoenix.PubSub.broadcast(
+          Psc.PubSub,
+          pubsub_topic_unstr(canvas_id),
+          {:operation, user_id, client_id, operation, seq}
+        )
+        {:ok, seq}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
   def save_unstr_canvas_content_to_db(canvas_id, cells) do
     max_seq =
       Repo.one(

@@ -24,6 +24,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         socket
         |> assign(:canvas, canvas)
         |> assign(:canvas_id, id)
+        |> assign(:client_id, Integer.to_string(:erlang.unique_integer([:positive])))
         |> assign(:user_id, socket.assigns.current_scope.user.id)
         |> assign(:username, user_email)
         |> assign(:cells, cells)
@@ -50,8 +51,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   defp subscribe_to_canvas(socket, canvas_id) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Psc.PubSub, Canvas.pubsub_topic_unstr(canvas_id))
-      Phoenix.PubSub.subscribe(Psc.PubSub, "presence_unstr:#{canvas_id}")
+      topic = Canvas.pubsub_topic_unstr(canvas_id)
+      :ok = Phoenix.PubSub.subscribe(Psc.PubSub, topic)
+      :ok = Phoenix.PubSub.subscribe(Psc.PubSub, "presence_unstr:#{canvas_id}")
+      Logger.debug("[UnstrCanvasLive] subscribed pid=#{inspect(self())} topic=#{topic}")
 
       Presence.track(self(), "presence_unstr:#{canvas_id}", socket.assigns.user_id, %{
         username: socket.assigns.username,
@@ -65,7 +68,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   defp process_operation(socket, operation) do
-    Canvas.apply_unstr_canvas_operation(socket.assigns.canvas_id, socket.assigns.user_id, operation)
+    Canvas.apply_unstr_canvas_operation(socket.assigns.canvas_id, socket.assigns.user_id, socket.assigns.client_id, operation)
     cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
 
     Logger.debug("[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}")
@@ -160,11 +163,35 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
-  def handle_info({:operation, user_id, operation, _seq}, socket) do
-    if user_id != socket.assigns.user_id do
+  def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
+    # New broadcasts include a per-client id so multiple tabs by same user get updates
+    if client_id != socket.assigns.client_id do
+      Logger.debug("[UnstrCanvasLive] received broadcast operation from user_id=#{user_id} client_id=#{client_id}: #{inspect(operation)}")
       cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
       c_name = Map.get(cells, "$name", socket.assigns.c_name)
       c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
+
+      Logger.debug("[UnstrCanvasLive] after broadcast apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}")
+
+      {:noreply,
+       socket
+       |> assign(:cells, cells)
+       |> assign(:c_name, c_name)
+       |> assign(:c_desc, c_desc)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:operation, user_id, operation, _seq}, socket) do
+    # Backwards-compatible handler for broadcasts without client_id
+    if user_id != socket.assigns.user_id do
+      Logger.debug("[UnstrCanvasLive] received legacy broadcast operation from user_id=#{user_id}: #{inspect(operation)}")
+      cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
+      c_name = Map.get(cells, "$name", socket.assigns.c_name)
+      c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
+
+      Logger.debug("[UnstrCanvasLive] after legacy apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}")
 
       {:noreply,
        socket
