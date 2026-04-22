@@ -41,7 +41,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} container_class={"w-full mx-auto max-w-screen-xl"}>
       <div class="max-w-4xl mx-auto px-4 py-8">
         <div class="flex items-center justify-between mb-8">
           <h1 class="text-3xl font-bold text-gray-900">Canvas Layouts</h1>
@@ -55,7 +55,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
 
             <.input field={@new_layout_form[:description]} type="textarea" label="Description" placeholder="Enter layout description..." />
 
-            <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">Create Layout</button>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Create Layout</button>
           </.form>
         </div>
 
@@ -75,7 +75,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
                   </div>
                   <div class="flex items-center gap-2">
                     <.link navigate={~p"/canvas-layouts/#{l.id}"} class="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Edit</.link>
-                    <button phx-click="delete_layout" phx-value-id={l.id} onclick="return confirm('Delete this layout?')" class="px-3 py-1 bg-red-600 text-white rounded text-sm">Delete</button>
+                    <button phx-click="delete_layout" phx-value-id={l.id} onclick="return confirm('Delete this layout?')" class="px-3 py-1 bg-red-600 text-white rounded text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Delete</button>
                   </div>
                 </div>
               <% end %>

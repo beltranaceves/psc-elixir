@@ -54,7 +54,7 @@ defmodule PscWeb.CanvasLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} container_class={"w-full mx-auto max-w-screen-xl"}>
       <div class="max-w-6xl mx-auto px-4 py-8">
         <div class="flex items-center justify-between mb-8">
           <h1 class="text-3xl font-bold text-gray-900">Canvases</h1>
@@ -82,7 +82,7 @@ defmodule PscWeb.CanvasLive.Index do
             />
             <button
               type="submit"
-              class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition"
+              class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Create Canvas
             </button>
@@ -113,7 +113,7 @@ defmodule PscWeb.CanvasLive.Index do
                       phx-click="delete_canvas"
                       phx-value-id={canvas.id}
                       onclick="return confirm('Delete this canvas?')"
-                      class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition"
+                      class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       Delete
                     </button>
