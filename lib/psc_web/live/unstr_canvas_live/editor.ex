@@ -387,30 +387,37 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
                       <td class="px-4 py-2 border border-gray-300">
                         <%= if cell_key do %>
-                          <div class="text-sm font-medium text-gray-900">
-                            <%= cell_key %>
-                          </div>
                           <% cell_data = (get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{}) %>
-                          <.form for={%{}} phx-change="update_cell">
-                            <input type="hidden" name="cell_key" value={cell_key} />
-                            <div class="mt-2 space-y-2 text-xs">
-                              <%= for {field, value} <- cell_data do %>
-                                <%= if field not in ["row", "column"] do %>
-                                  <div>
-                                    <label class="block text-gray-600"><%= field %>:</label>
-                                    <input
-                                      name={"values[" <> field <> "]"}
-                                      type="text"
-                                      value={value}
-                                      phx-debounce="150"
-                                      class="w-full px-2 py-1 border border-gray-300 rounded text-gray-900"
-                                      placeholder="Enter value..."
-                                    />
-                                  </div>
-                                <% end %>
-                              <% end %>
+                          <% title = Map.get(cell_data, "name") || Map.get(cell_data, "title") || cell_key %>
+
+                          <div class="bg-white p-3 rounded-md shadow-sm">
+                            <div class="mb-2">
+                              <div class="text-base font-semibold text-gray-900"><%= title %></div>
+                              <div class="text-xs text-gray-500"><%= cell_key %></div>
                             </div>
-                          </.form>
+
+                            <.form for={%{}} phx-change="update_cell">
+                              <input type="hidden" name="cell_key" value={cell_key} />
+
+                              <div class="mt-2 grid gap-2 text-sm">
+                                <%= for {field, value} <- cell_data do %>
+                                  <%= if field not in ["row", "column"] do %>
+                                    <div class="flex flex-col">
+                                      <label class="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1"><%= field %></label>
+                                      <input
+                                        name={"values[" <> field <> "]"}
+                                        type="text"
+                                        value={value}
+                                        phx-debounce="150"
+                                        class="w-full px-2 py-1 border border-gray-200 rounded-md text-gray-900 focus:ring-1 focus:ring-blue-500"
+                                        placeholder="Enter value..."
+                                      />
+                                    </div>
+                                  <% end %>
+                                <% end %>
+                              </div>
+                            </.form>
+                          </div>
                         <% end %>
                       </td>
                     <% end %>
