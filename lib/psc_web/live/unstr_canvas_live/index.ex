@@ -9,14 +9,16 @@ defmodule PscWeb.UnstrCanvasLive.Index do
 
     my_canvases = Canvas.list_user_unstr_canvases(user_id)
     shared_canvases = Canvas.list_shared_unstr_canvases(user_email)
-     layouts = Canvas.list_canvas_layouts()
+    layouts = Canvas.list_canvas_layouts()
+    layout_options = [{"Default", ""} | Enum.map(layouts, fn l -> {l.name, l.id} end)]
 
     {:ok,
      socket
      |> assign(:my_canvases, my_canvases)
      |> assign(:shared_canvases, shared_canvases)
       |> assign(:new_canvas_form, to_form(%{}))
-      |> assign(:layouts, layouts)}
+      |> assign(:layouts, layouts)
+      |> assign(:layout_options, layout_options)}
   end
 
   @impl true
@@ -98,15 +100,12 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               label="Description"
               placeholder="Enter canvas description..."
             />
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Layout</label>
-              <select name="layout_id" id="layout_id" class="mt-1 block w-full rounded border px-3 py-2">
-                <option value="">Default</option>
-                <%= for l <- @layouts do %>
-                  <option value={l.id}><%= l.name %></option>
-                <% end %>
-              </select>
-            </div>
+            <.input
+              field={@new_canvas_form[:layout_id]}
+              type="select"
+              options={@layout_options}
+              label="Layout"
+            />
             <button
               type="submit"
               class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
