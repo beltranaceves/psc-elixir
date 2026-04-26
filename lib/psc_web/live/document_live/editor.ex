@@ -348,7 +348,7 @@ defmodule PscWeb.DocumentLive.Editor do
                 phx-hook="EditorHook"
                 phx-update="ignore"
                 data-current-user-id={@user_id}
-                class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
                 placeholder="Start typing..."
                 value={@content}
               ></textarea>

@@ -163,6 +163,29 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
+  def handle_event("render_field", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
+    html =
+      case value do
+        nil -> ""
+        v ->
+          trimmed = String.trim(v || "")
+          if trimmed == "" do
+            # placeholder HTML for empty fields (keeps area clickable)
+            "<div class=\"p-2 rounded bg-gray-50 text-gray-400\">Click to edit</div>"
+          else
+            try do
+              Earmark.as_html!(v || "")
+            rescue
+              _ -> Phoenix.HTML.html_escape(v || "") |> Phoenix.HTML.safe_to_string()
+            end
+          end
+      end
+
+    socket = push_event(socket, "field_rendered", %{cell_key: cell_key, field: field, html: html})
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
     # New broadcasts include a per-client id so multiple tabs by same user get updates
     if client_id != socket.assigns.client_id do
@@ -172,6 +195,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
 
       Logger.debug("[UnstrCanvasLive] after broadcast apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}")
+
+      # If this operation updated a cell field, notify the client-side hooks
+      socket =
+        case operation do
+          %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
+            new_value = (get_in(cells, ["cells", cell_key, field]) || cells[cell_key] && Map.get(cells[cell_key], field)) || ""
+            push_event(socket, "cell_updated", %{cell_key: cell_key, field: field, new_value: new_value, from_user_id: user_id})
+
+          _ ->
+            socket
+        end
 
       {:noreply,
        socket
@@ -192,6 +226,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
 
       Logger.debug("[UnstrCanvasLive] after legacy apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}")
+
+      # Notify client-side hooks for cell updates (legacy broadcasts)
+      socket =
+        case operation do
+          %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
+            new_value = (get_in(cells, ["cells", cell_key, field]) || cells[cell_key] && Map.get(cells[cell_key], field)) || ""
+            push_event(socket, "cell_updated", %{cell_key: cell_key, field: field, new_value: new_value, from_user_id: user_id})
+
+          _ ->
+            socket
+        end
 
       {:noreply,
        socket
@@ -404,14 +449,19 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                   <%= if field not in ["row", "column"] do %>
                                     <div class="flex flex-col">
                                       <label class="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1"><%= field %></label>
-                                      <input
-                                        name={"values[" <> field <> "]"}
-                                        type="text"
-                                        value={value}
-                                        phx-debounce="150"
-                                        class="w-full px-2 py-1 border border-gray-200 rounded-md text-gray-900 focus:ring-1 focus:ring-blue-500"
-                                        placeholder="Enter value..."
-                                      />
+
+                                      <div id={"md-" <> cell_key <> "-" <> field} phx-hook="MarkdownField" phx-update="ignore" data-cell-key={cell_key} data-field={field} data-current-user-id={@user_id} class="w-full">
+                                        <div id={"md-render-" <> cell_key <> "-" <> field}
+                                          class="md-render prose prose-sm prose-stone dark:prose-invert break-words mb-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded"
+                                          phx-update="ignore"><%= value %></div>
+                                        <textarea
+                                          name={"values[" <> field <> "]"}
+                                          phx-debounce="150"
+                                          class="hidden w-full px-2 py-1 border border-gray-200 rounded-md text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 resize-none"
+                                          placeholder="Enter value..."
+                                          rows="3"
+                                        ><%= value %></textarea>
+                                      </div>
                                     </div>
                                   <% end %>
                                 <% end %>

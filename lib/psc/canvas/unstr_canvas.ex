@@ -7,7 +7,7 @@ defmodule Psc.Canvas.UnstrCanvas do
       field :name, :string
       field :description, :string
 
-      field :shared_with, {:array, :id}, default: []
+      field :shared_with, {:array, :string}, default: []
 
       belongs_to :author, Psc.Accounts.User, type: :id
 

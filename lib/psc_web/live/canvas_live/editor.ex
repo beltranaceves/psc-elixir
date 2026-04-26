@@ -370,7 +370,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="problem_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the problem..."
                       ><%= Map.get(@canvas.problem || %{}, :content, "") %></textarea>
                     </td>
@@ -384,7 +384,7 @@ defmodule PscWeb.CanvasLive.Editor do
                           placeholder="Technology..."
                           value={Map.get(@canvas.leverage || %{}, :technology, "")}
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         />
                         <input
                           type="text"
@@ -392,7 +392,7 @@ defmodule PscWeb.CanvasLive.Editor do
                           placeholder="Components..."
                           value={Map.get(@canvas.leverage || %{}, :components, "")}
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         />
                         <input
                           type="text"
@@ -400,7 +400,7 @@ defmodule PscWeb.CanvasLive.Editor do
                           placeholder="Information..."
                           value={Map.get(@canvas.leverage || %{}, :information, "")}
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         />
                         <input
                           type="text"
@@ -418,7 +418,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="solution_cluster_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the solution..."
                       ><%= Map.get(@canvas.solution_cluster || %{}, :content, "") %></textarea>
                     </td>
@@ -428,7 +428,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="horizon_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the horizon..."
                       ><%= Map.get(@canvas.horizon || %{}, :content, "") %></textarea>
                     </td>
@@ -483,7 +483,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="inner_environment_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the inner environment..."
                       ><%= Map.get(@canvas.inner_environment || %{}, :content, "") %></textarea>
                     </td>
@@ -497,7 +497,7 @@ defmodule PscWeb.CanvasLive.Editor do
                           placeholder="Evolvability..."
                           value={Map.get(@canvas.evolvability_cluster || %{}, :evolvability, "")}
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         />
                         <input
                           type="text"
@@ -505,7 +505,7 @@ defmodule PscWeb.CanvasLive.Editor do
                           placeholder="Diffusibility..."
                           value={Map.get(@canvas.evolvability_cluster || %{}, :diffusibility, "")}
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         />
                         <input
                           type="text"
@@ -523,7 +523,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="potential_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the potential..."
                       ><%= Map.get(@canvas.potential || %{}, :content, "") %></textarea>
                     </td>
@@ -540,7 +540,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="manifestations_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the manifestations..."
                       ><%= Map.get(@canvas.manifestations || %{}, :content, "") %></textarea>
                     </td>
@@ -550,7 +550,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="capabilities_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the capabilities..."
                       ><%= Map.get(@canvas.capabilities || %{}, :content, "") %></textarea>
                     </td>
@@ -564,7 +564,7 @@ defmodule PscWeb.CanvasLive.Editor do
                           placeholder="Merit..."
                           value={Map.get(@canvas.merit_cluster || %{}, :merit, "")}
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         />
                         <input
                           type="text"
@@ -598,7 +598,7 @@ defmodule PscWeb.CanvasLive.Editor do
                       <textarea
                         name="mission_content"
                         phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 rounded px-2 py-1 text-sm resize-none text-black"
+                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
                         placeholder="Describe the mission..."
                       ><%= Map.get(@canvas.mission || %{}, :content, "") %></textarea>
                     </td>
