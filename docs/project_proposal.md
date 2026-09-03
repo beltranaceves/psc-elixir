@@ -86,22 +86,34 @@ Capture interaction traces to support later analysis and experiments:
 - expose exportable event streams and lightweight aggregation APIs,
 - enable studies of user archetypes, framing patterns, and outcome correlations.
 
+## Non-Functional Requirements
+- The platform should be built using the Elixir/Phoenix stack for scalability and real-time capabilities.
+- The system should be designed for extensibility to support future features and different types of VIT
+- The user interface should be intuitive and responsive to facilitate collaboration and ease of use, including support for both desktop and mobile devices.
+- The platform should ensure data integrity and consistency during real-time collaboration, using CRDTs for conflict-free merging of changes.
+- The analytics infrastructure should be designed to efficiently capture and store interaction data while minimizing performance overhead on the user experience.
+- The system should be easy to deploy and maintain, with clear documentation for both users and developers.
+
 # Deliverables
 
 - A working web application built with Elixir/Phoenix
 - Support for:
-
 	- configurable visual inquiry templates
 	- collaborative canvas instances
 	- delta-based versioning
 - A basic analytics infrastructure capturing user interactions
 - A written report describing:
-
 	- design decisions
 	- system architecture
 	- and implications for supporting visual inquiry and innovation
 
-# Key References
+# References
+
+## Frameworks and Libraries
+- Elixir: https://elixir-lang.org
+- Phoenix: https://www.phoenixframework.org
+- Delta CRDTs: https://github.com/derekkraan/delta_crdt_ex
+- LiveView: https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView
 
 ## Core Concepts
 
