@@ -1,0 +1,249 @@
+% ============================================================================
+%  Project Proposal
+%  Developing a Configurable Platform for Collaborative Visual Inquiry Tools:
+%  The Problem–Solution Canvas
+%
+%  Compile with pdfLaTeX + BibTeX (default settings on Overleaf).
+%  Bibliography: references.bib (natbib / plainnat, author–year style).
+% ============================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% --- Encoding & fonts -------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% --- Page layout ------------------------------------------------------------
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{parskip}
+\usepackage{enumitem}
+\setlist{topsep=2pt,itemsep=2pt,parsep=0pt}
+
+% --- Graphics & colors ------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% --- Citations & bibliography -----------------------------------------------
+\usepackage[round]{natbib}
+\bibliographystyle{plainnat}
+\usepackage{doi}
+
+% --- Hyperlinks -------------------------------------------------------------
+\usepackage[hidelinks]{hyperref}
+\urlstyle{same}
+
+% --- Section formatting -----------------------------------------------------
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+
+% ============================================================================
+\begin{document}
+
+% --- Title page -------------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+
+  {\Huge\bfseries Developing a Configurable Platform for\\[0.4em] Collaborative Visual Inquiry Tools\par}
+  \vspace{0.8cm}
+  {\LARGE The Problem--Solution Canvas\par}
+
+  \vspace{3cm}
+
+  {\large 9th Semester --- Project Proposal\par}
+
+  \vspace{2cm}
+
+  \begin{tabular}{rl}
+    \textbf{Supervisor:} & Ivan Aaen \\
+                         & \href{mailto:ivan@cs.aau.dk}{\texttt{ivan@cs.aau.dk}} \\[0.8em]
+    \textbf{Student:}    & Beltran Aceves \\
+                         & \href{mailto:baceve25@student.aau.dk}{\texttt{baceve25@student.aau.dk}} \\
+  \end{tabular}
+
+  \vfill
+
+  {\large \today\par}
+
+  \vspace*{1cm}
+\end{titlepage}
+
+% --- Table of contents ------------------------------------------------------
+\tableofcontents
+\newpage
+
+% --- Project Summary --------------------------------------------------------
+\section{Project Summary}
+
+This project focuses on developing a web-based, configurable platform for creating and using Visual Inquiry Tools (VITs) collaboratively, with a particular emphasis on the Problem--Solution Canvas (PSC), developed by Ivan Aaen. Visual inquiry tools are common in both industry and research: commercial products such as Miro and MURAL, and a variety of canvas-style templates (e.g., the Business Model Canvas, Lean Canvas). Our aim is not to replace those tools, but to provide a platform that combines configurability and observability for the purpose of studying user interactions within these systems.
+
+The platform will therefore let users:
+\begin{itemize}
+  \item define and share canvas templates (e.g., PSC variants);
+  \item instantiate collaborative canvas instances that load and synchronize in real time;
+  \item explicitly version canvas progress via a delta-based, tree-like model which records the reason for pivoting, and supports visualizing and traversing versions;
+  \item automatically capture user interaction events and metrics via an analytics engine for later study, producing exportable event stream datasets;
+  \item analyze canvas content via an insights system that surfaces coherence, staleness, and quality signals (e.g., cells deviating from the central theme, old/stale cells), using LLMs among other methods.
+\end{itemize}
+
+Implemented as a web application using the Elixir/Phoenix/Postgres stack \citep{elixir,phoenix,liveview}, the platform will provide CRDT-based real-time collaboration \citep{delta_crdt}, a canvas template configurator, a versioning system, a process for capturing user interactions, and an insights system for analyzing canvas contents.
+
+The immediate goal is a minimal, extensible MVP that demonstrates template configurability, synchronized collaborative editing, explicit version capture, automatic interaction capture, and content-level insights; subsequent phases will scale the analytics, experiment tooling, and dataset exports for larger studies.
+
+% --- Background -------------------------------------------------------------
+\section{Background}
+
+Visual Inquiry Tools (VITs) are structured visual frameworks used to support collaborative inquiry, problem framing, ideation, and decision-making. Common examples include canvases, maps, and collaborative diagrammatic workspaces that help teams externalize knowledge and iteratively refine understanding during innovation processes.
+
+The Problem--Solution Canvas (PSC) is a Visual Inquiry Tool developed within the context of software and digital innovation research by Ivan Aaen and collaborators. Building on the \emph{Essence} approach to software innovation \citep{aaen2008essence,aaen2012essence}, the PSC emphasizes iterative problem framing and the co-evolution of problems and solutions through collaborative inquiry, reinterpretation, and negotiation among team members.
+
+Digital innovation problems are often ambiguous, evolving, and socio-technical, making them difficult to capture using static or linear planning tools. Existing industry platforms such as \href{https://www.strategyzer.com}{Strategyzer}, \href{https://miro.com}{Miro}, \href{https://www.mural.co}{MURAL}, \href{https://canvanizer.com}{Canvanizer}, \href{https://leanspark.ai/leancanvas}{Lean Canvas}, and \href{https://designthinking.ideo.com/}{IDEO Design Thinking Tools} provide reusable templates and collaborative workspaces, but generally offer limited support for analyzing how ideas evolve over time or whether canvas content remains coherent and up to date. Similarly, literature on canvas-based and inquiry-oriented tools includes the Business Model Canvas \citep{osterwalder2010business}, Lean Canvas \citep{maurya2012running}, Design Principle Canvas \citep{schoormann2023guiding}, and recent work on digital inquiry platforms \citep{roschnik2024approaching,avdiji2020design} and collaborative visual analytics \citep{chen2020collaborative,chen2021large,kolloffel2011comparing,hu2021systematic}, as well as visual inquiry for sharing contextual knowledge \citep{sandberg2011visual}. This project aims to address that gap by combining configurable visual inquiry templates, real-time collaboration, fine-grained interaction tracing, and content-level insights into a unified research-oriented platform.
+
+\subsection{Examples of Existing Tools in Literature}
+
+\begin{itemize}
+  \item \textbf{Business Model Canvas} --- Osterwalder, A., \& Pigneur, Y. (2010). \emph{Business Model Generation}.
+  \item \textbf{Lean Canvas} --- Maurya, A. (2012). \emph{Running Lean}.
+  \item \textbf{Design Principle Canvas} --- Schoormann, T., et al. (2023). \emph{Guiding Design Principle Projects: A Canvas for Young Design Science Researchers}.
+  \item \textbf{Digital Inquiry Platform concepts} --- Roschnik, A., et al. (2024). \emph{Approaching Visual Inquiry Tools through the Lens of Systems Thinking: The Proposal of a Digital Inquiry Platform}. See also Avdiji et al. (2020).
+  \item \textbf{Collaborative visual inquiry and analytics research} --- Chen, L., et al. (2020). \emph{Collaborative Behavior, Performance and Engagement with Visual Analytics Tasks Using Mobile Devices}. See also Chen et al. (2021); Kolloffel et al. (2011); Hu \& Chen (2021).
+  \item \textbf{Visual inquiry and contextual knowledge sharing} --- Sandberg, F. (2011). \emph{Visual Inquiry: A Tool for Presenting and Sharing Contextual Knowledge}.
+\end{itemize}
+
+\subsection{Examples of Existing Tools in Industry}
+
+\begin{itemize}
+  \item \href{https://www.strategyzer.com/library?type=Tools}{Strategyzer}
+  \item \href{https://miro.com}{Miro}
+  \item \href{https://www.mural.co/templates}{MURAL}
+  \item \href{https://canvanizer.com}{Canvanizer}
+  \item \href{https://leanspark.ai/leancanvas}{Lean Canvas}
+  \item \href{https://designthinking.ideo.com/}{Design Thinking Tools (IDEO U)}
+\end{itemize}
+
+% --- Project Goals ----------------------------------------------------------
+\section{Project Goals}
+
+The project focuses on building the MVP:
+\begin{itemize}
+  \item development of the main web application with VIT core features;
+  \item implementation of the delta-based versioning system: explicit milestones/versions/commits in a traversable tree, with visualization and recorded pivot/bifurcation rationale;
+  \item implementation of the insights system for analyzing canvas content (coherence, staleness, quality signals, with optional LLM-enabled insights);
+  \item implementation of the analytics engine (automatic capture of interaction events and metrics) to lay the foundation for later study.
+\end{itemize}
+
+% --- Functional Requirements ------------------------------------------------
+\section{Functional Requirements}
+
+\subsection{Core Tooling for VITs}
+
+Design and implement core tooling for building Visual Inquiry Tools (VITs). This includes:
+\begin{itemize}
+  \item defining canvas structure (cells, relations, semantics) and templates;
+  \item editor UI and components for creating and editing cells;
+  \item template persistence and instantiation of canvases.
+\end{itemize}
+
+\subsection{Collaborative Workspaces}
+
+Develop workspaces for real-time collaboration on canvases. This includes:
+\begin{itemize}
+  \item real-time collaborative editing using CRDTs with live document loading and conflict-free merges;
+  \item per-user presence and cursor indicators, plus inline comments and discussion threads;
+  \item sharing, access control, and session management for team sessions.
+\end{itemize}
+
+Presence, awareness, and representational guidance follow findings on collaborative inquiry learning and engagement with shared visual tasks \citep{kolloffel2011comparing,chen2020collaborative,chen2021large}.
+
+\subsection{Delta Model \& Versioning}
+
+A PSC, or any other VIT instance, evolves continuously during collaborative real-time sessions. This fluid evolution is normal and expected, but teams also need to explicitly mark that they have reached a meaningful point in the progress of their project or canvas.
+
+The delta system provides this intentional versioning layer, to:
+\begin{itemize}
+  \item let users create explicit milestones/versions/commits (snapshots) of the canvas at chosen moments;
+  \item organize versions in a tree-like manner supporting linear history as well as branches for pivots, bifurcations, and parallel alternatives;
+  \item visualize and traverse the version tree (timeline/tree view, diff/compare between versions, restore or fork from any version);
+  \item record the reason for each pivot or bifurcation (decision rationale, reinterpretation note, author, timestamp, parent link(s));
+  \item provide tools to annotate and group deltas/versions for later analysis.
+\end{itemize}
+
+\subsection{Analytics \& Interaction Telemetry}
+\label{sec:analytics}
+
+The platform provides an analytics engine that automatically captures all kinds of events and metrics from users interacting with the system, so they can be analyzed later:
+\begin{itemize}
+  \item passively log interaction events (edits, navigation, presence, comments, version operations, insight views) with order, frequency/distribution, and metadata (who, when, where in the canvas, session/device context);
+  \item expose exportable event streams and lightweight aggregation APIs for research use;
+  \item enable studies of user archetypes, framing patterns, collaboration dynamics, and outcome correlations.
+\end{itemize}
+
+Event models and visual representations for collaborative discourse build on prior work in visual analytics and discourse analysis \citep{chen2020collaborative,chen2021large,hu2021systematic}.
+
+\subsection{Insights \& Content Analysis}
+
+Analyze the contents of a given PSC to support reflection and convergence, complementing the interaction-level analytics in Section~\ref{sec:analytics}:
+\begin{itemize}
+  \item detect cells deviating from the central theme or problem framing of the canvas;
+  \item detect old/stale cells (e.g., untouched, superseded, or inconsistent with recent pivots/decisions);
+  \item surface coherence and quality signals (e.g., contradictions, gaps, duplicates across cells);
+  \item provide LLM-enabled insights where appropriate (e.g., summaries, suggestions, theme-drift explanations), designed as an optional, pluggable layer over deterministic heuristics so the platform remains usable without an LLM provider.
+\end{itemize}
+
+Content-level coherence builds on design theory for visual inquiry tools \citep{avdiji2020design} and canvas-based guidance for design projects \citep{schoormann2023guiding}.
+
+% --- Non-Functional Requirements --------------------------------------------
+\section{Non-Functional Requirements}
+
+\begin{itemize}
+  \item The platform should be built using the Elixir/Phoenix stack for scalability and real-time capabilities.
+  \item The system should be designed for extensibility to support future features and different types of VIT, including new insight detectors and LLM providers.
+  \item The user interface should be intuitive and responsive to facilitate collaboration and ease of use, including support for both desktop and mobile devices.
+  \item The platform should ensure data integrity and consistency during real-time collaboration, using CRDTs for conflict-free merging of changes.
+  \item The analytics infrastructure should be designed to efficiently capture and store interaction data while minimizing performance overhead on the user experience.
+  \item The insights system should run efficiently alongside editing (e.g., asynchronous/on-demand analysis) and keep LLM usage optional, privacy-aware, and clearly attributed, so canvases remain fully usable without external AI services.
+  \item The system should be easy to deploy and maintain, with clear documentation for both users and developers.
+\end{itemize}
+
+% --- Deliverables -----------------------------------------------------------
+\section{Deliverables}
+
+\begin{itemize}
+  \item A working web application built with Elixir/Phoenix;
+  \item Project documentation and deployment guide;
+  \item Support for:
+  \begin{itemize}
+    \item configurable visual inquiry templates;
+    \item collaborative canvas instances;
+    \item delta-based pivot versioning;
+    \item insights system for canvas content analysis (theme deviation, stale cells, coherence signals, with optional LLM-enabled insights);
+    \item a basic analytics engine automatically capturing user interaction events and metrics, with exportable streams for later analysis;
+  \end{itemize}
+  \item A written report describing:
+  \begin{itemize}
+    \item design decisions;
+    \item system architecture;
+    \item and implications for supporting visual inquiry and innovation.
+  \end{itemize}
+\end{itemize}
+
+% --- Future Work ------------------------------------------------------------
+\section{Future Work}
+
+The following are out of scope for the MVP but are natural next steps once the core platform is in place.
+
+\paragraph{Experiments on user behavior.}
+Design and run studies using the analytics engine to look at patterns of use, problem framing, and solution development; such as user archetypes, framing patterns, collaboration dynamics, and how they relate to outcomes. This would also mean scaling up the analytics side: experiment tooling, aggregation APIs, and dataset exports for larger studies.
+
+\paragraph{Non-table canvases.}
+The MVP assumes table-like canvases made of cells. Later we want templates that are not grids at all: a background image or SVG with floating text inputs placed on top of it. This would support more visual or spatial VITs (maps, diagrams, annotated pictures) using the same collaboration, versioning, and analytics foundations.
+
+% --- References -------------------------------------------------------------
+\section{References}
+\bibliography{references}
+
+\end{document}
