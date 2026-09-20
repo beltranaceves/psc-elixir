@@ -1,0 +1,13 @@
+{
+  "name": "psc-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright browser regression suite for the Psc Phoenix app",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

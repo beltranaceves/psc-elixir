@@ -1,11 +1,14 @@
 import Config
 
 # Configure your database
+#
+# PSC_DB_NAME / PSC_PORT allow the E2E test harness to run the dev build
+# against a separate database and port without recompiling dependencies.
 config :psc, Psc.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "psc_dev",
+  database: System.get_env("PSC_DB_NAME", "psc_dev"),
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -19,7 +22,7 @@ config :psc, Psc.Repo,
 config :psc, PscWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}],
+  http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("PSC_PORT", "4000"))],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

@@ -86,6 +86,12 @@ defmodule Psc.MixProject do
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "e2e.setup": [
+        "ecto.create --quiet",
+        "ecto.migrate --quiet",
+        "run priv/repo/e2e_seeds.exs",
+        "assets.build"
+      ],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind psc", "esbuild psc"],

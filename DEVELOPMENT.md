@@ -134,7 +134,13 @@ separate from the Phoenix esbuild/tailwind tooling.
 cd test/e2e
 npm install
 npx playwright install chromium
-mix e2e.setup        # creates + migrates psc_e2e DB, seeds a confirmed test user
+```
+
+The database, migrations, seed user, and assets are handled automatically by the Playwright
+`globalSetup` on every run. For a manual fallback (e.g., to inspect the DB before a run):
+
+```bash
+set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && set PSC_PORT=4001 && mix e2e.setup
 ```
 
 **Running:**
@@ -151,10 +157,11 @@ npx playwright test
 export default defineConfig({
   webServer: {
     command: 'mix phx.server',
+    cwd: '../..',                  // run from the project root (where mix.exs lives)
     url: 'http://localhost:4001',
-    reuseExistingServer: true,   // if 4001 is already up, reuse it — no second server
+    reuseExistingServer: true,     // if 4001 is already up, reuse it — no second server
     timeout: 120_000,
-    env: { MIX_ENV: 'e2e' },
+    env: { MIX_ENV: 'dev', PSC_DB_NAME: 'psc_e2e', PSC_PORT: '4001' },
   },
   // ...
 });
@@ -165,25 +172,12 @@ Behavior:
 - **Already running** → `reuseExistingServer: true` detects the live port and reuses it.
 - **Server fails to start** → the run fails with server output in the report.
 
-**Why `MIX_ENV=e2e`:** `config/test.exs` uses the Ecto Sandbox (`server: false`), which cannot
-serve a real running server. `config/dev.exs` uses `psc_dev` with code reloader + watchers —
-E2E tests must not mutate dev data. So `config/e2e.exs` imports dev and overrides:
-
-```elixir
-# config/e2e.exs
-import Config
-import_config "dev.exs"
-
-config :psc, Psc.Repo,
-  database: "psc_e2e",          # separate DB — safe to wipe
-  pool_size: 10
-
-config :psc, PscWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 4001],
-  server: true,
-  code_reloader: false,          # faster, no reloader needed
-  watchers: []                   # assets prebuilt via mix assets.build
-```
+**Why `MIX_ENV=dev` + env overrides:** the E2E server runs the **already-compiled dev build**
+against a separate database (`psc_e2e`) and port (`4001`) via `PSC_DB_NAME` / `PSC_PORT`
+(see `config/dev.exs`). This avoids recompiling dependencies for a new environment — important
+because `bcrypt_elixir` compiles C code via `make`, which requires a C toolchain that may not
+be present. `config/test.exs` uses the Ecto Sandbox (`server: false`) and cannot serve a real
+running server, and the dev database (`psc_dev`) is never touched.
 
 **Auth in tests:** use Playwright `storageState` — a global setup logs in once via the UI with
 the seeded confirmed user, saves the session cookie to `test/e2e/.auth/user.json`, and every
@@ -241,7 +235,9 @@ the repository:
    `%APPDATA%\Code\User\workspaceStorage\<workspace-hash>\GitHub.copilot-chat\transcripts\<session-id>.jsonl`
    (the newest file is the current session).
 2. **Export to markdown:**
-   `node scripts/export_chat.mjs <session-id> -o docs/audit/<date>-<topic>.md`
+   `mix run --no-start scripts/export_chat.exs --session-id <id> -o docs/audit/<date>-<topic>.md`
+   (omit `--session-id` to auto-detect the newest session; omit `-o` to use the default
+   `docs/audit/<date>-<session-short>.md`).
 3. **Commit it** alongside the code it produced.
 
 The export script reads the JSONL (structured events: `user.message`, `assistant.message` with

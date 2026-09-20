@@ -5,6 +5,19 @@ This is a web application written using the Phoenix web framework.
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
 
+### Verification workflow
+
+- **Always** follow the workflow in `DEVELOPMENT.md`: spec → plan → implement → verify
+- Before declaring work done, run the verification matrix (cheapest first):
+  1. `mix test` (unit/context) — business logic, changesets, CRDT ops
+  2. `mix test` (LiveView) — component interaction, events, streams, forms
+  3. Ad-hoc browser verification — use the built-in browser tools to open the running app,
+     click through the UI, and capture screenshots (the images enter the LLM context)
+  4. `npx playwright test` — the committed E2E regression suite in `test/e2e/` (auto-starts
+     Phoenix via `MIX_ENV=e2e`, reuses an already-running server)
+- Report evidence for each step **in the chat** (test output, screenshots, what was checked).
+  Do not silently retry or auto-fix; surface failures to the user for review.
+
 ### Phoenix v1.8 guidelines
 
 - **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
