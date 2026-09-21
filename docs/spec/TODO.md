@@ -1,0 +1,3 @@
+- Linters for code quality, complexity, style, etc. What about the type system? What about upgrading elixir and phoenix? Migrations in DB
+- somehow internet access.  either API or headless chromium. I think this already exists with chromium, we just need the instructions to also use to gather info
+- Migrating to a UI component library. Which one?
