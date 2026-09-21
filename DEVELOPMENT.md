@@ -138,20 +138,178 @@ into tracked text files.
 
 ---
 
-## Windows environment notes
+## Environment & tooling guide (Windows)
 
-This project is developed on Windows. Two environment-specific facts matter for agents:
+Practical notes on working in this environment. Most were learned the hard way — each entry
+records a failure mode and the technique that gets around it.
 
-**1. NIF extension (`nif.fix`).** Erlang on Windows resolves NIFs as `.dll`, but `elixir_make`
-builds `bcrypt_elixir` from the Unix `Makefile`, which hardcodes `bcrypt_nif.so`. Without the
-`.dll`, `Bcrypt.Base` fails to load and every password operation raises (12 test failures with a
-misleading *"make sure you have a C compiler"* message). The `nif.fix` alias copies `priv/*.so`
-to `.dll` in the current `_build` environment and is wired into `test`, `verify`, and
-`precommit`. It is a no-op on non-Windows systems.
+### Running commands
 
-**2. Toolchain / shell.** MSYS2 lives at `C:\msys64` and is **not on PATH by default**; gcc is
-at `C:\msys64\mingw64\bin\gcc.exe`. PowerShell blocks `mix.ps1`/`npm.ps1` via execution policy —
-**use `mix.bat`, `npm.cmd`, `npx.cmd`, or `cmd /c`**.
+- **PowerShell blocks the `.ps1` shims** (`mix.ps1`, `npm.ps1`) via execution policy. Use
+  `mix.bat`, `npm.cmd`, `npx.cmd`, or wrap in `cmd /c "…"`.
+- **PATH is not always consistent between terminal calls.** A command that resolved a moment ago
+  can come back *"is not recognized"*. Verify before relying on it: `Get-Command mix.bat`.
+  MSYS2 binaries in particular are **not** on PATH by default (see "Toolchain" below).
+- **Long git output is paginated** and will hang a command. Always use `git --no-pager log …`,
+  `git --no-pager diff …`, `git --no-pager show …`.
+- **`sc` is an alias for `Set-Content` in PowerShell.** It does *not* call `sc.exe`, so
+  `sc query postgresql-x64-16` silently **creates a file named `query`**. Use `Get-Service` or
+  `sc.exe` explicitly.
+- **`Set-Content -Encoding utf8` writes a byte-order mark on PowerShell 5.1**, which breaks
+  strict JSON parsers (VS Code's task runner, `jq`, Node). To write clean UTF-8:
+  ```powershell
+  [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+  ```
+  Recovery for an already-BOM'd file: any editor save through `replace_string_in_file` rewrites
+  it without the BOM.
+
+### When the terminal stops cooperating
+
+The integrated terminal can degrade: commands appear to succeed but produce no output, and
+nothing actually executes. **This is recoverable — switch to a VS Code task with redirected
+output:**
+
+```
+cmd /c "cd /d C:\software\psc-elixir && <command> > C:\software\psc-elixir\run.log 2>&1"
+```
+
+then read `run.log` with `read_file`. Redirecting to a file is the important part: it removes
+the dependency on capturing terminal output at all. End these tasks with a cleanup step
+(`del run.log`) so the workaround doesn't leave artifacts behind.
+
+⚠️ **`create_and_run_task` appends every task it is given to `.vscode/tasks.json`.** Diagnostic
+one-offs accumulate as junk entries. After using it, restore the committed task list:
+
+```
+git checkout -- .vscode/tasks.json
+```
+
+The committed `.vscode/tasks.json` holds the four tasks worth keeping: `mix verify`, `mix test`,
+`e2e (playwright)`, `phx.server`.
+
+### The browser is a research tool, not just a UI checker
+
+The built-in browser tools reach the **public internet**, not only localhost. This makes them a
+first-class documentation and research tool:
+
+- Navigate to docs, blog posts, release notes, RFCs — then extract the text:
+  ```js
+  await page.evaluate(() => {
+    const t = document.body.innerText;
+    const i = t.indexOf('to_form');
+    return t.slice(Math.max(0, i - 100), i + 300);
+  });
+  ```
+  Verified working against `hexdocs.pm` (which redirects to `phoenix-live-view.hexdocs.pm`).
+- `screenshot_page` accepts a `ref`/`selector`, so you can capture just one element (a chart, a
+  rendered component) rather than the whole viewport.
+- `fetch_webpage` is the lighter option and returns text directly into context, but it **can
+  return only a redirect notice instead of content**. If it does, follow the redirect URL or
+  fall back to the browser.
+
+**But prefer the local source for API truth.** `deps/` contains the exact source of the exact
+versions in use — no network, no redirects, no version drift. Reach for the web when the answer
+is *not* in `deps/`: ecosystem conventions, migration guides, error messages, design discussion.
+
+### Reading the UI: screenshots are authoritative
+
+**Accessibility snapshots can lag behind the page.** After an action, an a11y snapshot has been
+observed still showing the *previous* state — e.g. after successfully creating a document it
+still reported "No documents yet", and after creating a canvas it still showed the create button
+as disabled. In both cases the screenshot showed the correct, updated state.
+
+Rules:
+- When a screenshot and an a11y snapshot disagree, **trust the screenshot**.
+- Take a screenshot after any action whose result matters, not just a snapshot read.
+- A fresh full `goto`/reload produces a trustworthy snapshot; a snapshot read immediately after
+  a click may not.
+
+### Driving LiveView from the browser or Playwright
+
+- **Wait for `.phx-connected` before typing into a form.** LiveView wipes input values that were
+  typed before the view connected, because the first server diff re-renders the inputs. Symptom:
+  the form submits *empty* fields. (`PHX_CONNECTED_CLASS` is applied to the `data-phx-main`
+  element by `hideLoader()` — see `deps/phoenix_live_view/priv/static/phoenix_live_view.esm.js`.)
+- **Scope to a form id, then address inputs by `name`.** Pages can contain several forms with the
+  same labels — `/users/log-in` has both a magic-link and a password form, each with an "Email"
+  field. Use `#login_form_password` + `input[name="user[email]"]`, not a bare label lookup.
+
+### Playwright failure artifacts
+
+Every failure writes a folder under `test/e2e/test-results/` containing:
+
+| File | Use |
+|---|---|
+| `test-failed-1.png` | Screenshot of the failure — view it (`view_image`) to *see* what broke |
+| `error-context.md` | A11y snapshot of the failed state **plus the test source** |
+
+`error-context.md` is often enough to diagnose without re-running: it shows both the assertion
+and the DOM state at failure.
+
+### Isolated environments for experiments
+
+The same build can be run against a different database and port, so ad-hoc work never touches
+`psc_dev` (see `config/runtime.exs` and `config/dev.exs`):
+
+```
+set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && set PSC_PORT=4001 && mix phx.server
+```
+
+- `PSC_DB_NAME` — database name (default `psc_dev`)
+- `PSC_PORT` — HTTP port, takes precedence over `PORT` (default `4000`)
+
+For ad-hoc inspection of business logic or the database, write a script and run it with
+`mix run` — **do not pass `--no-start`**, which leaves the repo unstarted and produces
+`could not lookup Ecto repo Psc.Repo`:
+
+```
+set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && mix run scripts/my_check.exs
+```
+
+See also "Backend Stress/Validity Scripts" below.
+
+### Toolchain
+
+- **NIF extension (`nif.fix`).** Erlang on Windows resolves NIFs as `.dll`, but `elixir_make`
+  builds `bcrypt_elixir` from the Unix `Makefile`, which hardcodes `bcrypt_nif.so`. Without the
+  `.dll`, `Bcrypt.Base` fails to load and every password operation raises — 12 test failures with
+  a misleading *"make sure you have a C compiler"* message. The `nif.fix` alias copies `priv/*.so`
+  to `.dll` in the current `_build` environment and is wired into `test`, `verify`, and
+  `precommit`. No-op on non-Windows.
+- **A C toolchain is available but off PATH.** MSYS2 lives at `C:\msys64`; `gcc` is at
+  `C:\msys64\mingw64\bin\gcc.exe` and `make` at `C:\msys64\usr\bin\make.exe`. Prepend both to
+  PATH when compiling a NIF from source:
+  ```powershell
+  $env:PATH = "C:\msys64\mingw64\bin;C:\msys64\usr\bin;" + $env:PATH
+  $env:CC = "gcc"
+  mix.bat deps.compile bcrypt_elixir --force
+  ```
+  A fresh `_build` (or a new `MIX_ENV`) is therefore buildable — it just needs this PATH,
+  followed by `mix nif.fix`.
+
+### Git
+
+- **Check a file's line endings:** `git ls-files --eol <file>` → `i/lf` / `i/crlf`.
+- **`git add --renormalize .` only touches *tracked* files.** A newly created `.gitattributes`
+  must be staged separately.
+- **Refreshing the working tree after a `.gitattributes` change:** git normalizes on *compare*,
+  so the tree looks clean while the bytes on disk are still CRLF. Refresh with:
+  ```
+  git rm --cached -r -q . && git reset --hard
+  ```
+  (`git checkout-index -a -f` is not sufficient.)
+- **A file isn't showing up as untracked?** It is probably ignored:
+  `git check-ignore -v <file>` names the matching rule.
+- **Discarding everything unstaged** (including deletions) is `git reset --hard`; to keep it
+  scoped, `git checkout -- <paths>`.
+
+### Context economy
+
+- **Delegate exploration to a subagent** (`runSubagent`) when a question needs broad searching —
+  many file reads and greps. The subagent works in its own context and returns only a summary,
+  so the main conversation doesn't pay for the exploration.
+- Run **one test file** while iterating; filter long output; read specific line ranges
+  (see `AGENTS.md`, "Output discipline").
 
 ---
 

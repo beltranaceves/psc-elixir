@@ -4,8 +4,35 @@ This is a web application written using the Phoenix web framework.
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
-- **Use `mix.bat`, `npm.cmd`, `npx.cmd`, or `cmd /c`** on Windows — PowerShell blocks the `.ps1`
-  shims via execution policy. See `DEVELOPMENT.md` ("Windows environment notes").
+
+### Environment & tooling (Windows)
+
+The essentials — see `DEVELOPMENT.md` ("Environment & tooling guide") for detail and rationale.
+
+- Run commands as **`mix.bat` / `npm.cmd` / `npx.cmd`**, or wrap in `cmd /c "…"` — PowerShell
+  blocks the `.ps1` shims via execution policy. Verify with `Get-Command` if something that
+  worked a moment ago is suddenly "not recognized".
+- **Long git output is paginated and will hang a command** — always `git --no-pager log/diff/show`.
+- **If the terminal stops producing output, switch to a VS Code task with output redirected to a
+  file**, then read the file. ⚠️ `create_and_run_task` **appends** to `.vscode/tasks.json`, so run
+  `git checkout -- .vscode/tasks.json` afterwards to drop the throwaway entries.
+- In PowerShell, **`sc` is an alias for `Set-Content`** — `sc query x` *creates a file*. Use
+  `Get-Service` or `sc.exe`. Also `Set-Content -Encoding utf8` writes a BOM (PS 5.1) and breaks
+  JSON; write files with
+  `[System.IO.File]::WriteAllText($p, $s, (New-Object System.Text.UTF8Encoding($false)))`.
+- **The browser is a research tool, not just a UI checker.** It reaches the public internet
+  (docs, blogs, release notes) — read a page with `run_playwright_code` +
+  `document.body.innerText`. Still prefer the local `deps/` source for API truth.
+- **Screenshots are authoritative over accessibility snapshots.** A snapshot read immediately
+  after an action can still show the *previous* state; when the two disagree, trust the screenshot.
+- **Driving LiveView:** wait for `.phx-connected` before typing into a form, or the first server
+  diff wipes the values. Scope to a form id and address inputs by `name`.
+- **Playwright failures leave artifacts** in `test/e2e/test-results/`: `test-failed-1.png` (view it)
+  and `error-context.md` (a11y snapshot + test source) — often enough to diagnose without re-running.
+- **Isolated run** without touching `psc_dev`:
+  `set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && set PSC_PORT=4001 && mix phx.server`.
+  Ad-hoc scripts: `mix run scripts/x.exs` — **not** `--no-start` (leaves the repo unstarted).
+- **Delegate broad exploration to a subagent** — it returns a summary, so the main context stays small.
 
 ### Verification workflow
 
