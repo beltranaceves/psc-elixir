@@ -13,7 +13,8 @@ defmodule Psc.Documents.SnapshotManager do
   alias Psc.Documents.{Document, DocumentEvent, CRDT}
   import Ecto.Query
 
-  @snapshot_interval 100  # Create snapshot after every 100 operations
+  # Create snapshot after every 100 operations
+  @snapshot_interval 100
   @doc """
   Create a snapshot of the document at the current event sequence.
   Stores the content and the seq number so we only replay events after this snapshot.
@@ -102,7 +103,7 @@ defmodule Psc.Documents.SnapshotManager do
       ) || 0
 
     # Create snapshot if we have more than @snapshot_interval events since last snapshot
-    (max_seq - (document.snapshot_seq || 0)) >= @snapshot_interval
+    max_seq - (document.snapshot_seq || 0) >= @snapshot_interval
   end
 
   @doc """
@@ -127,7 +128,8 @@ defmodule Psc.Documents.SnapshotManager do
       snapshot_seq: document.snapshot_seq,
       events_since_snapshot: events_since_snapshot,
       should_snapshot: events_since_snapshot >= @snapshot_interval,
-      snapshot_efficiency: "#{round((document.snapshot_seq / max(total_events, 1)) * 100)}% of events in snapshot"
+      snapshot_efficiency:
+        "#{round(document.snapshot_seq / max(total_events, 1) * 100)}% of events in snapshot"
     }
   end
 end

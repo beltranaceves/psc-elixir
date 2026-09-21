@@ -46,15 +46,17 @@ defmodule Psc.Documents.ConsistencyManager do
 
         %{
           "text" => new_text,
-          "events" => acc["events"] ++ [
-            %{
-              "seq" => event.seq,
-              "user_id" => event.user_id,
-              "operation" => event.operation,
-              "resulting_text" => new_text,
-              "text_hash" => hash_text(new_text)
-            }
-          ]
+          "events" =>
+            acc["events"] ++
+              [
+                %{
+                  "seq" => event.seq,
+                  "user_id" => event.user_id,
+                  "operation" => event.operation,
+                  "resulting_text" => new_text,
+                  "text_hash" => hash_text(new_text)
+                }
+              ]
         }
       end
     )

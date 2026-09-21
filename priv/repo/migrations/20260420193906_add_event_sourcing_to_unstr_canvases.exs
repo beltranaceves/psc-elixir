@@ -10,7 +10,10 @@ defmodule Psc.Repo.Migrations.AddEventSourcingToUnstrCanvases do
       add :id, :binary_id, primary_key: true
       add :operation, :map, null: false
       add :seq, :integer, null: false
-      add :unstr_canvas_id, references(:unstr_canvases, on_delete: :delete_all, type: :binary_id), null: false
+
+      add :unstr_canvas_id, references(:unstr_canvases, on_delete: :delete_all, type: :binary_id),
+        null: false
+
       add :user_id, references(:users, on_delete: :nilify_all), null: true
 
       timestamps()

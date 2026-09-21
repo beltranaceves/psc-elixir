@@ -18,7 +18,10 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     apply_operation(event.operation, cells)
   end
 
-  def apply_operation(%{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value}, cells) do
+  def apply_operation(
+        %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value},
+        cells
+      ) do
     cell_data = cells[cell_key] || %{}
     updated_cell = Map.put(cell_data, field, value)
     Map.put(cells, cell_key, updated_cell)
@@ -33,8 +36,8 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
   end
 
   def apply_operation(_op, cells), do: cells
-
 end
+
 defmodule Psc.Canvas.UnstrCanvasCRDT do
   @moduledoc """
   CRDT-like state application for UnstrCanvas properties (name, description, cells).
@@ -68,7 +71,10 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
   end
 
   # Cell updates
-  def apply_operation(%{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value}, state) do
+  def apply_operation(
+        %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value},
+        state
+      ) do
     cells = Map.get(state, "cells") || %{}
     cell_data = Map.get(cells, cell_key) || %{}
 

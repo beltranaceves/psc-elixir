@@ -101,16 +101,13 @@ defmodule Psc.MixProject do
         "esbuild psc --minify",
         "phx.digest"
       ],
-      # Fast agent/developer loop: fail on warnings, stop at the first test failure.
-      #
-      # NOTE: `format` is intentionally excluded. This repo commits files with CRLF
-      # line endings, but the Elixir formatter always writes LF, so `mix format`
-      # would rewrite every file in the repository (and `--check-formatted` could
-      # never pass). See DEVELOPMENT.md ("Line endings & formatting").
-      verify: ["nif.fix", "compile --warnings-as-errors", "test --max-failures 1"],
-      # Strict full check.
+      # Fast agent/developer loop: format, fail on warnings, stop at the first
+      # test failure. Self-healing — `format` rewrites files in place.
+      verify: ["nif.fix", "format", "compile --warnings-as-errors", "test --max-failures 1"],
+      # Strict full check: formatting must already be applied (no side effects).
       precommit: [
         "nif.fix",
+        "format --check-formatted",
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "test"

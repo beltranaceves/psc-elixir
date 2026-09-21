@@ -24,6 +24,7 @@ defmodule PscWeb.CanvasLive.Index do
     case Canvas.create_canvas(user_id, %{name: name, description: description}) do
       {:ok, _canvas} ->
         my_canvases = Canvas.list_user_canvases(user_id)
+
         {:noreply,
          socket
          |> assign(:my_canvases, my_canvases)
@@ -42,6 +43,7 @@ defmodule PscWeb.CanvasLive.Index do
     if canvas && canvas.author_id == user_id do
       Canvas.delete_canvas(canvas)
       my_canvases = Canvas.list_user_canvases(user_id)
+
       {:noreply,
        socket
        |> assign(:my_canvases, my_canvases)
@@ -54,7 +56,11 @@ defmodule PscWeb.CanvasLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} container_class={"w-full mx-auto max-w-screen-xl"}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      container_class="w-full mx-auto max-w-screen-xl"
+    >
       <div class="max-w-6xl mx-auto px-4 py-8">
         <div class="flex items-center justify-between mb-8">
           <h1 class="text-3xl font-bold text-gray-900">Canvases</h1>
@@ -66,7 +72,12 @@ defmodule PscWeb.CanvasLive.Index do
         <%!-- Create New Canvas Form --%>
         <div class="mb-8 bg-white rounded-lg shadow p-6">
           <h2 class="text-xl font-semibold text-gray-900 mb-4">Create New Canvas</h2>
-          <.form for={@new_canvas_form} id="new-canvas-form" phx-submit="create_canvas" class="space-y-4">
+          <.form
+            for={@new_canvas_form}
+            id="new-canvas-form"
+            phx-submit="create_canvas"
+            class="space-y-4"
+          >
             <.input
               field={@new_canvas_form[:name]}
               type="text"
@@ -100,8 +111,8 @@ defmodule PscWeb.CanvasLive.Index do
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <%= for canvas <- @my_canvases do %>
                 <div class="bg-white rounded-lg shadow hover:shadow-md transition p-6">
-                  <h3 class="text-lg font-semibold text-gray-900"><%= canvas.name %></h3>
-                  <p class="text-sm text-gray-600 mt-2"><%= canvas.description %></p>
+                  <h3 class="text-lg font-semibold text-gray-900">{canvas.name}</h3>
+                  <p class="text-sm text-gray-600 mt-2">{canvas.description}</p>
                   <div class="mt-4 flex gap-2">
                     <.link
                       navigate={~p"/canvases/#{canvas.id}"}
@@ -133,11 +144,11 @@ defmodule PscWeb.CanvasLive.Index do
                 <div class="bg-white rounded-lg shadow hover:shadow-md transition p-6 border-l-4 border-green-500">
                   <div class="flex items-start justify-between">
                     <div>
-                      <h3 class="text-lg font-semibold text-gray-900"><%= canvas.name %></h3>
-                      <p class="text-sm text-gray-600 mt-1">by <%= canvas.author.email %></p>
+                      <h3 class="text-lg font-semibold text-gray-900">{canvas.name}</h3>
+                      <p class="text-sm text-gray-600 mt-1">by {canvas.author.email}</p>
                     </div>
                   </div>
-                  <p class="text-sm text-gray-600 mt-2"><%= canvas.description %></p>
+                  <p class="text-sm text-gray-600 mt-2">{canvas.description}</p>
                   <div class="mt-4">
                     <.link
                       navigate={~p"/canvases/#{canvas.id}"}

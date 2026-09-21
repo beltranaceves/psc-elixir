@@ -5,10 +5,14 @@ defmodule PscWeb.DocumentLive.Editor do
   alias Psc.Documents.ConsistencyManager
   alias PscWeb.Presence
 
-  @consistency_check_interval 5000  # Check every 5 seconds
-  @snapshot_check_interval 10000    # Check if snapshot needed every 10 seconds
-  @idle_save_interval 1500          # Save after 1.5 seconds of inactivity
-  @periodic_save_interval 10000     # Save every 10 seconds as fallback
+  # Check every 5 seconds
+  @consistency_check_interval 5000
+  # Check if snapshot needed every 10 seconds
+  @snapshot_check_interval 10000
+  # Save after 1.5 seconds of inactivity
+  @idle_save_interval 1500
+  # Save every 10 seconds as fallback
+  @periodic_save_interval 10000
 
   @impl true
   def mount(%{"id" => document_id}, _session, socket) do
@@ -31,7 +35,8 @@ defmodule PscWeb.DocumentLive.Editor do
         |> assign(:presence, %{})
         |> assign(:content, content)
         |> assign(:last_saved_content, content)
-        |> assign(:save_state, :saved)  # :saved, :unsaved, :saving
+        # :saved, :unsaved, :saving
+        |> assign(:save_state, :saved)
         |> assign(:idle_timer_ref, nil)
         |> subscribe_to_document(document_id)
 
@@ -226,7 +231,11 @@ defmodule PscWeb.DocumentLive.Editor do
 
       # Push event to the hook to update the textarea
       # Include the user_id so the hook knows this is from another user
-      socket = push_event(socket, "content_updated", %{"newContent" => new_content, "fromUserId" => user_id})
+      socket =
+        push_event(socket, "content_updated", %{
+          "newContent" => new_content,
+          "fromUserId" => user_id
+        })
 
       {:noreply, assign(socket, content: new_content)}
     else
@@ -250,10 +259,12 @@ defmodule PscWeb.DocumentLive.Editor do
 
       {:diverged, server_text} ->
         # Client has diverged from server - resync to authoritative state
-        socket = push_event(socket, "content_updated", %{
-          "newContent" => server_text,
-          "fromUserId" => -1  # Special ID indicating server resync
-        })
+        socket =
+          push_event(socket, "content_updated", %{
+            "newContent" => server_text,
+            # Special ID indicating server resync
+            "fromUserId" => -1
+          })
 
         # Log the divergence for debugging
         :telemetry.execute(
@@ -313,7 +324,8 @@ defmodule PscWeb.DocumentLive.Editor do
               <%= cond do %>
                 <% @save_state == :saving -> %>
                   <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-amber-700 bg-amber-100">
-                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin"></div>
+                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin">
+                    </div>
                     <span>Saving...</span>
                   </div>
                 <% @save_state == :saved -> %>
@@ -332,8 +344,7 @@ defmodule PscWeb.DocumentLive.Editor do
               navigate={~p"/documents"}
               class="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
             >
-              <.icon name="hero-arrow-left" class="w-4 h-4" />
-              Back
+              <.icon name="hero-arrow-left" class="w-4 h-4" /> Back
             </.link>
           </div>
         </div>
@@ -362,9 +373,9 @@ defmodule PscWeb.DocumentLive.Editor do
               <%= for {user_id, %{metas: metas}} <- @presence do %>
                 <% meta = List.first(metas) %>
                 <div class="text-sm text-gray-900 p-3 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 transition">
-                  <div class="font-medium text-gray-900"><%= meta[:username] %></div>
+                  <div class="font-medium text-gray-900">{meta[:username]}</div>
                   <div class="text-xs text-gray-600 mt-1">
-                    Cursor: <span class="font-mono"><%= meta[:cursor_pos] %></span>
+                    Cursor: <span class="font-mono">{meta[:cursor_pos]}</span>
                   </div>
                 </div>
               <% end %>

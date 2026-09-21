@@ -100,7 +100,8 @@ defmodule PscWeb.CanvasLive.Editor do
         "horizon_content" => {"horizon", "content"},
         "outer_environment_external_services" => {"outer_environment", "external_services"},
         "outer_environment_external_implements" => {"outer_environment", "external_implements"},
-        "outer_environment_external_repositories" => {"outer_environment", "external_repositories"},
+        "outer_environment_external_repositories" =>
+          {"outer_environment", "external_repositories"},
         "outer_environment_external_people" => {"outer_environment", "external_people"},
         "inner_environment_content" => {"inner_environment", "content"},
         "evolvability_cluster_evolvability" => {"evolvability_cluster", "evolvability"},
@@ -227,7 +228,10 @@ defmodule PscWeb.CanvasLive.Editor do
 
       case Canvas.update_canvas(canvas, attrs) do
         {:ok, updated_canvas} ->
-          Logger.debug(fn -> "[IDLE SAVE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}" end)
+          Logger.debug(fn ->
+            "[IDLE SAVE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}"
+          end)
+
           {:noreply,
            socket
            |> assign(:original_canvas, updated_canvas)
@@ -236,6 +240,7 @@ defmodule PscWeb.CanvasLive.Editor do
 
         {:error, error} ->
           Logger.error("[IDLE SAVE FAILED] Error: #{inspect(error)}")
+
           {:noreply,
            socket
            |> assign(:save_state, :unsaved)
@@ -255,8 +260,12 @@ defmodule PscWeb.CanvasLive.Editor do
 
       case Canvas.update_canvas(socket.assigns.canvas, attrs) do
         {:ok, updated_canvas} ->
-          Logger.debug(fn -> "[PERIODIC SAVE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}" end)
+          Logger.debug(fn ->
+            "[PERIODIC SAVE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}"
+          end)
+
           :ok
+
         {:error, error} ->
           Logger.error("[PERIODIC SAVE FAILED] Error: #{inspect(error)}")
           :ok
@@ -270,26 +279,40 @@ defmodule PscWeb.CanvasLive.Editor do
   end
 
   defp build_canvas_update_attrs(canvas) do
-    attrs = %{name: canvas.name, description: canvas.description}
-    |> Map.merge(
-      [
-        :problem, :leverage, :solution_cluster, :horizon,
-        :outer_environment, :inner_environment, :evolvability_cluster,
-        :potential, :manifestations, :capabilities, :merit_cluster, :mission
-      ]
-      |> Enum.reduce(%{}, fn cell_field, acc ->
-        case Map.get(canvas, cell_field) do
-          nil ->
-            acc
-          value ->
-            # Convert struct to map for cast_embed (which expects maps, not structs)
-            map_value = if is_struct(value), do: Map.from_struct(value), else: value
-            Map.put(acc, cell_field, map_value)
-        end
-      end)
-    )
+    attrs =
+      %{name: canvas.name, description: canvas.description}
+      |> Map.merge(
+        [
+          :problem,
+          :leverage,
+          :solution_cluster,
+          :horizon,
+          :outer_environment,
+          :inner_environment,
+          :evolvability_cluster,
+          :potential,
+          :manifestations,
+          :capabilities,
+          :merit_cluster,
+          :mission
+        ]
+        |> Enum.reduce(%{}, fn cell_field, acc ->
+          case Map.get(canvas, cell_field) do
+            nil ->
+              acc
 
-    Logger.debug(fn -> "[BUILD ATTRS] Canvas ID: #{canvas.id}: #{inspect(attrs, limit: :infinity)}" end)
+            value ->
+              # Convert struct to map for cast_embed (which expects maps, not structs)
+              map_value = if is_struct(value), do: Map.from_struct(value), else: value
+              Map.put(acc, cell_field, map_value)
+          end
+        end)
+      )
+
+    Logger.debug(fn ->
+      "[BUILD ATTRS] Canvas ID: #{canvas.id}: #{inspect(attrs, limit: :infinity)}"
+    end)
+
     attrs
   end
 
@@ -307,13 +330,14 @@ defmodule PscWeb.CanvasLive.Editor do
           <div class="mb-6">
             <div class="flex items-center justify-between">
               <div>
-                <h1 class="text-3xl font-bold text-gray-900"><%= @canvas.name %></h1>
-                <p class="text-sm text-gray-600 mt-1"><%= @canvas.description %></p>
+                <h1 class="text-3xl font-bold text-gray-900">{@canvas.name}</h1>
+                <p class="text-sm text-gray-600 mt-1">{@canvas.description}</p>
               </div>
               <%= cond do %>
                 <% @save_state == :saving -> %>
                   <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-amber-700 bg-amber-100">
-                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin"></div>
+                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin">
+                    </div>
                     <span>Saving...</span>
                   </div>
                 <% @save_state == :saved -> %>
@@ -332,8 +356,7 @@ defmodule PscWeb.CanvasLive.Editor do
               navigate={~p"/canvases"}
               class="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 mt-4"
             >
-              <.icon name="hero-arrow-left" class="w-4 h-4" />
-              Back
+              <.icon name="hero-arrow-left" class="w-4 h-4" /> Back
             </.link>
           </div>
 
@@ -343,253 +366,257 @@ defmodule PscWeb.CanvasLive.Editor do
             <div class="flex-1 min-w-0 overflow-x-auto">
               <.form for={%{}} id="canvas-form">
                 <table class="w-full border-collapse table-fixed">
-                <tbody>
-                  <%!-- Row 1: Rationale --%>
-                  <tr>
-                    <th class="border border-gray-300 bg-blue-50 p-3 text-left text-sm font-semibold text-gray-900">
-                      Rationale
-                    </th>
-                    <%!-- Perceive: Problem --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Problem</h3>
-                      <textarea
-                        name="problem_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the problem..."
-                      ><%= Map.get(@canvas.problem || %{}, :content, "") %></textarea>
-                    </td>
-                    <%!-- Form: Leverage --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Leverage</h3>
-                      <div class="space-y-2 text-sm">
-                        <input
-                          type="text"
-                          name="leverage_technology"
-                          placeholder="Technology..."
-                          value={Map.get(@canvas.leverage || %{}, :technology, "")}
+                  <tbody>
+                    <%!-- Row 1: Rationale --%>
+                    <tr>
+                      <th class="border border-gray-300 bg-blue-50 p-3 text-left text-sm font-semibold text-gray-900">
+                        Rationale
+                      </th>
+                      <%!-- Perceive: Problem --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Problem</h3>
+                        <textarea
+                          name="problem_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        />
-                        <input
-                          type="text"
-                          name="leverage_components"
-                          placeholder="Components..."
-                          value={Map.get(@canvas.leverage || %{}, :components, "")}
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the problem..."
+                        ><%= Map.get(@canvas.problem || %{}, :content, "") %></textarea>
+                      </td>
+                      <%!-- Form: Leverage --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Leverage</h3>
+                        <div class="space-y-2 text-sm">
+                          <input
+                            type="text"
+                            name="leverage_technology"
+                            placeholder="Technology..."
+                            value={Map.get(@canvas.leverage || %{}, :technology, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          />
+                          <input
+                            type="text"
+                            name="leverage_components"
+                            placeholder="Components..."
+                            value={Map.get(@canvas.leverage || %{}, :components, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          />
+                          <input
+                            type="text"
+                            name="leverage_information"
+                            placeholder="Information..."
+                            value={Map.get(@canvas.leverage || %{}, :information, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          />
+                          <input
+                            type="text"
+                            name="leverage_human_resources"
+                            placeholder="Human Resources..."
+                            value={Map.get(@canvas.leverage || %{}, :human_resources, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                        </div>
+                      </td>
+                      <%!-- Consolidate: Solution Cluster --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Solution</h3>
+                        <textarea
+                          name="solution_cluster_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        />
-                        <input
-                          type="text"
-                          name="leverage_information"
-                          placeholder="Information..."
-                          value={Map.get(@canvas.leverage || %{}, :information, "")}
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the solution..."
+                        ><%= Map.get(@canvas.solution_cluster || %{}, :content, "") %></textarea>
+                      </td>
+                      <%!-- Learn: Horizon --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Horizon</h3>
+                        <textarea
+                          name="horizon_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        />
-                        <input
-                          type="text"
-                          name="leverage_human_resources"
-                          placeholder="Human Resources..."
-                          value={Map.get(@canvas.leverage || %{}, :human_resources, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                      </div>
-                    </td>
-                    <%!-- Consolidate: Solution Cluster --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Solution</h3>
-                      <textarea
-                        name="solution_cluster_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the solution..."
-                      ><%= Map.get(@canvas.solution_cluster || %{}, :content, "") %></textarea>
-                    </td>
-                    <%!-- Learn: Horizon --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Horizon</h3>
-                      <textarea
-                        name="horizon_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the horizon..."
-                      ><%= Map.get(@canvas.horizon || %{}, :content, "") %></textarea>
-                    </td>
-                  </tr>
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the horizon..."
+                        ><%= Map.get(@canvas.horizon || %{}, :content, "") %></textarea>
+                      </td>
+                    </tr>
 
-                  <%!-- Row 2: Strategy --%>
-                  <tr>
-                    <th class="border border-gray-300 bg-purple-50 p-3 text-left text-sm font-semibold text-gray-900">
-                      Strategy
-                    </th>
-                    <%!-- Perceive: Outer Environment --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Outer Environment</h3>
-                      <div class="space-y-2 text-sm">
-                        <input
-                          type="text"
-                          name="outer_environment_external_services"
-                          placeholder="External Services..."
-                          value={Map.get(@canvas.outer_environment || %{}, :external_services, "")}
+                    <%!-- Row 2: Strategy --%>
+                    <tr>
+                      <th class="border border-gray-300 bg-purple-50 p-3 text-left text-sm font-semibold text-gray-900">
+                        Strategy
+                      </th>
+                      <%!-- Perceive: Outer Environment --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Outer Environment</h3>
+                        <div class="space-y-2 text-sm">
+                          <input
+                            type="text"
+                            name="outer_environment_external_services"
+                            placeholder="External Services..."
+                            value={Map.get(@canvas.outer_environment || %{}, :external_services, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                          <input
+                            type="text"
+                            name="outer_environment_external_implements"
+                            placeholder="External Implements..."
+                            value={
+                              Map.get(@canvas.outer_environment || %{}, :external_implements, "")
+                            }
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                          <input
+                            type="text"
+                            name="outer_environment_external_repositories"
+                            placeholder="External Repositories..."
+                            value={
+                              Map.get(@canvas.outer_environment || %{}, :external_repositories, "")
+                            }
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                          <input
+                            type="text"
+                            name="outer_environment_external_people"
+                            placeholder="External People..."
+                            value={Map.get(@canvas.outer_environment || %{}, :external_people, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                        </div>
+                      </td>
+                      <%!-- Form: Inner Environment --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Inner Environment</h3>
+                        <textarea
+                          name="inner_environment_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                        <input
-                          type="text"
-                          name="outer_environment_external_implements"
-                          placeholder="External Implements..."
-                          value={Map.get(@canvas.outer_environment || %{}, :external_implements, "")}
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the inner environment..."
+                        ><%= Map.get(@canvas.inner_environment || %{}, :content, "") %></textarea>
+                      </td>
+                      <%!-- Consolidate: Evolvability Cluster --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Evolvability</h3>
+                        <div class="space-y-2 text-sm">
+                          <input
+                            type="text"
+                            name="evolvability_cluster_evolvability"
+                            placeholder="Evolvability..."
+                            value={Map.get(@canvas.evolvability_cluster || %{}, :evolvability, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          />
+                          <input
+                            type="text"
+                            name="evolvability_cluster_diffusibility"
+                            placeholder="Diffusibility..."
+                            value={Map.get(@canvas.evolvability_cluster || %{}, :diffusibility, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          />
+                          <input
+                            type="text"
+                            name="evolvability_cluster_adoptability"
+                            placeholder="Adoptability..."
+                            value={Map.get(@canvas.evolvability_cluster || %{}, :adoptability, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                        </div>
+                      </td>
+                      <%!-- Learn: Potential --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Potential</h3>
+                        <textarea
+                          name="potential_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                        <input
-                          type="text"
-                          name="outer_environment_external_repositories"
-                          placeholder="External Repositories..."
-                          value={Map.get(@canvas.outer_environment || %{}, :external_repositories, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                        <input
-                          type="text"
-                          name="outer_environment_external_people"
-                          placeholder="External People..."
-                          value={Map.get(@canvas.outer_environment || %{}, :external_people, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                      </div>
-                    </td>
-                    <%!-- Form: Inner Environment --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Inner Environment</h3>
-                      <textarea
-                        name="inner_environment_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the inner environment..."
-                      ><%= Map.get(@canvas.inner_environment || %{}, :content, "") %></textarea>
-                    </td>
-                    <%!-- Consolidate: Evolvability Cluster --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Evolvability</h3>
-                      <div class="space-y-2 text-sm">
-                        <input
-                          type="text"
-                          name="evolvability_cluster_evolvability"
-                          placeholder="Evolvability..."
-                          value={Map.get(@canvas.evolvability_cluster || %{}, :evolvability, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        />
-                        <input
-                          type="text"
-                          name="evolvability_cluster_diffusibility"
-                          placeholder="Diffusibility..."
-                          value={Map.get(@canvas.evolvability_cluster || %{}, :diffusibility, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        />
-                        <input
-                          type="text"
-                          name="evolvability_cluster_adoptability"
-                          placeholder="Adoptability..."
-                          value={Map.get(@canvas.evolvability_cluster || %{}, :adoptability, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                      </div>
-                    </td>
-                    <%!-- Learn: Potential --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Potential</h3>
-                      <textarea
-                        name="potential_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the potential..."
-                      ><%= Map.get(@canvas.potential || %{}, :content, "") %></textarea>
-                    </td>
-                  </tr>
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the potential..."
+                        ><%= Map.get(@canvas.potential || %{}, :content, "") %></textarea>
+                      </td>
+                    </tr>
 
-                  <%!-- Row 3: Tactics --%>
-                  <tr>
-                    <th class="border border-gray-300 bg-green-50 p-3 text-left text-sm font-semibold text-gray-900">
-                      Tactics
-                    </th>
-                    <%!-- Perceive: Manifestations --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Manifestations</h3>
-                      <textarea
-                        name="manifestations_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the manifestations..."
-                      ><%= Map.get(@canvas.manifestations || %{}, :content, "") %></textarea>
-                    </td>
-                    <%!-- Form: Capabilities --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Capabilities</h3>
-                      <textarea
-                        name="capabilities_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the capabilities..."
-                      ><%= Map.get(@canvas.capabilities || %{}, :content, "") %></textarea>
-                    </td>
-                    <%!-- Consolidate: Merit Cluster --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Merit</h3>
-                      <div class="space-y-2 text-sm">
-                        <input
-                          type="text"
-                          name="merit_cluster_merit"
-                          placeholder="Merit..."
-                          value={Map.get(@canvas.merit_cluster || %{}, :merit, "")}
+                    <%!-- Row 3: Tactics --%>
+                    <tr>
+                      <th class="border border-gray-300 bg-green-50 p-3 text-left text-sm font-semibold text-gray-900">
+                        Tactics
+                      </th>
+                      <%!-- Perceive: Manifestations --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Manifestations</h3>
+                        <textarea
+                          name="manifestations_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        />
-                        <input
-                          type="text"
-                          name="merit_cluster_value"
-                          placeholder="Value..."
-                          value={Map.get(@canvas.merit_cluster || %{}, :value, "")}
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the manifestations..."
+                        ><%= Map.get(@canvas.manifestations || %{}, :content, "") %></textarea>
+                      </td>
+                      <%!-- Form: Capabilities --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Capabilities</h3>
+                        <textarea
+                          name="capabilities_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                        <input
-                          type="text"
-                          name="merit_cluster_reservation"
-                          placeholder="Reservation..."
-                          value={Map.get(@canvas.merit_cluster || %{}, :reservation, "")}
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the capabilities..."
+                        ><%= Map.get(@canvas.capabilities || %{}, :content, "") %></textarea>
+                      </td>
+                      <%!-- Consolidate: Merit Cluster --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Merit</h3>
+                        <div class="space-y-2 text-sm">
+                          <input
+                            type="text"
+                            name="merit_cluster_merit"
+                            placeholder="Merit..."
+                            value={Map.get(@canvas.merit_cluster || %{}, :merit, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          />
+                          <input
+                            type="text"
+                            name="merit_cluster_value"
+                            placeholder="Value..."
+                            value={Map.get(@canvas.merit_cluster || %{}, :value, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                          <input
+                            type="text"
+                            name="merit_cluster_reservation"
+                            placeholder="Reservation..."
+                            value={Map.get(@canvas.merit_cluster || %{}, :reservation, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                          <input
+                            type="text"
+                            name="merit_cluster_rebuttal"
+                            placeholder="Rebuttal..."
+                            value={Map.get(@canvas.merit_cluster || %{}, :rebuttal, "")}
+                            phx-change="update_cell"
+                            class="w-full border border-gray-300 rounded px-2 py-1 text-black"
+                          />
+                        </div>
+                      </td>
+                      <%!-- Learn: Mission --%>
+                      <td class="border border-gray-300 bg-white p-3">
+                        <h3 class="text-sm font-bold text-gray-900 mb-2">Mission</h3>
+                        <textarea
+                          name="mission_content"
                           phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                        <input
-                          type="text"
-                          name="merit_cluster_rebuttal"
-                          placeholder="Rebuttal..."
-                          value={Map.get(@canvas.merit_cluster || %{}, :rebuttal, "")}
-                          phx-change="update_cell"
-                          class="w-full border border-gray-300 rounded px-2 py-1 text-black"
-                        />
-                      </div>
-                    </td>
-                    <%!-- Learn: Mission --%>
-                    <td class="border border-gray-300 bg-white p-3">
-                      <h3 class="text-sm font-bold text-gray-900 mb-2">Mission</h3>
-                      <textarea
-                        name="mission_content"
-                        phx-change="update_cell"
-                        class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
-                        placeholder="Describe the mission..."
-                      ><%= Map.get(@canvas.mission || %{}, :content, "") %></textarea>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                          class="w-full h-32 border border-gray-300 dark:border-gray-700 rounded px-2 py-1 text-sm resize-none text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-400"
+                          placeholder="Describe the mission..."
+                        ><%= Map.get(@canvas.mission || %{}, :content, "") %></textarea>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </.form>
             </div>
 
@@ -601,7 +628,7 @@ defmodule PscWeb.CanvasLive.Editor do
                   <%= for {_user_id, %{metas: metas}} <- @presence do %>
                     <% meta = List.first(metas) %>
                     <div class="text-xs text-gray-700 p-2 rounded bg-blue-50 border border-blue-200">
-                      <%= meta[:username] %>
+                      {meta[:username]}
                     </div>
                   <% end %>
                 </div>
@@ -615,7 +642,10 @@ defmodule PscWeb.CanvasLive.Editor do
                       placeholder="Email..."
                       class="flex-1 text-xs px-2 py-1 border border-gray-300 rounded text-gray-900 placeholder-gray-400"
                     />
-                    <button type="submit" class="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded">
+                    <button
+                      type="submit"
+                      class="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded"
+                    >
                       +
                     </button>
                   </.form>
@@ -625,7 +655,7 @@ defmodule PscWeb.CanvasLive.Editor do
                   <div class="space-y-1">
                     <%= for email <- @canvas.shared_with do %>
                       <div class="text-xs text-gray-700 px-2 py-1 bg-green-50 rounded border border-green-200 flex items-center justify-between">
-                        <span><%= email %></span>
+                        <span>{email}</span>
                         <%= if @canvas.author_id == @user_id do %>
                           <button
                             phx-click="remove_access"

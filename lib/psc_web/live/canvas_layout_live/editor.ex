@@ -35,7 +35,10 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
               socket
               |> assign(:layout_map, lm)
               |> assign(:editing_layout_id, id)
-              |> assign(:new_layout_form, to_form(%{"name" => layout.name, "description" => layout.description}))
+              |> assign(
+                :new_layout_form,
+                to_form(%{"name" => layout.name, "description" => layout.description})
+              )
 
             _ ->
               assign(socket, :layout_map, layout_map)
@@ -56,6 +59,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
     # extend each row in layout matrix
     matrix = layout["layout"] || []
+
     new_matrix =
       if matrix == [] do
         [[id]]
@@ -129,16 +133,27 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     layout = socket.assigns.layout_map
     matrix = layout["layout"] || []
     # ensure row exists
-    updated_matrix = List.update_at(matrix, ri, fn row -> List.replace_at(row, ci, if(cell_key == "", do: nil, else: cell_key)) end)
+    updated_matrix =
+      List.update_at(matrix, ri, fn row ->
+        List.replace_at(row, ci, if(cell_key == "", do: nil, else: cell_key))
+      end)
 
     # ensure cell entry exists
     new_layout = layout |> Map.put("layout", updated_matrix)
-    new_layout = if cell_key != "" and not Map.has_key?(new_layout, cell_key), do: Map.put(new_layout, cell_key, %{}), else: new_layout
+
+    new_layout =
+      if cell_key != "" and not Map.has_key?(new_layout, cell_key),
+        do: Map.put(new_layout, cell_key, %{}),
+        else: new_layout
 
     {:noreply, assign(socket, :layout_map, new_layout)}
   end
 
-  def handle_event("update_cell_field", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
+  def handle_event(
+        "update_cell_field",
+        %{"cell_key" => cell_key, "field" => field, "value" => value},
+        socket
+      ) do
     layout = socket.assigns.layout_map
     cell = Map.get(layout, cell_key, %{})
     new_cell = Map.put(cell, field, value)
@@ -168,7 +183,10 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             generated = "#{col_meta["id"]}_#{row_meta["id"]}"
 
             matrix = layout["layout"] || []
-            updated_matrix = List.update_at(matrix, ri, fn row -> List.replace_at(row, ci, generated) end)
+
+            updated_matrix =
+              List.update_at(matrix, ri, fn row -> List.replace_at(row, ci, generated) end)
+
             {generated, Map.put(layout, "layout", updated_matrix)}
           else
             {cell_key, layout}
@@ -193,7 +211,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   def handle_event("save_layout", %{"name" => name, "description" => description}, socket) do
-    attrs = %{"name" => name, "description" => description, "layout_map" => socket.assigns.layout_map}
+    attrs = %{
+      "name" => name,
+      "description" => description,
+      "layout_map" => socket.assigns.layout_map
+    }
 
     case Map.get(socket.assigns, :editing_layout_id) do
       nil ->
@@ -212,7 +234,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             case Canvas.update_canvas_layout(layout, attrs) do
               {:ok, _updated} ->
                 layouts = Canvas.list_canvas_layouts()
-                {:noreply, socket |> assign(:layouts, layouts) |> put_flash(:info, "Layout updated")}
+
+                {:noreply,
+                 socket |> assign(:layouts, layouts) |> put_flash(:info, "Layout updated")}
 
               {:error, _changeset} ->
                 {:noreply, put_flash(socket, :error, "Failed to update layout")}
@@ -265,12 +289,21 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} container_class={"w-full mx-auto max-w-screen-xl"}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      container_class="w-full mx-auto max-w-screen-xl"
+    >
       <div class="max-w-6xl mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold mb-4 text-gray-900">Graphical Layout Editor</h1>
 
         <div class="bg-white rounded-lg shadow p-6 mb-6">
-          <.form for={@new_layout_form} id="new-layout-form" phx-submit="save_layout" class="space-y-4">
+          <.form
+            for={@new_layout_form}
+            id="new-layout-form"
+            phx-submit="save_layout"
+            class="space-y-4"
+          >
             <.input
               field={@new_layout_form[:name]}
               type="text"
@@ -289,9 +322,26 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             />
 
             <div class="flex gap-2">
-              <button type="button" phx-click="add_column" class="px-3 py-2 bg-blue-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Add Column</button>
-              <button type="button" phx-click="add_row" class="px-3 py-2 bg-green-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Add Row</button>
-              <button type="submit" class="ml-auto px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Save Layout</button>
+              <button
+                type="button"
+                phx-click="add_column"
+                class="px-3 py-2 bg-blue-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Add Column
+              </button>
+              <button
+                type="button"
+                phx-click="add_row"
+                class="px-3 py-2 bg-green-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                Add Row
+              </button>
+              <button
+                type="submit"
+                class="ml-auto px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                Save Layout
+              </button>
             </div>
           </.form>
         </div>
@@ -303,8 +353,23 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             <div class="flex gap-2 items-start">
               <%= for {col, idx} <- Enum.with_index(@layout_map["columns"] || []) do %>
                 <div class="flex items-center gap-2 p-2 border rounded bg-gray-50">
-                  <input type="text" value={col["label"]} phx-change="update_column_label" phx-debounce="300" phx-value-index={idx} name="label" class="px-2 py-1 border rounded text-gray-900 bg-white" />
-                  <button type="button" phx-click="remove_column" phx-value-index={idx} class="text-sm text-red-600">Remove</button>
+                  <input
+                    type="text"
+                    value={col["label"]}
+                    phx-change="update_column_label"
+                    phx-debounce="300"
+                    phx-value-index={idx}
+                    name="label"
+                    class="px-2 py-1 border rounded text-gray-900 bg-white"
+                  />
+                  <button
+                    type="button"
+                    phx-click="remove_column"
+                    phx-value-index={idx}
+                    class="text-sm text-red-600"
+                  >
+                    Remove
+                  </button>
                 </div>
               <% end %>
             </div>
@@ -317,7 +382,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 <tr>
                   <th class="w-40 p-2 border bg-gray-100 text-gray-900"></th>
                   <%= for col <- @layout_map["columns"] || [] do %>
-                    <th class="p-2 border text-center bg-gray-100 text-gray-900"><%= col["label"] %></th>
+                    <th class="p-2 border text-center bg-gray-100 text-gray-900">{col["label"]}</th>
                   <% end %>
                 </tr>
               </thead>
@@ -325,36 +390,90 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 <%= for {row_meta, r_idx} <- Enum.with_index(@layout_map["rows"] || []) do %>
                   <tr>
                     <td class="p-2 border align-top bg-gray-50">
-                      <input type="text" value={row_meta["label"]} phx-change="update_row_label" phx-debounce="300" phx-value-index={r_idx} name="label" class="px-2 py-1 border rounded w-full text-gray-900 bg-white" />
+                      <input
+                        type="text"
+                        value={row_meta["label"]}
+                        phx-change="update_row_label"
+                        phx-debounce="300"
+                        phx-value-index={r_idx}
+                        name="label"
+                        class="px-2 py-1 border rounded w-full text-gray-900 bg-white"
+                      />
                       <div class="mt-2">
-                        <button type="button" phx-click="remove_row" phx-value-index={r_idx} class="text-sm text-red-600">Remove Row</button>
+                        <button
+                          type="button"
+                          phx-click="remove_row"
+                          phx-value-index={r_idx}
+                          class="text-sm text-red-600"
+                        >
+                          Remove Row
+                        </button>
                       </div>
                     </td>
                     <%= for {cell_key, c_idx} <- Enum.with_index(Enum.at(@layout_map["layout"] || [], r_idx, [])) do %>
                       <td class="p-2 border align-top bg-white text-gray-900">
                         <div class="text-xs text-gray-700 mb-1">Key:</div>
-                        <input type="text" value={cell_key || ""} phx-change="set_cell_key" phx-debounce="300" phx-value-row={r_idx} phx-value-col={c_idx} name="cell_key" class="px-2 py-1 border rounded w-full text-gray-900 bg-white" />
+                        <input
+                          type="text"
+                          value={cell_key || ""}
+                          phx-change="set_cell_key"
+                          phx-debounce="300"
+                          phx-value-row={r_idx}
+                          phx-value-col={c_idx}
+                          name="cell_key"
+                          class="px-2 py-1 border rounded w-full text-gray-900 bg-white"
+                        />
 
                         <div class="mt-2">
                           <h4 class="text-xs font-semibold text-gray-900">Fields</h4>
                           <%= if cell_key do %>
                             <%= for {field, value} <- Map.get(@layout_map, cell_key, %{}) do %>
                               <div class="mt-1 flex items-center gap-2">
-                                <input type="text" value={field} disabled class="px-2 py-1 border rounded w-1/3 mr-2 bg-gray-200 text-gray-800" />
-                                <input type="text" value={value} phx-change="update_cell_field" phx-debounce="300" phx-value-cell_key={cell_key} phx-value-field={field} name="value" class="px-2 py-1 border rounded w-2/3 text-gray-900 bg-white" />
-                                <button type="button" phx-click="remove_cell_field" phx-value-cell_key={cell_key} phx-value-field={field} class="text-sm text-red-600">Remove</button>
+                                <input
+                                  type="text"
+                                  value={field}
+                                  disabled
+                                  class="px-2 py-1 border rounded w-1/3 mr-2 bg-gray-200 text-gray-800"
+                                />
+                                <input
+                                  type="text"
+                                  value={value}
+                                  phx-change="update_cell_field"
+                                  phx-debounce="300"
+                                  phx-value-cell_key={cell_key}
+                                  phx-value-field={field}
+                                  name="value"
+                                  class="px-2 py-1 border rounded w-2/3 text-gray-900 bg-white"
+                                />
+                                <button
+                                  type="button"
+                                  phx-click="remove_cell_field"
+                                  phx-value-cell_key={cell_key}
+                                  phx-value-field={field}
+                                  class="text-sm text-red-600"
+                                >
+                                  Remove
+                                </button>
                               </div>
                             <% end %>
                           <% else %>
-                            <div class="text-sm text-gray-600">No key assigned to this cell yet — add a field to create one.</div>
+                            <div class="text-sm text-gray-600">
+                              No key assigned to this cell yet — add a field to create one.
+                            </div>
                           <% end %>
 
                           <form phx-submit="add_cell_field" class="mt-2 flex gap-2">
                             <input type="hidden" name="cell_key" value={cell_key || ""} />
                             <input type="hidden" name="row" value={to_string(r_idx)} />
                             <input type="hidden" name="col" value={to_string(c_idx)} />
-                            <input name="new_field" placeholder="New field name" class="px-2 py-1 border rounded w-2/3" />
-                            <button type="submit" class="px-2 py-1 bg-blue-600 text-white rounded">Add</button>
+                            <input
+                              name="new_field"
+                              placeholder="New field name"
+                              class="px-2 py-1 border rounded w-2/3"
+                            />
+                            <button type="submit" class="px-2 py-1 bg-blue-600 text-white rounded">
+                              Add
+                            </button>
                           </form>
                         </div>
                       </td>
@@ -376,10 +495,12 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 <li class="p-2 border rounded">
                   <div class="flex items-center justify-between">
                     <div>
-                      <div class="font-medium"><%= l.name %></div>
-                      <div class="text-sm text-gray-600"><%= l.description %></div>
+                      <div class="font-medium">{l.name}</div>
+                      <div class="text-sm text-gray-600">{l.description}</div>
                     </div>
-                    <div class="text-sm text-gray-500"><%= NaiveDateTime.to_string(l.inserted_at || ~N[1970-01-01 00:00:00]) %></div>
+                    <div class="text-sm text-gray-500">
+                      {NaiveDateTime.to_string(l.inserted_at || ~N[1970-01-01 00:00:00])}
+                    </div>
                   </div>
                 </li>
               <% end %>

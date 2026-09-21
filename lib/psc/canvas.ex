@@ -49,7 +49,9 @@ defmodule Psc.Canvas do
       |> Repo.get(id)
 
     if result do
-      Logger.debug(fn -> "[DB LOAD] Canvas #{id} loaded: #{inspect(result, limit: :infinity)}" end)
+      Logger.debug(fn ->
+        "[DB LOAD] Canvas #{id} loaded: #{inspect(result, limit: :infinity)}"
+      end)
     else
       Logger.warning("[DB LOAD] Canvas #{id} NOT FOUND in database")
     end
@@ -92,6 +94,7 @@ defmodule Psc.Canvas do
       {:ok, canvas} ->
         Logger.debug(fn -> "[DB SAVE - CREATE SUCCESS] #{inspect(canvas, limit: :infinity)}" end)
         {:ok, canvas}
+
       {:error, changeset} ->
         Logger.error("[DB SAVE - CREATE FAILED] Changeset error: #{inspect(changeset)}")
         {:error, changeset}
@@ -113,8 +116,12 @@ defmodule Psc.Canvas do
 
     case result do
       {:ok, updated_canvas} ->
-        Logger.debug(fn -> "[DB SAVE - UPDATE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}" end)
+        Logger.debug(fn ->
+          "[DB SAVE - UPDATE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}"
+        end)
+
         {:ok, updated_canvas}
+
       {:error, changeset} ->
         Logger.error("[DB SAVE - UPDATE FAILED] Changeset error: #{inspect(changeset)}")
         {:error, changeset}
@@ -359,13 +366,16 @@ defmodule Psc.Canvas do
       user_id: user_id
     }
 
-    case Repo.insert(Psc.Canvas.UnstrCanvasEvent.changeset(%Psc.Canvas.UnstrCanvasEvent{}, event_attrs)) do
+    case Repo.insert(
+           Psc.Canvas.UnstrCanvasEvent.changeset(%Psc.Canvas.UnstrCanvasEvent{}, event_attrs)
+         ) do
       {:ok, _event} ->
         Phoenix.PubSub.broadcast(
           Psc.PubSub,
           pubsub_topic_unstr(canvas_id),
           {:operation, user_id, operation, seq}
         )
+
         {:ok, seq}
 
       {:error, changeset} ->
@@ -386,13 +396,16 @@ defmodule Psc.Canvas do
       user_id: user_id
     }
 
-    case Repo.insert(Psc.Canvas.UnstrCanvasEvent.changeset(%Psc.Canvas.UnstrCanvasEvent{}, event_attrs)) do
+    case Repo.insert(
+           Psc.Canvas.UnstrCanvasEvent.changeset(%Psc.Canvas.UnstrCanvasEvent{}, event_attrs)
+         ) do
       {:ok, _event} ->
         Phoenix.PubSub.broadcast(
           Psc.PubSub,
           pubsub_topic_unstr(canvas_id),
           {:operation, user_id, client_id, operation, seq}
         )
+
         {:ok, seq}
 
       {:error, changeset} ->

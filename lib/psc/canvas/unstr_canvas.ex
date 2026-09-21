@@ -1,20 +1,21 @@
 defmodule Psc.Canvas.UnstrCanvas do
-    use Ecto.Schema
-    import Ecto.Changeset
+  use Ecto.Schema
+  import Ecto.Changeset
 
-    @primary_key {:id, :binary_id, autogenerate: true}
-    schema "unstr_canvases" do
-      field :name, :string
-      field :description, :string
+  @primary_key {:id, :binary_id, autogenerate: true}
+  schema "unstr_canvases" do
+    field :name, :string
+    field :description, :string
 
-      field :shared_with, {:array, :string}, default: []
+    field :shared_with, {:array, :string}, default: []
 
-      belongs_to :author, Psc.Accounts.User, type: :id
+    belongs_to :author, Psc.Accounts.User, type: :id
 
-      field :snapshot_seq, :integer, default: 0
-      has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
+    field :snapshot_seq, :integer, default: 0
+    has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
 
-      field :cells, :map, default: %{
+    field :cells, :map,
+      default: %{
         "columns" => [
           %{"id" => "perceive", "label" => "Perceive"},
           %{"id" => "form", "label" => "Form"},
@@ -103,39 +104,41 @@ defmodule Psc.Canvas.UnstrCanvas do
           "content" => ""
         }
       }
-      timestamps()
-    end
 
-    def changeset(unstr_canvas, attrs) do
-      # Add a step to validate that cells has the correct structure
-      unstr_canvas
-      |> cast(attrs, [:name, :description, :author_id, :shared_with, :cells, :snapshot_seq])
-      |> validate_required([:name, :author_id, :cells])
-      |> validate_cells_structure()
-    end
+    timestamps()
+  end
 
-    defp validate_cells_structure(changeset) do
-      # Validates that the cells field contains all the keys outlined in the layout 2d array
-      validate_change(changeset, :cells, fn :cells, cells ->
-        layout = get_in(cells, ["layout"])
-        if is_list(layout) and Enum.all?(layout, &is_list/1) do
-          # Flatten the layout to get all cell keys
-          cell_keys = layout |> List.flatten() |> Enum.uniq()
+  def changeset(unstr_canvas, attrs) do
+    # Add a step to validate that cells has the correct structure
+    unstr_canvas
+    |> cast(attrs, [:name, :description, :author_id, :shared_with, :cells, :snapshot_seq])
+    |> validate_required([:name, :author_id, :cells])
+    |> validate_cells_structure()
+  end
 
-          # Metadata keys that should be excluded from cell validation
-          metadata_keys = ["columns", "rows", "layout"]
-          all_cell_keys = cells |> Map.keys() |> Enum.reject(&(&1 in metadata_keys))
+  defp validate_cells_structure(changeset) do
+    # Validates that the cells field contains all the keys outlined in the layout 2d array
+    validate_change(changeset, :cells, fn :cells, cells ->
+      layout = get_in(cells, ["layout"])
 
-          missing_keys = cell_keys -- all_cell_keys
+      if is_list(layout) and Enum.all?(layout, &is_list/1) do
+        # Flatten the layout to get all cell keys
+        cell_keys = layout |> List.flatten() |> Enum.uniq()
 
-          if missing_keys == [] do
-            []
-          else
-            [cells: "Missing cell data for keys: #{Enum.join(missing_keys, ", ")}"]
-          end
+        # Metadata keys that should be excluded from cell validation
+        metadata_keys = ["columns", "rows", "layout"]
+        all_cell_keys = cells |> Map.keys() |> Enum.reject(&(&1 in metadata_keys))
+
+        missing_keys = cell_keys -- all_cell_keys
+
+        if missing_keys == [] do
+          []
         else
-          [cells: "Layout must be a 2D array of cell keys"]
+          [cells: "Missing cell data for keys: #{Enum.join(missing_keys, ", ")}"]
         end
-      end)
-    end
+      else
+        [cells: "Layout must be a 2D array of cell keys"]
+      end
+    end)
+  end
 end

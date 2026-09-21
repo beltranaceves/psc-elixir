@@ -54,18 +54,18 @@ defmodule PscWeb.Layouts do
           <li>
             <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
           </li>
-            <li>
-              <.link navigate={~p"/documents"} class="btn btn-ghost">Documents</.link>
-            </li>
-            <li>
-              <.link navigate={~p"/canvases"} class="btn btn-ghost">Canvases</.link>
-            </li>
-            <li>
-              <.link navigate={~p"/canvas-designer"} class="btn btn-ghost">Canvas Designer</.link>
-            </li>
-            <li>
-              <.link navigate={~p"/canvas-layouts"} class="btn btn-ghost">New Layout</.link>
-            </li>
+          <li>
+            <.link navigate={~p"/documents"} class="btn btn-ghost">Documents</.link>
+          </li>
+          <li>
+            <.link navigate={~p"/canvases"} class="btn btn-ghost">Canvases</.link>
+          </li>
+          <li>
+            <.link navigate={~p"/canvas-designer"} class="btn btn-ghost">Canvas Designer</.link>
+          </li>
+          <li>
+            <.link navigate={~p"/canvas-layouts"} class="btn btn-ghost">New Layout</.link>
+          </li>
           <li>
             <.theme_toggle />
           </li>

@@ -68,10 +68,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   defp process_operation(socket, operation) do
-    Canvas.apply_unstr_canvas_operation(socket.assigns.canvas_id, socket.assigns.user_id, socket.assigns.client_id, operation)
+    Canvas.apply_unstr_canvas_operation(
+      socket.assigns.canvas_id,
+      socket.assigns.user_id,
+      socket.assigns.client_id,
+      operation
+    )
+
     cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
 
-    Logger.debug("[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}")
+    Logger.debug(
+      "[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}"
+    )
 
     c_name = Map.get(cells, "$name", socket.assigns.c_name)
     c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
@@ -149,26 +157,49 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       values
       |> Enum.reject(fn {field, _value} -> String.starts_with?(field, "_unused_") end)
       |> Enum.reduce(socket, fn {field, value}, acc ->
-        operation = %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value}
+        operation = %{
+          "type" => "update_cell",
+          "cell_key" => cell_key,
+          "field" => field,
+          "value" => value
+        }
+
         process_operation(acc, operation)
       end)
 
     {:noreply, socket}
   end
 
-  def handle_event("update_cell", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
-    operation = %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value}
+  def handle_event(
+        "update_cell",
+        %{"cell_key" => cell_key, "field" => field, "value" => value},
+        socket
+      ) do
+    operation = %{
+      "type" => "update_cell",
+      "cell_key" => cell_key,
+      "field" => field,
+      "value" => value
+    }
+
     socket = process_operation(socket, operation)
     {:noreply, socket}
   end
 
   @impl true
-  def handle_event("render_field", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
+  def handle_event(
+        "render_field",
+        %{"cell_key" => cell_key, "field" => field, "value" => value},
+        socket
+      ) do
     html =
       case value do
-        nil -> ""
+        nil ->
+          ""
+
         v ->
           trimmed = String.trim(v || "")
+
           if trimmed == "" do
             # placeholder HTML for empty fields (keeps area clickable)
             "<div class=\"p-2 rounded bg-gray-50 text-gray-400\">Click to edit</div>"
@@ -189,19 +220,32 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
     # New broadcasts include a per-client id so multiple tabs by same user get updates
     if client_id != socket.assigns.client_id do
-      Logger.debug("[UnstrCanvasLive] received broadcast operation from user_id=#{user_id} client_id=#{client_id}: #{inspect(operation)}")
+      Logger.debug(
+        "[UnstrCanvasLive] received broadcast operation from user_id=#{user_id} client_id=#{client_id}: #{inspect(operation)}"
+      )
+
       cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
       c_name = Map.get(cells, "$name", socket.assigns.c_name)
       c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
 
-      Logger.debug("[UnstrCanvasLive] after broadcast apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}")
+      Logger.debug(
+        "[UnstrCanvasLive] after broadcast apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}"
+      )
 
       # If this operation updated a cell field, notify the client-side hooks
       socket =
         case operation do
           %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
-            new_value = (get_in(cells, ["cells", cell_key, field]) || cells[cell_key] && Map.get(cells[cell_key], field)) || ""
-            push_event(socket, "cell_updated", %{cell_key: cell_key, field: field, new_value: new_value, from_user_id: user_id})
+            new_value =
+              get_in(cells, ["cells", cell_key, field]) ||
+                (cells[cell_key] && Map.get(cells[cell_key], field)) || ""
+
+            push_event(socket, "cell_updated", %{
+              cell_key: cell_key,
+              field: field,
+              new_value: new_value,
+              from_user_id: user_id
+            })
 
           _ ->
             socket
@@ -220,19 +264,32 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   def handle_info({:operation, user_id, operation, _seq}, socket) do
     # Backwards-compatible handler for broadcasts without client_id
     if user_id != socket.assigns.user_id do
-      Logger.debug("[UnstrCanvasLive] received legacy broadcast operation from user_id=#{user_id}: #{inspect(operation)}")
+      Logger.debug(
+        "[UnstrCanvasLive] received legacy broadcast operation from user_id=#{user_id}: #{inspect(operation)}"
+      )
+
       cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
       c_name = Map.get(cells, "$name", socket.assigns.c_name)
       c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
 
-      Logger.debug("[UnstrCanvasLive] after legacy apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}")
+      Logger.debug(
+        "[UnstrCanvasLive] after legacy apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}"
+      )
 
       # Notify client-side hooks for cell updates (legacy broadcasts)
       socket =
         case operation do
           %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
-            new_value = (get_in(cells, ["cells", cell_key, field]) || cells[cell_key] && Map.get(cells[cell_key], field)) || ""
-            push_event(socket, "cell_updated", %{cell_key: cell_key, field: field, new_value: new_value, from_user_id: user_id})
+            new_value =
+              get_in(cells, ["cells", cell_key, field]) ||
+                (cells[cell_key] && Map.get(cells[cell_key], field)) || ""
+
+            push_event(socket, "cell_updated", %{
+              cell_key: cell_key,
+              field: field,
+              new_value: new_value,
+              from_user_id: user_id
+            })
 
           _ ->
             socket
@@ -256,7 +313,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def handle_info(:idle_save, socket) do
     if socket.assigns.cells != socket.assigns.last_saved_cells do
-      Canvas.update_unstr_canvas(socket.assigns.canvas, %{name: socket.assigns.c_name, description: socket.assigns.c_desc})
+      Canvas.update_unstr_canvas(socket.assigns.canvas, %{
+        name: socket.assigns.c_name,
+        description: socket.assigns.c_desc
+      })
+
       Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
 
       {:noreply,
@@ -271,7 +332,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def handle_info(:periodic_save, socket) do
     if socket.assigns.cells != socket.assigns.last_saved_cells do
-      Canvas.update_unstr_canvas(socket.assigns.canvas, %{name: socket.assigns.c_name, description: socket.assigns.c_desc})
+      Canvas.update_unstr_canvas(socket.assigns.canvas, %{
+        name: socket.assigns.c_name,
+        description: socket.assigns.c_desc
+      })
+
       Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
       socket = assign(socket, :last_saved_cells, socket.assigns.cells)
 
@@ -291,7 +356,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} container_class={"w-full mx-auto max-w-screen-xl space-y-4"}>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      container_class="w-full mx-auto max-w-screen-xl space-y-4"
+    >
       <div class="w-full max-w-screen-xl mx-auto px-4 py-8">
         <%!-- Header --%>
         <div class="flex items-center justify-between mb-8">
@@ -320,7 +389,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <%= for {_user_id, %{metas: metas}} <- @presence do %>
                 <% meta = List.first(metas) %>
                 <div class="text-sm font-medium px-2 py-1 bg-blue-100 text-blue-800 rounded-md">
-                  <%= meta[:username] %>
+                  {meta[:username]}
                 </div>
               <% end %>
             </div>
@@ -391,7 +460,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <div class="flex flex-wrap gap-2">
               <%= for column <- @cells["columns"] || [] do %>
                 <div class="px-3 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
-                  <%= column["label"] %>
+                  {column["label"]}
                 </div>
               <% end %>
             </div>
@@ -402,7 +471,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <div class="flex flex-wrap gap-2">
               <%= for row <- @cells["rows"] || [] do %>
                 <div class="px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
-                  <%= row["label"] %>
+                  {row["label"]}
                 </div>
               <% end %>
             </div>
@@ -416,7 +485,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   <th class="px-4 py-2 border border-gray-300 bg-gray-100"></th>
                   <%= for column <- @cells["columns"] || [] do %>
                     <th class="px-4 py-2 border border-gray-300 bg-gray-100 font-semibold text-gray-900">
-                      <%= column["label"] %>
+                      {column["label"]}
                     </th>
                   <% end %>
                 </tr>
@@ -425,20 +494,22 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
                   <tr>
                     <td class="px-4 py-2 border border-gray-300 bg-gray-100 font-semibold text-gray-900">
-                      <%= row["label"] %>
+                      {row["label"]}
                     </td>
                     <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                       <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
                       <td class="px-4 py-2 border border-gray-300">
                         <%= if cell_key do %>
-                          <% cell_data = (get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{}) %>
-                          <% title = Map.get(cell_data, "name") || Map.get(cell_data, "title") || cell_key %>
+                          <% cell_data =
+                            get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
+                          <% title =
+                            Map.get(cell_data, "name") || Map.get(cell_data, "title") || cell_key %>
 
                           <div class="bg-white p-3 rounded-md shadow-sm">
                             <div class="mb-2">
-                              <div class="text-base font-semibold text-gray-900"><%= title %></div>
-                              <div class="text-xs text-gray-500"><%= cell_key %></div>
+                              <div class="text-base font-semibold text-gray-900">{title}</div>
+                              <div class="text-xs text-gray-500">{cell_key}</div>
                             </div>
 
                             <.form for={%{}} phx-change="update_cell">
@@ -448,12 +519,26 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                 <%= for {field, value} <- cell_data do %>
                                   <%= if field not in ["row", "column"] do %>
                                     <div class="flex flex-col">
-                                      <label class="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1"><%= field %></label>
+                                      <label class="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
+                                        {field}
+                                      </label>
 
-                                      <div id={"md-" <> cell_key <> "-" <> field} phx-hook="MarkdownField" phx-update="ignore" data-cell-key={cell_key} data-field={field} data-current-user-id={@user_id} class="w-full">
-                                        <div id={"md-render-" <> cell_key <> "-" <> field}
+                                      <div
+                                        id={"md-" <> cell_key <> "-" <> field}
+                                        phx-hook="MarkdownField"
+                                        phx-update="ignore"
+                                        data-cell-key={cell_key}
+                                        data-field={field}
+                                        data-current-user-id={@user_id}
+                                        class="w-full"
+                                      >
+                                        <div
+                                          id={"md-render-" <> cell_key <> "-" <> field}
                                           class="md-render prose prose-sm prose-stone dark:prose-invert break-words mb-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded"
-                                          phx-update="ignore"><%= value %></div>
+                                          phx-update="ignore"
+                                        >
+                                          {value}
+                                        </div>
                                         <textarea
                                           name={"values[" <> field <> "]"}
                                           phx-debounce="150"

@@ -122,26 +122,19 @@ to the browser steps until it is green.
 
 ## Line endings & formatting
 
-The repository has **mixed line endings** in git (some files committed as CRLF, some as LF),
-and there is no `.gitattributes` to normalize them. Most files are CRLF.
+Tracked text files are normalized to **LF** by `.gitattributes` (`* text=auto eol=lf`), matching
+the Elixir formatter. `format` is part of both the `verify` and `precommit` aliases.
 
-**The Elixir formatter always writes LF.** Running `mix format` therefore rewrites every CRLF
-file in the repository — a single run produced ~6,800 insertions / ~6,500 deletions across
-84 files of pure line-ending noise.
+- `mix verify` runs `format` (rewrites files in place — self-healing).
+- `mix precommit` runs `format --check-formatted` (strict, no side effects).
+- Check a file's endings with `git ls-files --eol <file>` (`i/lf` = LF in git).
+- `rel/overlays/bin/*.bat` are deliberately `eol=crlf` — Windows scripts need CRLF to execute.
 
-**Consequences — these are deliberate, do not "fix" them without reading this:**
-
-- `format` is **intentionally excluded** from the `verify` and `precommit` aliases. Adding it
-  back will silently rewrite the whole repository.
-- `mix format --check-formatted` **can never pass** on the current tree, because the formatter
-  disagrees with the committed CRLF endings.
-- **Never run `mix format` repo-wide.** If you need to format, format only the specific files
-  you are already changing, and be aware it will flip those files to LF.
-- Check a file's endings with `git ls-files --eol <file>` (`i/crlf` = CRLF in git, `i/lf` = LF).
-
-**Recommended follow-up (requires a deliberate, standalone commit):** add a `.gitattributes`
-with `* text=auto eol=lf` and normalize the repository once. After that, `mix format` becomes a
-no-op on clean files and formatting can safely rejoin the gate.
+**History:** the repository previously had mixed CRLF/LF endings committed with no
+`.gitattributes`, so `mix format` rewrote every CRLF file (~6,500 lines of noise per run) and
+`--check-formatted` could never pass. It was normalized in a single commit; add that commit's
+SHA to `.git-blame-ignore-revs` if you want to preserve blame history. Do not reintroduce CRLF
+into tracked text files.
 
 ---
 

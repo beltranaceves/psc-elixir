@@ -19,7 +19,15 @@ defmodule Psc.Documents.Document do
   @doc false
   def changeset(document, attrs) do
     document
-    |> cast(attrs, [:title, :content, :crdt_state, :user_id, :shared_with, :snapshot_content, :snapshot_seq])
+    |> cast(attrs, [
+      :title,
+      :content,
+      :crdt_state,
+      :user_id,
+      :shared_with,
+      :snapshot_content,
+      :snapshot_seq
+    ])
     |> validate_required([:title, :user_id])
   end
 end

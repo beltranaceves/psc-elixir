@@ -46,12 +46,17 @@ Long command output and whole-file dumps are expensive and bury the signal. Alwa
 - Read **specific line ranges** (`read_file` with `startLine`/`endLine`) instead of whole files.
 - Never paste an entire file into the chat to "show" a change; make the edit and summarise it.
 
-### Do not run `mix format` repo-wide
+### Line endings & formatting
 
-The repository has mixed CRLF/LF line endings committed, and the Elixir formatter writes LF.
-`mix format` rewrites every CRLF file (~6,500 changed lines of pure noise) and
-`--check-formatted` can never pass. `format` is **intentionally excluded** from `verify` and
-`precommit` — do not add it back. See `DEVELOPMENT.md` ("Line endings & formatting").
+Tracked text files are normalized to **LF** by `.gitattributes` (`* text=auto eol=lf`), which
+matches the Elixir formatter. Consequences:
+
+- `format` is part of both the `verify` and `precommit` aliases — **keep it there**.
+- Never commit CRLF into tracked text files. `git ls-files --eol <file>` should report `i/lf`.
+- `rel/overlays/bin/*.bat` are the deliberate exception (`eol=crlf`), since Windows scripts need
+  CRLF to execute reliably.
+
+See `DEVELOPMENT.md` ("Line endings & formatting").
 
 ### Phoenix v1.8 guidelines
 
