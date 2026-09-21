@@ -1,0 +1,38 @@
+# Line ending normalization.
+#
+# This repository previously had MIXED line endings committed (some files CRLF,
+# some LF) with no .gitattributes, which meant:
+#   - `mix format` rewrote every CRLF file to LF (~6,500 lines of noise per run)
+#   - `mix format --check-formatted` could NEVER pass
+#   - `format` had to be excluded from the verify/precommit aliases
+#
+# The Elixir formatter always writes LF, so the working tree is normalized to LF
+# too (`eol=lf`, not just `text=auto`). That keeps the working tree, the
+# repository, and the formatter consistent, and lets formatting rejoin the gate.
+#
+# See DEVELOPMENT.md ("Line endings & formatting").
+* text=auto eol=lf
+
+# Binary files: never convert, never attempt a text diff.
+*.pdf   binary
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.svg   text
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.so    binary
+*.dll   binary
+*.zip   binary
+*.gz    binary
+
+# Windows shell scripts must keep CRLF to execute reliably.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

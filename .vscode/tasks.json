@@ -56,6 +56,24 @@
 			"type": "shell",
 			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && del /q auditcheck*.log 2>nul & git add -A & git reset -q -- .gitattributes docs/spec/TODO.md & echo === STAGED === & git diff --cached --name-status & echo === COMMITTING === & git commit -q -F commit-msg-1.txt & git log --oneline -1\"",
 			"isBackground": false
+		},
+		{
+			"label": "check-commit",
+			"type": "shell",
+			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && (git log --oneline -3 & echo === STATUS === & git status --short) > C:\\software\\psc-elixir\\commitcheck.log 2>&1\"",
+			"isBackground": false
+		},
+		{
+			"label": "commit-work-2",
+			"type": "shell",
+			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && git reset -q -- commit-msg-1.txt > commitout.log 2>&1 & git commit -q -F commit-msg-1.txt >> commitout.log 2>&1 & git --no-pager log --oneline -2 >> commitout.log 2>&1 & echo === STATUS === >> commitout.log 2>&1 & git status --short >> commitout.log 2>&1 & echo DONE\"",
+			"isBackground": false
+		},
+		{
+			"label": "renormalize",
+			"type": "shell",
+			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && del /q commitcheck.log commitout.log 2>nul & git add --renormalize . > renorm.log 2>&1 & echo === RENORMALIZED STATUS === >> renorm.log 2>&1 & git --no-pager status --short >> renorm.log 2>&1 & echo DONE\"",
+			"isBackground": false
 		}
 	]
 }
