@@ -7,6 +7,7 @@ follows. It is deliberately **not** a list of conventions — those live in `AGE
 - `DEVELOPMENT.md` — **HOW**: the workflow (this file)
 - `AGENTS.md` — **RULES**: conventions every agent must follow
 - `docs/spec/` — **WHAT**: one structured spec per feature pillar
+- `docs/plans/` — **PLAN**: implementation checklists derived from specs, one file per topic
 
 ---
 
@@ -42,6 +43,7 @@ docs/spec/                        # WHAT — one structured spec per feature are
   insights.md                     #   insights & content analysis          (has content)
   scratchpad.md                   #   unstructured canvas                  (stub — empty)
   TODO.md                         #   loose follow-up ideas
+docs/plans/                       # PLAN — implementation checklists, one file per topic
 .github/skills/                   # pattern references (deep-dive how-tos)
   crdt-collaboration/             #   real-time editing pattern (event log, snapshots, consistency)
   architecture-diagram/           #   SVG architecture diagrams
@@ -63,8 +65,9 @@ docs/audit/                       # committed chat exports (full audit trail)
 
 **Input:** a spec from `docs/spec/` (or a feature request).
 
-**Output:** an implementation checklist, following the pattern of the existing
-`crdt_implementation_checklist.md` (see repo memory). The checklist must include:
+**Output:** an implementation checklist written to `docs/plans/<topic>.md`, following the
+pattern of the existing `crdt_implementation_checklist.md` (see repo memory).
+The checklist must include:
 
 - data model (schemas, migrations)
 - context module API
@@ -74,6 +77,7 @@ docs/audit/                       # committed chat exports (full audit trail)
 - design decisions + pitfalls
 - pointers to relevant pattern references (e.g., `crdt-collaboration` if the feature needs
   real-time sync)
+file lives in `docs/plans/` and is presented in the chat for review **before**
 
 The plan is presented in the chat for review **before** implementation begins.
 

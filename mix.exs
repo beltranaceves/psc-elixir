@@ -5,7 +5,7 @@ defmodule Psc.MixProject do
     [
       app: :psc,
       version: "0.1.0",
-      elixir: "~> 1.15",
+      elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -41,7 +41,6 @@ defmodule Psc.MixProject do
   defp deps do
     [
       {:bcrypt_elixir, "~> 3.0"},
-      {:tidewave, "~> 0.5.6", only: :dev},
       {:phoenix, "~> 1.8.5"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},

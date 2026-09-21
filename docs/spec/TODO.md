@@ -1,3 +1,4 @@
 - Linters for code quality, complexity, style, etc. What about the type system? What about upgrading elixir and phoenix? Migrations in DB
 - somehow internet access.  either API or headless chromium. I think this already exists with chromium, we just need the instructions to also use to gather info
 - Migrating to a UI component library. Which one?
+- Tidewave style copy of selecting an element and then asking for a change.  This is a bit more complex than just asking for a change to the code, but it is a more natural way to ask for changes.  It also allows for more complex changes that might not be possible with just code changes. and can rely on the vision model
