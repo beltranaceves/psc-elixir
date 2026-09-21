@@ -33,18 +33,21 @@ next. There is no silent auto-retry.
 ```
 DEVELOPMENT.md                    # HOW — this workflow document
 AGENTS.md                         # RULES — conventions (auth scopes, streams, forms, tests)
-docs/spec/                        # WHAT — one structured spec per feature pillar
-  canvas-designer.md              #   (first spec — see "First Spec" below)
-  versioning.md                   #   (planned)
-  analytics.md                    #   (planned)
-  insights.md                     #   (planned)
-  collaboration.md                #   (planned)
+docs/spec/                        # WHAT — one structured spec per feature area
+  creator.md                      #   canvas template creator/configurator  (stub — empty)
+  editor.md                       #   canvas editor                        (stub — empty)
+  deltas.md                       #   delta model & versioning             (stub — empty)
+  telemetry.md                    #   analytics / interaction capture      (stub — empty)
+  analytics.md                    #   analytics derived views              (stub — empty)
+  insights.md                     #   insights & content analysis          (has content)
+  scratchpad.md                   #   unstructured canvas                  (stub — empty)
+  TODO.md                         #   loose follow-up ideas
 .github/skills/                   # pattern references (deep-dive how-tos)
   crdt-collaboration/             #   real-time editing pattern (event log, snapshots, consistency)
   architecture-diagram/           #   SVG architecture diagrams
 scripts/
+  export_chat.exs                 # chat session → markdown audit export
   verify_*.exs                    # backend stress/validity scripts (STUB — see below)
-  export_chat.mjs                 # chat session → markdown audit export
 test/
   psc/                            # unit + context tests
   psc_web/                        # LiveView interaction tests
@@ -89,6 +92,7 @@ Run the verification matrix, cheapest first. Report evidence for each step **in 
 
 | Step | Tool | What it proves |
 |---|---|---|
+| 0 | `mix verify` | Zero warnings, tests pass — the fast gate |
 | 1 | `mix test` (unit/context) | Business logic, changesets, CRDT ops |
 | 2 | `mix test` (LiveView) | Component interaction, events, streams, forms |
 | 3 | Ad-hoc browser (built-in Chromium tools) | The actual UI flow works — mount, edit, collaborate, version |
@@ -96,6 +100,65 @@ Run the verification matrix, cheapest first. Report evidence for each step **in 
 
 Evidence = test output, screenshots, and a short statement of what was checked. The user
 reviews and decides next steps. No auto-retry loops.
+
+**Step 0 first, always.** `mix verify` is the gate: it runs `nif.fix`, compiles with
+`--warnings-as-errors`, and runs the test suite stopping at the *first* failure. Do not proceed
+to the browser steps until it is green.
+
+### Command reference
+
+| Command | Purpose |
+|---|---|
+| `mix verify` | **Fast gate** — warnings + tests, stops at first failure |
+| `mix precommit` | Strict full check (same as verify, plus `deps.unlock --unused`) |
+| `mix test` | Full test suite |
+| `mix test test/path/to/file_test.exs` | One test file (prefer this while iterating) |
+| `mix test test/path/to/file_test.exs:42` | One test at a line |
+| `mix nif.fix` | Re-create Windows NIF `.dll` files (runs automatically in the aliases) |
+| `mix compile --warnings-as-errors` | Compile only, warnings are errors |
+| `mix ecto.gen.migration name` | Generate a migration |
+
+---
+
+## Line endings & formatting
+
+The repository has **mixed line endings** in git (some files committed as CRLF, some as LF),
+and there is no `.gitattributes` to normalize them. Most files are CRLF.
+
+**The Elixir formatter always writes LF.** Running `mix format` therefore rewrites every CRLF
+file in the repository — a single run produced ~6,800 insertions / ~6,500 deletions across
+84 files of pure line-ending noise.
+
+**Consequences — these are deliberate, do not "fix" them without reading this:**
+
+- `format` is **intentionally excluded** from the `verify` and `precommit` aliases. Adding it
+  back will silently rewrite the whole repository.
+- `mix format --check-formatted` **can never pass** on the current tree, because the formatter
+  disagrees with the committed CRLF endings.
+- **Never run `mix format` repo-wide.** If you need to format, format only the specific files
+  you are already changing, and be aware it will flip those files to LF.
+- Check a file's endings with `git ls-files --eol <file>` (`i/crlf` = CRLF in git, `i/lf` = LF).
+
+**Recommended follow-up (requires a deliberate, standalone commit):** add a `.gitattributes`
+with `* text=auto eol=lf` and normalize the repository once. After that, `mix format` becomes a
+no-op on clean files and formatting can safely rejoin the gate.
+
+---
+
+## Windows environment notes
+
+This project is developed on Windows. Two environment-specific facts matter for agents:
+
+**1. NIF extension (`nif.fix`).** Erlang on Windows resolves NIFs as `.dll`, but `elixir_make`
+builds `bcrypt_elixir` from the Unix `Makefile`, which hardcodes `bcrypt_nif.so`. Without the
+`.dll`, `Bcrypt.Base` fails to load and every password operation raises (12 test failures with a
+misleading *"make sure you have a C compiler"* message). The `nif.fix` alias copies `priv/*.so`
+to `.dll` in the current `_build` environment and is wired into `test`, `verify`, and
+`precommit`. It is a no-op on non-Windows systems.
+
+**2. Toolchain / shell.** MSYS2 lives at `C:\msys64` and is **not on PATH by default**; gcc is
+at `C:\msys64\mingw64\bin\gcc.exe`. PowerShell blocks `mix.ps1`/`npm.ps1` via execution policy —
+**use `mix.bat`, `npm.cmd`, `npx.cmd`, or `cmd /c`**.
 
 ---
 
@@ -201,7 +264,15 @@ Every spec in `docs/spec/` follows this structure so agents can consume it mecha
 <2–3 sentences: what and why>
 
 ## Data Model
-<schemas, fields, types, associations, migrations>
+<schemas, fields, types, associations, migrations — with exact field names and types>
+
+## File Plan
+Exact paths to create or modify, with module names and function signatures.
+Ambiguity here is what causes retries, so be concrete:
+- `lib/psc/<context>.ex` — module `Psc.<Context>`, functions `list_thing/1`, `create_thing/2`
+- `lib/psc_web/live/<x>_live/index.ex` — module `PscWeb.<X>Live.Index`, `mount/3`, `render/1`
+- `lib/psc_web/router.ex` — add route inside an existing `live_session` (name it and say why)
+- `test/psc/<context>_test.exs` — context tests
 
 ## API / Context Module
 <function signatures, return shapes, side effects>
@@ -223,6 +294,32 @@ Every spec in `docs/spec/` follows this structure so agents can consume it mecha
 
 The acceptance criteria are the contract: plan mode derives the test plan from them, and
 verify mode checks against them. Specs, tests, and verification stay in lockstep.
+
+---
+
+## Canonical Exemplars
+
+Prefer copying a known-good file over inventing structure. For each task, start from the
+exemplar and adapt it. These are the files the project already treats as idiomatic:
+
+| Task | Copy the structure of |
+|---|---|
+| Ecto schema + changeset | `lib/psc/documents/document.ex` |
+| Context module (CRUD + authorization) | `lib/psc/documents.ex` |
+| Pure domain logic / algorithms | `lib/psc/documents/crdt.ex` |
+| List LiveView (index) | `lib/psc_web/live/document_live/index.ex` |
+| Editor LiveView (events, forms) | `lib/psc_web/live/canvas_layout_live/editor.ex` |
+| LiveView with CRDT + presence + timers | `lib/psc_web/live/document_live/editor.ex` |
+| Context test | `test/psc/documents_test.exs` |
+| Pure-function test | `test/psc/documents/crdt_test.exs` |
+| LiveView test | `test/psc_web/live/document_live_test.exs` |
+| Test fixtures | `test/support/fixtures/document_fixtures.ex` |
+| Playwright E2E test | `test/e2e/tests/smoke.spec.ts` |
+
+**Vision-first verification.** When a change affects the UI, a screenshot is **mandatory
+evidence**. Reasoning about markup is expensive and unreliable; *looking* at the rendered page is
+cheap and reliable. Use the built-in browser tools to open the running app and capture a
+screenshot rather than inferring correctness from the template source.
 
 ---
 
@@ -258,16 +355,17 @@ pattern: `mix run scripts/verify_<topic>.exs`, deterministic output, exit non-ze
 
 ---
 
-## First Spec
+## First Specs
 
-The first spec to write is **`docs/spec/canvas-designer.md`** — the canvas template
-configurator and canvas editor. It is foundational: every other pillar (versioning, analytics,
-insights) operates on canvases instantiated from templates. It covers:
+The stubs in `docs/spec/` are empty and ready to be filled in. The first two to write are
+**`docs/spec/creator.md`** (the canvas template creator/configurator) and
+**`docs/spec/editor.md`** (the canvas editor). Together they are foundational: every other area
+(versioning, analytics, insights) operates on canvases instantiated from templates.
 
-- defining canvas structure (cells, relations, semantics) and templates
-- editor UI and components for creating and editing cells
-- template persistence and instantiation of canvases
-- the canvas editor where users work on instantiated canvases
+- `creator.md` — defining canvas structure (cells, relations, semantics) and templates;
+  template persistence and instantiation of canvases
+- `editor.md` — the editor UI and components for creating and editing cells, on an
+  instantiated canvas
 
-Write it in the structured format above, with acceptance criteria and verification methods for
-each.
+Write them in the structured format above, with acceptance criteria and verification methods
+for each.

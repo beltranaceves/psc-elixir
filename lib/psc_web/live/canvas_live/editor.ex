@@ -2,7 +2,6 @@ defmodule PscWeb.CanvasLive.Editor do
   use PscWeb, :live_view
   require Logger
   alias Psc.Canvas
-  alias Psc.Canvas.Canvas, as: CanvasSchema
   alias PscWeb.Presence
 
   @idle_save_interval 1500
@@ -10,16 +9,16 @@ defmodule PscWeb.CanvasLive.Editor do
 
   @impl true
   def mount(%{"id" => canvas_id}, _session, socket) do
-    Logger.info("---------- [MOUNT] Loading canvas_id: #{canvas_id} ----------")
+    Logger.debug("---------- [MOUNT] Loading canvas_id: #{canvas_id} ----------")
 
     canvas = Canvas.get_canvas_with_author(canvas_id)
     user_email = socket.assigns.current_scope.user.email
     user_id = socket.assigns.current_scope.user.id
 
     if canvas do
-      Logger.info("[MOUNT] Canvas loaded successfully, will be displayed in template")
+      Logger.debug("[MOUNT] Canvas loaded successfully, will be displayed in template")
     else
-      Logger.warn("[MOUNT] Canvas is nil - will redirect")
+      Logger.warning("[MOUNT] Canvas is nil - will redirect")
     end
 
     if canvas && Canvas.can_access_canvas?(canvas, user_email) do
@@ -75,25 +74,6 @@ defmodule PscWeb.CanvasLive.Editor do
   @impl true
   def handle_event("update_description", _params, socket) do
     {:noreply, socket}
-  end
-
-  # Map cell names to their struct modules for instantiation
-  defp cell_struct_module(cell_name) do
-    case cell_name do
-      "problem" -> Psc.Canvas.Problem
-      "leverage" -> Psc.Canvas.Leverage
-      "solution_cluster" -> Psc.Canvas.SolutionCluster
-      "horizon" -> Psc.Canvas.Horizon
-      "outer_environment" -> Psc.Canvas.OuterEnvironment
-      "inner_environment" -> Psc.Canvas.InnerEnvironment
-      "evolvability_cluster" -> Psc.Canvas.EvolvabilityCluster
-      "potential" -> Psc.Canvas.Potential
-      "manifestations" -> Psc.Canvas.Manifestations
-      "capabilities" -> Psc.Canvas.Capabilities
-      "merit_cluster" -> Psc.Canvas.MeritCluster
-      "mission" -> Psc.Canvas.Mission
-      _ -> nil
-    end
   end
 
   @impl true
@@ -176,20 +156,6 @@ defmodule PscWeb.CanvasLive.Editor do
   end
 
   @impl true
-  def handle_event("update_title", _params, socket) do
-    # phx-change on an input sends the entire form value
-    # We get it from the parameter 'html_escaped_value' when using regular input
-    # Actually, let's simplify and just get it from the input value directly
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_event("update_description", _params, socket) do
-    # Similarly for description
-    {:noreply, socket}
-  end
-
-  @impl true
   def handle_event("share_canvas", %{"email" => email}, socket) do
     # Only owner can share
     if socket.assigns.canvas.author_id == socket.assigns.user_id do
@@ -227,46 +193,41 @@ defmodule PscWeb.CanvasLive.Editor do
     end
   end
 
+  # Map cell names to their struct modules for instantiation
+  defp cell_struct_module(cell_name) do
+    case cell_name do
+      "problem" -> Psc.Canvas.Problem
+      "leverage" -> Psc.Canvas.Leverage
+      "solution_cluster" -> Psc.Canvas.SolutionCluster
+      "horizon" -> Psc.Canvas.Horizon
+      "outer_environment" -> Psc.Canvas.OuterEnvironment
+      "inner_environment" -> Psc.Canvas.InnerEnvironment
+      "evolvability_cluster" -> Psc.Canvas.EvolvabilityCluster
+      "potential" -> Psc.Canvas.Potential
+      "manifestations" -> Psc.Canvas.Manifestations
+      "capabilities" -> Psc.Canvas.Capabilities
+      "merit_cluster" -> Psc.Canvas.MeritCluster
+      "mission" -> Psc.Canvas.Mission
+      _ -> nil
+    end
+  end
+
   @impl true
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
     {:noreply, handle_presence_change(socket, socket.assigns.canvas_id)}
   end
 
-  defp build_canvas_update_attrs(canvas) do
-    attrs = %{name: canvas.name, description: canvas.description}
-    |> Map.merge(
-      [
-        :problem, :leverage, :solution_cluster, :horizon,
-        :outer_environment, :inner_environment, :evolvability_cluster,
-        :potential, :manifestations, :capabilities, :merit_cluster, :mission
-      ]
-      |> Enum.reduce(%{}, fn cell_field, acc ->
-        case Map.get(canvas, cell_field) do
-          nil ->
-            acc
-          value ->
-            # Convert struct to map for cast_embed (which expects maps, not structs)
-            map_value = if is_struct(value), do: Map.from_struct(value), else: value
-            Map.put(acc, cell_field, map_value)
-        end
-      end)
-    )
-
-    Logger.info("[BUILD ATTRS] Canvas ID: #{canvas.id}, attrs being prepared for DB update: #{inspect(attrs, limit: :infinity)}")
-    attrs
-  end
-
   @impl true
   def handle_info(:idle_save, socket) do
     if has_changes?(socket.assigns.canvas, socket.assigns.original_canvas) do
-      Logger.info("[IDLE SAVE] Saving changes for canvas_id: #{socket.assigns.canvas_id}")
+      Logger.debug("[IDLE SAVE] Saving changes for canvas_id: #{socket.assigns.canvas_id}")
       socket = assign(socket, save_state: :saving)
       canvas = socket.assigns.canvas
       attrs = build_canvas_update_attrs(canvas)
 
       case Canvas.update_canvas(canvas, attrs) do
         {:ok, updated_canvas} ->
-          Logger.info("[IDLE SAVE SUCCESS] Canvas saved: #{inspect(updated_canvas, label: "saved_canvas", limit: :infinity)}")
+          Logger.debug(fn -> "[IDLE SAVE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}" end)
           {:noreply,
            socket
            |> assign(:original_canvas, updated_canvas)
@@ -289,12 +250,12 @@ defmodule PscWeb.CanvasLive.Editor do
   @impl true
   def handle_info(:periodic_save, socket) do
     if has_changes?(socket.assigns.canvas, socket.assigns.original_canvas) do
-      Logger.info("[PERIODIC SAVE] Saving changes for canvas_id: #{socket.assigns.canvas_id}")
+      Logger.debug("[PERIODIC SAVE] Saving changes for canvas_id: #{socket.assigns.canvas_id}")
       attrs = build_canvas_update_attrs(socket.assigns.canvas)
 
       case Canvas.update_canvas(socket.assigns.canvas, attrs) do
         {:ok, updated_canvas} ->
-          Logger.info("[PERIODIC SAVE SUCCESS] Canvas saved: #{inspect(updated_canvas, label: "saved_canvas", limit: :infinity)}")
+          Logger.debug(fn -> "[PERIODIC SAVE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}" end)
           :ok
         {:error, error} ->
           Logger.error("[PERIODIC SAVE FAILED] Error: #{inspect(error)}")
@@ -306,6 +267,30 @@ defmodule PscWeb.CanvasLive.Editor do
 
     Process.send_after(self(), :periodic_save, @periodic_save_interval)
     {:noreply, socket}
+  end
+
+  defp build_canvas_update_attrs(canvas) do
+    attrs = %{name: canvas.name, description: canvas.description}
+    |> Map.merge(
+      [
+        :problem, :leverage, :solution_cluster, :horizon,
+        :outer_environment, :inner_environment, :evolvability_cluster,
+        :potential, :manifestations, :capabilities, :merit_cluster, :mission
+      ]
+      |> Enum.reduce(%{}, fn cell_field, acc ->
+        case Map.get(canvas, cell_field) do
+          nil ->
+            acc
+          value ->
+            # Convert struct to map for cast_embed (which expects maps, not structs)
+            map_value = if is_struct(value), do: Map.from_struct(value), else: value
+            Map.put(acc, cell_field, map_value)
+        end
+      end)
+    )
+
+    Logger.debug(fn -> "[BUILD ATTRS] Canvas ID: #{canvas.id}: #{inspect(attrs, limit: :infinity)}" end)
+    attrs
   end
 
   defp has_changes?(canvas1, canvas2) do

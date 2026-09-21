@@ -138,44 +138,6 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     {:noreply, assign(socket, :layout_map, new_layout)}
   end
 
-  # Ensure every position in the layout matrix has a cell key
-  defp ensure_matrix_keys(layout) do
-    cols = layout["columns"] || []
-    rows = layout["rows"] || []
-    matrix = layout["layout"] || []
-
-    {updated_matrix, cell_entries} =
-      matrix
-      |> Enum.with_index()
-      |> Enum.map_reduce(%{}, fn {row_list, ri}, acc ->
-        new_row =
-          row_list
-          |> Enum.with_index()
-          |> Enum.map_reduce(acc, fn {cell_key, ci}, acc2 ->
-            if cell_key && cell_key != "" do
-              {cell_key, acc2}
-            else
-              row_meta = Enum.at(rows, ri, %{"id" => "r#{ri}"})
-              col_meta = Enum.at(cols, ci, %{"id" => "c#{ci}"})
-              gen_key = "#{col_meta["id"]}_#{row_meta["id"]}"
-              {gen_key, Map.put(acc2, gen_key, %{})}
-            end
-          end)
-
-        # new_row is {row_values, acc_after_row}
-        {elem(new_row, 0), elem(new_row, 1)}
-      end)
-
-    # updated_matrix is a list of rows; cell_entries contains newly added empty maps
-    merged = Map.merge(layout, %{"layout" => updated_matrix})
-
-    # ensure we have empty maps for all cell keys
-    cell_entries = Enum.into(cell_entries, %{})
-    merged = Enum.reduce(cell_entries, merged, fn {k, v}, acc -> Map.put_new(acc, k, v) end)
-
-    merged
-  end
-
   def handle_event("update_cell_field", %{"cell_key" => cell_key, "field" => field, "value" => value}, socket) do
     layout = socket.assigns.layout_map
     cell = Map.get(layout, cell_key, %{})
@@ -260,6 +222,44 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             {:noreply, put_flash(socket, :error, "Layout not found")}
         end
     end
+  end
+
+  # Ensure every position in the layout matrix has a cell key
+  defp ensure_matrix_keys(layout) do
+    cols = layout["columns"] || []
+    rows = layout["rows"] || []
+    matrix = layout["layout"] || []
+
+    {updated_matrix, cell_entries} =
+      matrix
+      |> Enum.with_index()
+      |> Enum.map_reduce(%{}, fn {row_list, ri}, acc ->
+        new_row =
+          row_list
+          |> Enum.with_index()
+          |> Enum.map_reduce(acc, fn {cell_key, ci}, acc2 ->
+            if cell_key && cell_key != "" do
+              {cell_key, acc2}
+            else
+              row_meta = Enum.at(rows, ri, %{"id" => "r#{ri}"})
+              col_meta = Enum.at(cols, ci, %{"id" => "c#{ci}"})
+              gen_key = "#{col_meta["id"]}_#{row_meta["id"]}"
+              {gen_key, Map.put(acc2, gen_key, %{})}
+            end
+          end)
+
+        # new_row is {row_values, acc_after_row}
+        {elem(new_row, 0), elem(new_row, 1)}
+      end)
+
+    # updated_matrix is a list of rows; cell_entries contains newly added empty maps
+    merged = Map.merge(layout, %{"layout" => updated_matrix})
+
+    # ensure we have empty maps for all cell keys
+    cell_entries = Enum.into(cell_entries, %{})
+    merged = Enum.reduce(cell_entries, merged, fn {k, v}, acc -> Map.put_new(acc, k, v) end)
+
+    merged
   end
 
   @impl true

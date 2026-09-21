@@ -69,11 +69,11 @@ defmodule Psc.Documents.CRDT do
       {same, same} ->
         []
 
-      {_old, new} when byte_size(new) > byte_size(_old) ->
+      {old, new} when byte_size(new) > byte_size(old) ->
         # Insertion detected
         find_insertion_point(old_text, new_text)
 
-      {_old, new} when byte_size(new) < byte_size(_old) ->
+      {old, new} when byte_size(new) < byte_size(old) ->
         # Deletion detected
         find_deletion_point(old_text, new_text)
 

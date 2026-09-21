@@ -4,19 +4,54 @@ This is a web application written using the Phoenix web framework.
 
 - Use `mix precommit` alias when you are done with all changes and fix any pending issues
 - Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+- **Use `mix.bat`, `npm.cmd`, `npx.cmd`, or `cmd /c`** on Windows — PowerShell blocks the `.ps1`
+  shims via execution policy. See `DEVELOPMENT.md` ("Windows environment notes").
 
 ### Verification workflow
 
 - **Always** follow the workflow in `DEVELOPMENT.md`: spec → plan → implement → verify
 - Before declaring work done, run the verification matrix (cheapest first):
+  0. `mix verify` — the fast gate: zero warnings + tests, stops at the first failure
   1. `mix test` (unit/context) — business logic, changesets, CRDT ops
   2. `mix test` (LiveView) — component interaction, events, streams, forms
   3. Ad-hoc browser verification — use the built-in browser tools to open the running app,
      click through the UI, and capture screenshots (the images enter the LLM context)
   4. `npx playwright test` — the committed E2E regression suite in `test/e2e/` (auto-starts
-     Phoenix via `MIX_ENV=e2e`, reuses an already-running server)
+     Phoenix, reuses an already-running server)
 - Report evidence for each step **in the chat** (test output, screenshots, what was checked).
   Do not silently retry or auto-fix; surface failures to the user for review.
+
+### Retrieval over recall — never guess an API
+
+This project vendors its dependencies in `deps/`, so the **exact source of the exact versions
+in use** is always available locally. Read it instead of relying on memory:
+
+- Unsure of a function signature, option, or component attribute? Read `deps/<app>/lib/…`
+  (e.g. `deps/phoenix_live_view/lib/phoenix_component.ex`) or fetch the docs.
+- **Never guess** a function name, arity, option, or attribute. Guessing produces plausible-
+  looking code that fails at compile time or, worse, silently at runtime.
+
+Worked example: a `<.form>` was missing its required `for` attribute. Instead of guessing a fix,
+reading `deps/phoenix_live_view/lib/phoenix_component.ex` showed `form/1` explicitly handles
+nils (`case assigns[:for] do nil -> %{}`), so `for={nil}` was correct and behaviour-neutral —
+whereas refactoring to `to_form/1` would have changed the submitted parameter shape and broken
+the event handler.
+
+### Output discipline — keep the context small
+
+Long command output and whole-file dumps are expensive and bury the signal. Always:
+
+- Run **one test file** while iterating (`mix test test/path/to/file_test.exs`), not the full suite.
+- Filter noisy output — compile warnings, logs, and progress bars are not results.
+- Read **specific line ranges** (`read_file` with `startLine`/`endLine`) instead of whole files.
+- Never paste an entire file into the chat to "show" a change; make the edit and summarise it.
+
+### Do not run `mix format` repo-wide
+
+The repository has mixed CRLF/LF line endings committed, and the Elixir formatter writes LF.
+`mix format` rewrites every CRLF file (~6,500 changed lines of pure noise) and
+`--check-formatted` can never pass. `format` is **intentionally excluded** from `verify` and
+`precommit` — do not add it back. See `DEVELOPMENT.md` ("Line endings & formatting").
 
 ### Phoenix v1.8 guidelines
 

@@ -1,9 +1,13 @@
 import Config
 
+# Quiet by default: `Logger.debug` output (verbose state dumps from the canvas
+# context and editor) is available on demand via `Logger.configure(level: :debug)`.
+config :logger, level: :info
+
 # Configure your database
 #
-# PSC_DB_NAME / PSC_PORT allow the E2E test harness to run the dev build
-# against a separate database and port without recompiling dependencies.
+# PSC_DB_NAME allows the E2E test harness to run the dev build against a
+# separate database without recompiling dependencies.
 config :psc, Psc.Repo,
   username: "postgres",
   password: "postgres",
@@ -19,10 +23,13 @@ config :psc, Psc.Repo,
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
+#
+# The HTTP port is set in config/runtime.exs (via PSC_PORT / PORT), so it can
+# be overridden at runtime — see the E2E harness in test/e2e/.
 config :psc, PscWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("PSC_PORT", "4000"))],
+  http: [ip: {127, 0, 0, 1}],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

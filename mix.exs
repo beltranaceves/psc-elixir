@@ -27,7 +27,7 @@ defmodule Psc.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :test, verify: :test]
     ]
   end
 
@@ -83,16 +83,17 @@ defmodule Psc.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
+      setup: ["deps.get", "deps.compile", "nif.fix", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "nif.fix": &fix_nif_extensions/1,
       "e2e.setup": [
         "ecto.create --quiet",
         "ecto.migrate --quiet",
         "run priv/repo/e2e_seeds.exs",
         "assets.build"
       ],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      test: ["nif.fix", "ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind psc", "esbuild psc"],
       "assets.deploy": [
@@ -100,7 +101,42 @@ defmodule Psc.MixProject do
         "esbuild psc --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      # Fast agent/developer loop: fail on warnings, stop at the first test failure.
+      #
+      # NOTE: `format` is intentionally excluded. This repo commits files with CRLF
+      # line endings, but the Elixir formatter always writes LF, so `mix format`
+      # would rewrite every file in the repository (and `--check-formatted` could
+      # never pass). See DEVELOPMENT.md ("Line endings & formatting").
+      verify: ["nif.fix", "compile --warnings-as-errors", "test --max-failures 1"],
+      # Strict full check.
+      precommit: [
+        "nif.fix",
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "test"
+      ]
     ]
+  end
+
+  # On Windows, Erlang resolves NIFs as `.dll`, but `elixir_make` builds them as `.so`
+  # (it uses the dependency's Unix `Makefile`, which hardcodes the `.so` name).
+  # Elixir/Erlang then fails with a misleading "module could not be found" error.
+  #
+  # This makes each build environment self-healing by copying any `priv/*.so` that has
+  # no matching `.dll`. No-op on non-Windows platforms and when already fixed.
+  defp fix_nif_extensions(_args) do
+    if match?({:win32, _}, :os.type()) do
+      lib_dir = Path.join(Mix.Project.build_path(), "lib")
+
+      for priv <- Path.wildcard(Path.join(lib_dir, "*/priv")),
+          so <- Path.wildcard(Path.join(priv, "*.so")),
+          dll = Path.rootname(so) <> ".dll",
+          not File.exists?(dll) do
+        File.cp!(so, dll)
+        Mix.shell().info("nif.fix: created #{Path.relative_to_cwd(dll)}")
+      end
+    end
+
+    :ok
   end
 end

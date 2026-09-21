@@ -27,7 +27,7 @@ user = user |> User.confirm_changeset() |> Repo.update!()
 
 # Ensure a password is set so the password login form works.
 if is_nil(user.hashed_password) do
-  {:ok, user} = Accounts.update_user_password(user, %{password: password})
+  {:ok, _user} = Accounts.update_user_password(user, %{password: password})
 end
 
 IO.puts("E2E user ready: #{user.email}")

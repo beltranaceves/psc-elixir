@@ -1,0 +1,61 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "mix verify",
+			"detail": "Fast gate: nif.fix, compile --warnings-as-errors, test --max-failures 1",
+			"type": "shell",
+			"command": "mix.bat verify",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "mix test",
+			"detail": "Full ExUnit suite",
+			"type": "shell",
+			"command": "mix.bat test",
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "e2e (playwright)",
+			"detail": "Browser regression suite; auto-starts Phoenix on port 4001 (psc_e2e DB)",
+			"type": "shell",
+			"command": "npx.cmd playwright test",
+			"options": {
+				"cwd": "${workspaceFolder}/test/e2e"
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "phx.server",
+			"detail": "Start the dev server (http://localhost:4000)",
+			"type": "shell",
+			"command": "mix.bat phx.server",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "check-audit-dir",
+			"type": "shell",
+			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && (echo === docs/audit === & if exist docs\\audit (dir /b docs\\audit) else (echo MISSING) & echo. & echo === gitignore check === & git check-ignore -v docs/audit/2026-09-21-agentic-setup.md & echo. & echo === tracked in audit === & git ls-files docs/audit) > C:\\software\\psc-elixir\\auditcheck.log 2>&1\"",
+			"isBackground": false
+		},
+		{
+			"label": "check-audit-2",
+			"type": "shell",
+			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && (git status --short --untracked-files=all & echo === CHECK-IGNORE === & git check-ignore -v docs/audit/2026-09-21-agentic-setup.md & echo === LS-FILES === & git ls-files docs/ ) > C:\\software\\psc-elixir\\auditcheck2.log 2>&1\"",
+			"isBackground": false
+		},
+		{
+			"label": "commit-work",
+			"type": "shell",
+			"command": "cmd /c \"cd /d C:\\software\\psc-elixir && del /q auditcheck*.log 2>nul & git add -A & git reset -q -- .gitattributes docs/spec/TODO.md & echo === STAGED === & git diff --cached --name-status & echo === COMMITTING === & git commit -q -F commit-msg-1.txt & git log --oneline -1\"",
+			"isBackground": false
+		}
+	]
+}

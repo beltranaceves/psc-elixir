@@ -135,9 +135,7 @@ defmodule Psc.Documents do
     end
   end
 
-  @doc """
-  Broadcast an operation to all subscribers.
-  """
+  # Broadcast an operation to all subscribers.
   defp broadcast_operation(document_id, user_id, operation, seq) do
     Phoenix.PubSub.broadcast(
       Psc.PubSub,
@@ -212,9 +210,7 @@ defmodule Psc.Documents do
     CRDT.text_to_deltas(old_text, new_text)
   end
 
-  @doc """
-  Get next sequence number for a document.
-  """
+  # Get next sequence number for a document.
   defp next_sequence(document_id) do
     case Repo.one(
            from(e in DocumentEvent,

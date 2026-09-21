@@ -9,18 +9,6 @@ defmodule Psc.Canvas do
   alias Psc.Repo
   alias Psc.Canvas.Canvas
   alias Psc.Canvas.UnstrCanvas
-  alias Psc.Canvas.Problem
-  alias Psc.Canvas.Leverage
-  alias Psc.Canvas.SolutionCluster
-  alias Psc.Canvas.Horizon
-  alias Psc.Canvas.OuterEnvironment
-  alias Psc.Canvas.InnerEnvironment
-  alias Psc.Canvas.EvolvabilityCluster
-  alias Psc.Canvas.Potential
-  alias Psc.Canvas.Manifestations
-  alias Psc.Canvas.Capabilities
-  alias Psc.Canvas.MeritCluster
-  alias Psc.Canvas.Mission
   alias Psc.Canvas.Layout
 
   @doc """
@@ -61,21 +49,9 @@ defmodule Psc.Canvas do
       |> Repo.get(id)
 
     if result do
-      Logger.info("[DB LOAD] Canvas #{id} loaded from database")
-      Logger.info("[DB LOAD - PROBLEM] #{inspect(result.problem, label: "problem")}")
-      Logger.info("[DB LOAD - LEVERAGE] #{inspect(result.leverage, label: "leverage")}")
-      Logger.info("[DB LOAD - SOLUTION] #{inspect(result.solution_cluster, label: "solution_cluster")}")
-      Logger.info("[DB LOAD - HORIZON] #{inspect(result.horizon, label: "horizon")}")
-      Logger.info("[DB LOAD - OUTER_ENV] #{inspect(result.outer_environment, label: "outer_environment")}")
-      Logger.info("[DB LOAD - INNER_ENV] #{inspect(result.inner_environment, label: "inner_environment")}")
-      Logger.info("[DB LOAD - EVOLVABILITY] #{inspect(result.evolvability_cluster, label: "evolvability_cluster")}")
-      Logger.info("[DB LOAD - POTENTIAL] #{inspect(result.potential, label: "potential")}")
-      Logger.info("[DB LOAD - MANIFESTATIONS] #{inspect(result.manifestations, label: "manifestations")}")
-      Logger.info("[DB LOAD - CAPABILITIES] #{inspect(result.capabilities, label: "capabilities")}")
-      Logger.info("[DB LOAD - MERIT] #{inspect(result.merit_cluster, label: "merit_cluster")}")
-      Logger.info("[DB LOAD - MISSION] #{inspect(result.mission, label: "mission")}")
+      Logger.debug(fn -> "[DB LOAD] Canvas #{id} loaded: #{inspect(result, limit: :infinity)}" end)
     else
-      Logger.warn("[DB LOAD] Canvas #{id} NOT FOUND in database")
+      Logger.warning("[DB LOAD] Canvas #{id} NOT FOUND in database")
     end
 
     result
@@ -105,7 +81,7 @@ defmodule Psc.Canvas do
       Map.merge(cell_attrs, attrs)
       |> Map.put(:author_id, user_id)
 
-    Logger.info("[DB SAVE - CREATE] Canvas attrs being saved: #{inspect(all_attrs, limit: :infinity)}")
+    Logger.debug(fn -> "[DB SAVE - CREATE] attrs: #{inspect(all_attrs, limit: :infinity)}" end)
 
     result =
       %Canvas{}
@@ -114,7 +90,7 @@ defmodule Psc.Canvas do
 
     case result do
       {:ok, canvas} ->
-        Logger.info("[DB SAVE - CREATE SUCCESS] Canvas created: #{inspect(canvas, label: "created_canvas", limit: :infinity)}")
+        Logger.debug(fn -> "[DB SAVE - CREATE SUCCESS] #{inspect(canvas, limit: :infinity)}" end)
         {:ok, canvas}
       {:error, changeset} ->
         Logger.error("[DB SAVE - CREATE FAILED] Changeset error: #{inspect(changeset)}")
@@ -126,7 +102,9 @@ defmodule Psc.Canvas do
   Update a canvas.
   """
   def update_canvas(canvas, attrs) do
-    Logger.info("[DB SAVE - UPDATE] Canvas ID: #{canvas.id}, cells being saved: #{inspect(Map.keys(attrs))}, full attrs: #{inspect(attrs, limit: :infinity)}")
+    Logger.debug(fn ->
+      "[DB SAVE - UPDATE] Canvas ID: #{canvas.id}, cells: #{inspect(Map.keys(attrs))}, attrs: #{inspect(attrs, limit: :infinity)}"
+    end)
 
     result =
       canvas
@@ -135,7 +113,7 @@ defmodule Psc.Canvas do
 
     case result do
       {:ok, updated_canvas} ->
-        Logger.info("[DB SAVE - UPDATE SUCCESS] Canvas updated: #{inspect(updated_canvas, label: "updated_canvas", limit: :infinity)}")
+        Logger.debug(fn -> "[DB SAVE - UPDATE SUCCESS] #{inspect(updated_canvas, limit: :infinity)}" end)
         {:ok, updated_canvas}
       {:error, changeset} ->
         Logger.error("[DB SAVE - UPDATE FAILED] Changeset error: #{inspect(changeset)}")
@@ -341,9 +319,7 @@ defmodule Psc.Canvas do
     canvas.author.email == user_email || Enum.any?(canvas.shared_with, &(&1 == user_email))
   end
 
-  @doc """
-  Get the next seq number for the given unstr_canvas
-  """
+  # Get the next seq number for the given unstr_canvas
   defp next_unstr_canvas_sequence(canvas_id) do
     case Repo.one(
            from(e in Psc.Canvas.UnstrCanvasEvent,

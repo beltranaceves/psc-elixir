@@ -5,7 +5,10 @@ defmodule PscWeb.DocumentLive.Index do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Psc.PubSub, "user:#{socket.assigns.current_scope.user.id}:documents")
+      Phoenix.PubSub.subscribe(
+        Psc.PubSub,
+        "user:#{socket.assigns.current_scope.user.id}:documents"
+      )
     end
 
     user_email = socket.assigns.current_scope.user.email
@@ -62,7 +65,7 @@ defmodule PscWeb.DocumentLive.Index do
   end
 
   @impl true
-  def handle_info({:document_created, document}, socket) do
+  def handle_info({:document_created, _document}, socket) do
     user_email = socket.assigns.current_scope.user.email
     documents = Documents.list_user_documents(socket.assigns.current_scope.user.id)
     shared_documents = Documents.list_shared_documents(user_email)
@@ -80,14 +83,14 @@ defmodule PscWeb.DocumentLive.Index do
             phx-click="show_new_form"
             class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 transition-colors"
           >
-            <.icon name="hero-plus" class="w-5 h-5" />
-            New Document
+            <.icon name="hero-plus" class="w-5 h-5" /> New Document
           </button>
         </div>
 
         <%= if @show_new_form do %>
           <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6">
             <.form
+              for={nil}
               id="new-document-form"
               phx-submit="create_document"
               phx-change="update_title"
@@ -133,9 +136,9 @@ defmodule PscWeb.DocumentLive.Index do
               >
                 <div class="flex items-center justify-between">
                   <div>
-                    <h3 class="font-semibold text-gray-900"><%= doc.title %></h3>
+                    <h3 class="font-semibold text-gray-900">{doc.title}</h3>
                     <p class="text-sm text-gray-500">
-                      Updated <%= Calendar.strftime(doc.updated_at, "%b %d, %Y") %>
+                      Updated {Calendar.strftime(doc.updated_at, "%b %d, %Y")}
                     </p>
                   </div>
                   <.icon name="hero-arrow-right" class="w-5 h-5 text-gray-400" />
@@ -157,9 +160,9 @@ defmodule PscWeb.DocumentLive.Index do
                 >
                   <div class="flex items-center justify-between">
                     <div>
-                      <h3 class="font-semibold text-gray-900"><%= doc.title %></h3>
+                      <h3 class="font-semibold text-gray-900">{doc.title}</h3>
                       <p class="text-sm text-gray-600">
-                        By <%= doc.user.email %> • Updated <%= Calendar.strftime(doc.updated_at, "%b %d, %Y") %>
+                        By {doc.user.email} • Updated {Calendar.strftime(doc.updated_at, "%b %d, %Y")}
                       </p>
                     </div>
                     <.icon name="hero-arrow-right" class="w-5 h-5 text-gray-400" />

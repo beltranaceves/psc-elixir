@@ -20,7 +20,14 @@ if System.get_env("PHX_SERVER") do
   config :psc, PscWeb.Endpoint, server: true
 end
 
-config :psc, PscWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+# The HTTP port is resolved at runtime so the same build can be started on a
+# different port. `PSC_PORT` (project-namespaced) takes precedence over `PORT`
+# (the deployment convention), falling back to 4000. The E2E harness in
+# `test/e2e/` relies on this to run alongside a dev server.
+config :psc, PscWeb.Endpoint,
+  http: [
+    port: String.to_integer(System.get_env("PSC_PORT") || System.get_env("PORT", "4000"))
+  ]
 
 if config_env() == :prod do
   database_url =
