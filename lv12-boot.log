@@ -1,0 +1,14 @@
+[warning] Phoenix is unable to create symlinks. Phoenix's code reloader will run considerably faster if symlinks are allowed. On Windows, the lack of symlinks may even cause empty assets to be served. Luckily, you can address this issue by starting your Windows terminal at least once with "Run as Administrator" and then running your Phoenix application.
+[info] Running PscWeb.Endpoint with Bandit 1.12.5 at 127.0.0.1:4001 (http)
+[info] Access PscWeb.Endpoint at http://localhost:4001
+[watch] build finished, watching for changes...
+[3m[1m[34m≈[39m[22m[23m tailwindcss [34mv4.1.12[39m
+
+/*! 🌼 daisyUI 5.0.35 */
+Done in [34m174ms[39m
+[info] GET /users/log-in
+[info] Sent 200 in 100ms
+[info] CONNECTED TO Phoenix.LiveView.Socket in 102µs
+  Transport: :websocket
+  Serializer: Phoenix.Socket.V2.JSONSerializer
+  Parameters: %{"_csrf_token" => "[FILTERED]", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4001/assets/css/app.css", "1" => "http://localhost:4001/assets/js/app.js"}, "vsn" => "2.0.0"}
