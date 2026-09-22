@@ -35,10 +35,10 @@ config :psc, PscWeb.Endpoint,
   pubsub_server: Psc.PubSub,
   live_view: [signing_salt: "8JgACyBj"]
 
-# Colocated JS hooks: creating the node_modules symlink requires elevated
+# Colocated assets: creating the node_modules symlink requires elevated
 # privileges on Windows ("Failed to symlink ... :eperm"). The bundle works
 # without the symlink, so the warning is disabled instead of failing the build.
-config :phoenix_live_view, :colocated_js, disable_symlink_warning: true
+config :phoenix_live_view, :colocated_assets, disable_symlink_warning: true
 
 # Configure the mailer
 #

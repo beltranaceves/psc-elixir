@@ -365,7 +365,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <%!-- Header --%>
         <div class="flex items-center justify-between mb-8">
           <div class="flex-1">
-            <.form for={%{}} phx-change="update_name">
+            <.form for={%{}} id="canvas-name-form" phx-change="update_name">
               <input
                 name="value"
                 type="text"
@@ -441,7 +441,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
         <%!-- Description --%>
         <div class="mb-8">
-          <.form for={%{}} phx-change="update_description">
+          <.form for={%{}} id="canvas-description-form" phx-change="update_description">
             <textarea
               name="value"
               phx-debounce="1000"
@@ -512,7 +512,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                               <div class="text-xs text-gray-500">{cell_key}</div>
                             </div>
 
-                            <.form for={%{}} phx-change="update_cell">
+                            <.form for={%{}} id={"cell-form-#{cell_key}"} phx-change="update_cell">
                               <input type="hidden" name="cell_key" value={cell_key} />
 
                               <div class="mt-2 grid gap-2 text-sm">
