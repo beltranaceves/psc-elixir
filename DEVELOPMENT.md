@@ -174,12 +174,13 @@ nothing actually executes. **This is recoverable — switch to a VS Code task wi
 output:**
 
 ```
-cmd /c "cd /d C:\software\psc-elixir && <command> > C:\software\psc-elixir\run.log 2>&1"
+cmd /c "cd /d C:\software\psc-elixir && <command> > C:\software\psc-elixir\tmp\agent-logs\run.log 2>&1"
 ```
 
-then read `run.log` with `read_file`. Redirecting to a file is the important part: it removes
-the dependency on capturing terminal output at all. End these tasks with a cleanup step
-(`del run.log`) so the workaround doesn't leave artifacts behind.
+then read `tmp/agent-logs/run.log` with `read_file`. Redirecting to a file is the important part:
+it removes the dependency on capturing terminal output at all. `tmp/agent-logs/` is gitignored
+(see `.gitignore`), so these logs never pollute `git status` — no cleanup step needed. Always
+redirect there, never to the repo root.
 
 ⚠️ **`create_and_run_task` appends every task it is given to `.vscode/tasks.json`.** Diagnostic
 one-offs accumulate as junk entries. After using it, restore the committed task list:

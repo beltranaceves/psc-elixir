@@ -8,6 +8,7 @@ defmodule Psc.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      TwMerge.Cache,
       PscWeb.Telemetry,
       Psc.Repo,
       {DNSCluster, query: Application.get_env(:psc, :dns_cluster_query) || :ignore},

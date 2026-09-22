@@ -22,6 +22,10 @@ erl_crash.dump
 # Temporary files, for example, from tests.
 /tmp/
 
+# Agent/task redirect logs (terminal workaround, see DEVELOPMENT.md).
+# Write all redirected task output here, never to the repo root.
+/tmp/agent-logs/
+
 # Ignore package tarball (built via "mix hex.build").
 psc-*.tar
 
