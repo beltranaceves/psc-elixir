@@ -1,5 +1,9 @@
 defmodule PscWeb.DocumentLive.Index do
   use PscWeb, :live_view
+
+  import PscWeb.CoreComponents, except: [button: 1]
+  import PscWeb.Components.UI.Button
+
   alias Psc.Documents
 
   @impl true
@@ -79,12 +83,9 @@ defmodule PscWeb.DocumentLive.Index do
       <div class="mx-auto max-w-2xl px-6 py-12">
         <div class="mb-8 flex items-center justify-between">
           <h1 class="text-3xl font-bold text-gray-900">My Documents</h1>
-          <button
-            phx-click="show_new_form"
-            class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 transition-colors"
-          >
+          <.button phx-click="show_new_form">
             <.icon name="hero-plus" class="w-5 h-5" /> New Document
-          </button>
+          </.button>
         </div>
 
         <%= if @show_new_form do %>
@@ -104,20 +105,12 @@ defmodule PscWeb.DocumentLive.Index do
                 required
                 class="flex-1"
               />
-              <button
-                type="submit"
-                disabled={String.trim(@new_title) == ""}
-                class="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <.button type="submit" disabled={String.trim(@new_title) == ""}>
                 Create
-              </button>
-              <button
-                type="button"
-                phx-click="cancel_new"
-                class="rounded-lg bg-gray-200 px-4 py-2 font-semibold text-gray-700 hover:bg-gray-300 transition-colors"
-              >
+              </.button>
+              <.button type="button" variant="secondary" phx-click="cancel_new">
                 Cancel
-              </button>
+              </.button>
             </.form>
           </div>
         <% end %>

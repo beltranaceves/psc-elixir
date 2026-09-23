@@ -1,5 +1,9 @@
 defmodule PscWeb.CanvasLayoutLive.Index do
   use PscWeb, :live_view
+
+  import PscWeb.CoreComponents, except: [button: 1]
+  import PscWeb.Components.UI.Button
+
   alias Psc.Canvas
 
   @impl true
@@ -77,12 +81,9 @@ defmodule PscWeb.CanvasLayoutLive.Index do
               placeholder="Enter layout description..."
             />
 
-            <button
-              type="submit"
-              class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
+            <.button type="submit">
               Create Layout
-            </button>
+            </.button>
           </.form>
         </div>
 
@@ -107,14 +108,15 @@ defmodule PscWeb.CanvasLayoutLive.Index do
                     >
                       Edit
                     </.link>
-                    <button
+                    <.button
+                      variant="destructive"
+                      size="sm"
                       phx-click="delete_layout"
                       phx-value-id={l.id}
                       onclick="return confirm('Delete this layout?')"
-                      class="px-3 py-1 bg-red-600 text-white rounded text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                     >
                       Delete
-                    </button>
+                    </.button>
                   </div>
                 </div>
               <% end %>
