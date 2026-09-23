@@ -1,6 +1,13 @@
 defmodule PscWeb.UserLive.Login do
   use PscWeb, :live_view
 
+  # SaladUI alert/button/input/form called qualified (UIAlert/UIButton/UIInput/UIForm):
+  # CoreComponents is global via html_helpers and defines the same names.
+  alias PscWeb.Components.UI.Alert, as: UIAlert
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Form, as: UIForm
+  alias PscWeb.Components.UI.Input, as: UIInput
+
   alias Psc.Accounts
 
   @impl true
@@ -25,15 +32,15 @@ defmodule PscWeb.UserLive.Login do
           </.header>
         </div>
 
-        <div :if={local_mail_adapter?()} class="alert alert-info">
-          <.icon name="hero-information-circle" class="size-6 shrink-0" />
-          <div>
-            <p>You are running the local mail adapter.</p>
-            <p>
-              To see sent emails, visit <.link href="/dev/mailbox" class="underline">the mailbox page</.link>.
-            </p>
-          </div>
-        </div>
+        <UIAlert.alert :if={local_mail_adapter?()}>
+          <UIAlert.alert_title>Local mail adapter</UIAlert.alert_title>
+          <UIAlert.alert_description>
+            You are running the local mail adapter. To see sent emails, visit <.link
+              href="/dev/mailbox"
+              class="underline"
+            >the mailbox page</.link>.
+          </UIAlert.alert_description>
+        </UIAlert.alert>
 
         <.form
           :let={f}
@@ -42,19 +49,23 @@ defmodule PscWeb.UserLive.Login do
           action={~p"/users/log-in"}
           phx-submit="submit_magic"
         >
-          <.input
-            readonly={!!@current_scope}
-            field={f[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-            phx-mounted={JS.focus()}
-          />
-          <.button class="btn btn-primary w-full">
+          <UIForm.form_item>
+            <UIForm.form_control>
+              <UIInput.input
+                readonly={!!@current_scope}
+                field={f[:email]}
+                type="email"
+                autocomplete="username"
+                spellcheck="false"
+                required
+                phx-mounted={JS.focus()}
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={f[:email]} />
+          </UIForm.form_item>
+          <UIButton.button class="w-full">
             Log in with email <span aria-hidden="true">→</span>
-          </.button>
+          </UIButton.button>
         </.form>
 
         <div class="divider">or</div>
@@ -67,28 +78,40 @@ defmodule PscWeb.UserLive.Login do
           phx-submit="submit_password"
           phx-trigger-action={@trigger_submit}
         >
-          <.input
-            readonly={!!@current_scope}
-            field={f[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-          />
-          <.input
-            field={@form[:password]}
-            type="password"
-            label="Password"
-            autocomplete="current-password"
-            spellcheck="false"
-          />
-          <.button class="btn btn-primary w-full" name={@form[:remember_me].name} value="true">
+          <UIForm.form_item>
+            <UIForm.form_control>
+              <UIInput.input
+                readonly={!!@current_scope}
+                field={f[:email]}
+                type="email"
+                autocomplete="username"
+                spellcheck="false"
+                required
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={f[:email]} />
+          </UIForm.form_item>
+          <UIForm.form_item>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@form[:password]}
+                type="password"
+                autocomplete="current-password"
+                spellcheck="false"
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@form[:password]} />
+          </UIForm.form_item>
+          <UIButton.button
+            class="w-full"
+            name={@form[:remember_me].name}
+            value="true"
+          >
             Log in and stay logged in <span aria-hidden="true">→</span>
-          </.button>
-          <.button class="btn btn-primary btn-soft w-full mt-2">
+          </UIButton.button>
+          <UIButton.button variant="secondary" class="w-full mt-2">
             Log in only this time
-          </.button>
+          </UIButton.button>
         </.form>
       </div>
     </Layouts.app>

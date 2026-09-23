@@ -1,5 +1,14 @@
 defmodule PscWeb.CanvasLayoutLive.Editor do
   use PscWeb, :live_view
+
+  # SaladUI components are called qualified (UIButton.button, UIForm.*, …)
+  # because CoreComponents is imported globally via html_helpers and defines
+  # the same names (button/1, input/1) — unqualified imports would conflict.
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Form, as: UIForm
+  alias PscWeb.Components.UI.Input, as: UIInput
+  alias PscWeb.Components.UI.Textarea, as: UITextarea
+
   alias Psc.Canvas
 
   @impl true
@@ -304,44 +313,34 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             phx-submit="save_layout"
             class="space-y-4"
           >
-            <.input
-              field={@new_layout_form[:name]}
-              type="text"
-              label="Layout Name"
-              class="mt-1 block w-full rounded border px-3 py-2 text-gray-900 bg-white"
-              error_class="border-red-500"
-              required
-            />
+            <UIForm.form_item>
+              <UIForm.form_label field={@new_layout_form[:name]}>Layout Name</UIForm.form_label>
+              <UIForm.form_control>
+                <UIInput.input field={@new_layout_form[:name]} type="text" required />
+              </UIForm.form_control>
+              <UIForm.form_message field={@new_layout_form[:name]} />
+            </UIForm.form_item>
 
-            <.input
-              field={@new_layout_form[:description]}
-              type="textarea"
-              label="Description"
-              class="mt-1 block w-full rounded border px-3 py-2 text-gray-900 bg-white"
-              error_class="border-red-500"
-            />
+            <UIForm.form_item>
+              <UIForm.form_label field={@new_layout_form[:description]}>
+                Description
+              </UIForm.form_label>
+              <UIForm.form_control>
+                <UITextarea.textarea field={@new_layout_form[:description]} rows="2" />
+              </UIForm.form_control>
+              <UIForm.form_message field={@new_layout_form[:description]} />
+            </UIForm.form_item>
 
             <div class="flex gap-2">
-              <button
-                type="button"
-                phx-click="add_column"
-                class="px-3 py-2 bg-blue-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
+              <UIButton.button type="button" variant="secondary" phx-click="add_column">
                 Add Column
-              </button>
-              <button
-                type="button"
-                phx-click="add_row"
-                class="px-3 py-2 bg-green-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              >
+              </UIButton.button>
+              <UIButton.button type="button" variant="secondary" phx-click="add_row">
                 Add Row
-              </button>
-              <button
-                type="submit"
-                class="ml-auto px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
+              </UIButton.button>
+              <UIButton.button type="submit" class="ml-auto">
                 Save Layout
-              </button>
+              </UIButton.button>
             </div>
           </.form>
         </div>

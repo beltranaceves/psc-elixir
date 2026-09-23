@@ -1,5 +1,13 @@
 defmodule PscWeb.CanvasLive.Editor do
   use PscWeb, :live_view
+
+  # SaladUI badge/button/input are called qualified (UIBadge/UIButtton/UIInput)
+  # because CoreComponents is imported globally via html_helpers and defines
+  # the same names — unqualified imports would conflict.
+  alias PscWeb.Components.UI.Badge, as: UIBadge
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Input, as: UIInput
+
   require Logger
   alias Psc.Canvas
   alias PscWeb.Presence
@@ -335,21 +343,21 @@ defmodule PscWeb.CanvasLive.Editor do
               </div>
               <%= cond do %>
                 <% @save_state == :saving -> %>
-                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-amber-700 bg-amber-100">
-                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin">
+                  <UIBadge.badge variant="secondary">
+                    <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
                     </div>
                     <span>Saving...</span>
-                  </div>
+                  </UIBadge.badge>
                 <% @save_state == :saved -> %>
-                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-green-700 bg-green-100">
+                  <UIBadge.badge variant="default">
                     <.icon name="hero-check-circle" class="w-4 h-4" />
                     <span>Saved</span>
-                  </div>
+                  </UIBadge.badge>
                 <% true -> %>
-                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-gray-700 bg-gray-100">
+                  <UIBadge.badge variant="outline">
                     <.icon name="hero-exclamation-circle" class="w-4 h-4" />
                     <span>Unsaved</span>
-                  </div>
+                  </UIBadge.badge>
               <% end %>
             </div>
             <.link
@@ -636,18 +644,15 @@ defmodule PscWeb.CanvasLive.Editor do
                 <h4 class="font-semibold text-gray-900 mb-3">Share Canvas</h4>
                 <%= if @canvas.author_id == @user_id do %>
                   <.form for={%{}} id="share-form" phx-submit="share_canvas" class="flex gap-2 mb-4">
-                    <input
+                    <UIInput.input
                       type="email"
                       name="email"
                       placeholder="Email..."
-                      class="flex-1 text-xs px-2 py-1 border border-gray-300 rounded text-gray-900 placeholder-gray-400"
+                      class="flex-1 text-xs"
                     />
-                    <button
-                      type="submit"
-                      class="px-2 py-1 bg-green-600 text-white text-xs font-medium rounded"
-                    >
+                    <UIButton.button type="submit" size="sm">
                       +
-                    </button>
+                    </UIButton.button>
                   </.form>
                 <% end %>
 

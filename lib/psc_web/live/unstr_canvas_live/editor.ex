@@ -1,5 +1,13 @@
 defmodule PscWeb.UnstrCanvasLive.Editor do
   use PscWeb, :live_view
+
+  # SaladUI badge/button/input are called qualified (UIBadge/UIButton/UIInput)
+  # because CoreComponents is imported globally via html_helpers and defines
+  # the same names — unqualified imports would conflict.
+  alias PscWeb.Components.UI.Badge, as: UIBadge
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Input, as: UIInput
+
   alias Psc.Canvas
   alias PscWeb.Presence
   require Logger
@@ -388,9 +396,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <div class="flex gap-2">
               <%= for {_user_id, %{metas: metas}} <- @presence do %>
                 <% meta = List.first(metas) %>
-                <div class="text-sm font-medium px-2 py-1 bg-blue-100 text-blue-800 rounded-md">
+                <UIBadge.badge variant="secondary">
                   {meta[:username]}
-                </div>
+                </UIBadge.badge>
               <% end %>
             </div>
           </div>
@@ -400,18 +408,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
             <%= if @canvas.author_id == @user_id do %>
               <.form for={%{}} id="share-form" phx-submit="share_canvas" class="flex gap-2 mb-4">
-                <input
+                <UIInput.input
                   type="email"
                   name="email"
                   placeholder="Enter email..."
-                  class="flex-1 text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="flex-1 text-xs"
                 />
-                <button
-                  type="submit"
-                  class="px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition"
-                >
+                <UIButton.button type="submit" size="sm">
                   Share
-                </button>
+                </UIButton.button>
               </.form>
             <% end %>
 

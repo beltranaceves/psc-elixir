@@ -1,5 +1,13 @@
 defmodule PscWeb.DocumentLive.Editor do
   use PscWeb, :live_view
+
+  # SaladUI badge/button/input are called qualified (UIBadge/UIButtton/UIInput)
+  # because CoreComponents is imported globally via html_helpers and defines
+  # the same names — unqualified imports would conflict.
+  alias PscWeb.Components.UI.Badge, as: UIBadge
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Input, as: UIInput
+
   alias Psc.Documents
   alias Psc.Documents.CRDT
   alias Psc.Documents.ConsistencyManager
@@ -323,21 +331,21 @@ defmodule PscWeb.DocumentLive.Editor do
               <%!-- Save Status Indicator --%>
               <%= cond do %>
                 <% @save_state == :saving -> %>
-                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-amber-700 bg-amber-100">
-                    <div class="w-3 h-3 rounded-full border-2 border-amber-600 border-t-transparent animate-spin">
+                  <UIBadge.badge variant="secondary">
+                    <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
                     </div>
                     <span>Saving...</span>
-                  </div>
+                  </UIBadge.badge>
                 <% @save_state == :saved -> %>
-                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-green-700 bg-green-100">
+                  <UIBadge.badge variant="default">
                     <.icon name="hero-check-circle" class="w-4 h-4" />
                     <span>Saved</span>
-                  </div>
+                  </UIBadge.badge>
                 <% true -> %>
-                  <div class="flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full text-gray-700 bg-gray-100">
+                  <UIBadge.badge variant="outline">
                     <.icon name="hero-exclamation-circle" class="w-4 h-4" />
                     <span>Unsaved changes</span>
-                  </div>
+                  </UIBadge.badge>
               <% end %>
             </div>
             <.link
@@ -387,18 +395,15 @@ defmodule PscWeb.DocumentLive.Editor do
               <%!-- Share with email form (only for owner) --%>
               <%= if @document.user_id == @user_id do %>
                 <.form for={%{}} id="share-form" phx-submit="share_document" class="flex gap-2 mb-4">
-                  <input
+                  <UIInput.input
                     type="email"
                     name="email"
                     placeholder="Enter email..."
-                    class="flex-1 text-xs px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    class="flex-1 text-xs"
                   />
-                  <button
-                    type="submit"
-                    class="px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition"
-                  >
+                  <UIButton.button type="submit" size="sm">
                     Share
-                  </button>
+                  </UIButton.button>
                 </.form>
               <% end %>
 

@@ -1,6 +1,10 @@
 defmodule PscWeb.UserLive.Confirmation do
   use PscWeb, :live_view
 
+  # SaladUI button called qualified (UIButton): CoreComponents is global
+  # via html_helpers and also defines button/1.
+  alias PscWeb.Components.UI.Button, as: UIButton
+
   alias Psc.Accounts
 
   @impl true
@@ -22,17 +26,21 @@ defmodule PscWeb.UserLive.Confirmation do
           phx-trigger-action={@trigger_submit}
         >
           <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
-          <.button
+          <UIButton.button
             name={@form[:remember_me].name}
             value="true"
             phx-disable-with="Confirming..."
-            class="btn btn-primary w-full"
+            class="w-full"
           >
             Confirm and stay logged in
-          </.button>
-          <.button phx-disable-with="Confirming..." class="btn btn-primary btn-soft w-full mt-2">
+          </UIButton.button>
+          <UIButton.button
+            variant="secondary"
+            phx-disable-with="Confirming..."
+            class="w-full mt-2"
+          >
             Confirm and log in only this time
-          </.button>
+          </UIButton.button>
         </.form>
 
         <.form
@@ -46,21 +54,25 @@ defmodule PscWeb.UserLive.Confirmation do
         >
           <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
           <%= if @current_scope do %>
-            <.button phx-disable-with="Logging in..." class="btn btn-primary w-full">
+            <UIButton.button phx-disable-with="Logging in..." class="w-full">
               Log in
-            </.button>
+            </UIButton.button>
           <% else %>
-            <.button
+            <UIButton.button
               name={@form[:remember_me].name}
               value="true"
               phx-disable-with="Logging in..."
-              class="btn btn-primary w-full"
+              class="w-full"
             >
               Keep me logged in on this device
-            </.button>
-            <.button phx-disable-with="Logging in..." class="btn btn-primary btn-soft w-full mt-2">
+            </UIButton.button>
+            <UIButton.button
+              variant="secondary"
+              phx-disable-with="Logging in..."
+              class="w-full mt-2"
+            >
               Log me in only this time
-            </.button>
+            </UIButton.button>
           <% end %>
         </.form>
 

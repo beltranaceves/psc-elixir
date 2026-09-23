@@ -102,8 +102,8 @@ defmodule PscWeb.UserLive.LoginTest do
       refute html =~ "Register"
       assert html =~ "Log in with email"
 
-      assert html =~
-               ~s(<input type="email" name="user[email]" id="login_form_magic_email" value="#{user.email}")
+      assert html =~ ~s(id="login_form_magic_email")
+      assert html =~ ~s(value="#{user.email}")
     end
   end
 end

@@ -1,6 +1,12 @@
 defmodule PscWeb.UserLive.Registration do
   use PscWeb, :live_view
 
+  # SaladUI button/input/form called qualified (UIButton/UIInput/UIForm):
+  # CoreComponents is global via html_helpers and defines the same names.
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Form, as: UIForm
+  alias PscWeb.Components.UI.Input, as: UIInput
+
   alias Psc.Accounts
   alias Psc.Accounts.User
 
@@ -23,19 +29,23 @@ defmodule PscWeb.UserLive.Registration do
         </div>
 
         <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
-          <.input
-            field={@form[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-            phx-mounted={JS.focus()}
-          />
+          <UIForm.form_item>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@form[:email]}
+                type="email"
+                autocomplete="username"
+                spellcheck="false"
+                required
+                phx-mounted={JS.focus()}
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@form[:email]} />
+          </UIForm.form_item>
 
-          <.button phx-disable-with="Creating account..." class="btn btn-primary w-full">
+          <UIButton.button phx-disable-with="Creating account..." class="w-full">
             Create an account
-          </.button>
+          </UIButton.button>
         </.form>
       </div>
     </Layouts.app>

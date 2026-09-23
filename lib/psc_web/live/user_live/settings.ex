@@ -3,6 +3,12 @@ defmodule PscWeb.UserLive.Settings do
 
   on_mount {PscWeb.UserAuth, :require_sudo_mode}
 
+  # SaladUI button/input/form called qualified (UIButton/UIInput/UIForm):
+  # CoreComponents is global via html_helpers and defines the same names.
+  alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Form, as: UIForm
+  alias PscWeb.Components.UI.Input, as: UIInput
+
   alias Psc.Accounts
 
   @impl true
@@ -17,15 +23,19 @@ defmodule PscWeb.UserLive.Settings do
       </div>
 
       <.form for={@email_form} id="email_form" phx-submit="update_email" phx-change="validate_email">
-        <.input
-          field={@email_form[:email]}
-          type="email"
-          label="Email"
-          autocomplete="username"
-          spellcheck="false"
-          required
-        />
-        <.button variant="primary" phx-disable-with="Changing...">Change Email</.button>
+        <UIForm.form_item>
+          <UIForm.form_control>
+            <UIInput.input
+              field={@email_form[:email]}
+              type="email"
+              autocomplete="username"
+              spellcheck="false"
+              required
+            />
+          </UIForm.form_control>
+          <UIForm.form_message field={@email_form[:email]} />
+        </UIForm.form_item>
+        <UIButton.button phx-disable-with="Changing...">Change Email</UIButton.button>
       </.form>
 
       <div class="divider" />
@@ -46,24 +56,32 @@ defmodule PscWeb.UserLive.Settings do
           spellcheck="false"
           value={@current_email}
         />
-        <.input
-          field={@password_form[:password]}
-          type="password"
-          label="New password"
-          autocomplete="new-password"
-          spellcheck="false"
-          required
-        />
-        <.input
-          field={@password_form[:password_confirmation]}
-          type="password"
-          label="Confirm new password"
-          autocomplete="new-password"
-          spellcheck="false"
-        />
-        <.button variant="primary" phx-disable-with="Saving...">
+        <UIForm.form_item>
+          <UIForm.form_control>
+            <UIInput.input
+              field={@password_form[:password]}
+              type="password"
+              autocomplete="new-password"
+              spellcheck="false"
+              required
+            />
+          </UIForm.form_control>
+          <UIForm.form_message field={@password_form[:password]} />
+        </UIForm.form_item>
+        <UIForm.form_item>
+          <UIForm.form_control>
+            <UIInput.input
+              field={@password_form[:password_confirmation]}
+              type="password"
+              autocomplete="new-password"
+              spellcheck="false"
+            />
+          </UIForm.form_control>
+          <UIForm.form_message field={@password_form[:password_confirmation]} />
+        </UIForm.form_item>
+        <UIButton.button phx-disable-with="Saving...">
           Save Password
-        </.button>
+        </UIButton.button>
       </.form>
     </Layouts.app>
     """

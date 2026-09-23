@@ -7,6 +7,12 @@
 # General application configuration
 import Config
 
+# SaladUI form components delegate error translation to CoreComponents so
+# changeset errors (e.g. `{:email, {"must have the @ sign...", ...}}`) render
+# instead of crashing the fallback translator.
+config :salad_ui,
+  error_translator_function: {PscWeb.CoreComponents, :translate_error}
+
 config :psc, :scopes,
   user: [
     default: true,
