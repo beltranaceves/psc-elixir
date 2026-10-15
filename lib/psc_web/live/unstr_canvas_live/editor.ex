@@ -42,6 +42,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:page_title, c_name)
         |> assign(:last_saved_cells, cells)
         |> assign(:idle_timer_ref, nil)
+        |> assign(:save_state, :saved)
         |> subscribe_to_canvas(id)
 
       if connected?(socket) do
@@ -107,6 +108,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> assign(:c_name, c_name)
     |> assign(:c_desc, c_desc)
     |> assign(:idle_timer_ref, idle_timer_ref)
+    |> assign(:save_state, :unsaved)
   end
 
   @impl true
@@ -321,6 +323,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def handle_info(:idle_save, socket) do
     if socket.assigns.cells != socket.assigns.last_saved_cells do
+      socket = assign(socket, save_state: :saving)
+
       Canvas.update_unstr_canvas(socket.assigns.canvas, %{
         name: socket.assigns.c_name,
         description: socket.assigns.c_desc
@@ -331,7 +335,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       {:noreply,
        socket
        |> assign(:last_saved_cells, socket.assigns.cells)
-       |> assign(:idle_timer_ref, nil)}
+       |> assign(:idle_timer_ref, nil)
+       |> assign(:save_state, :saved)}
     else
       {:noreply, assign(socket, idle_timer_ref: nil)}
     end
@@ -339,21 +344,26 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   @impl true
   def handle_info(:periodic_save, socket) do
-    if socket.assigns.cells != socket.assigns.last_saved_cells do
-      Canvas.update_unstr_canvas(socket.assigns.canvas, %{
-        name: socket.assigns.c_name,
-        description: socket.assigns.c_desc
-      })
+    socket =
+      if socket.assigns.cells != socket.assigns.last_saved_cells do
+        socket = assign(socket, save_state: :saving)
 
-      Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
-      socket = assign(socket, :last_saved_cells, socket.assigns.cells)
+        Canvas.update_unstr_canvas(socket.assigns.canvas, %{
+          name: socket.assigns.c_name,
+          description: socket.assigns.c_desc
+        })
 
-      Process.send_after(self(), :periodic_save, @periodic_save_interval)
-      {:noreply, socket}
-    else
-      Process.send_after(self(), :periodic_save, @periodic_save_interval)
-      {:noreply, socket}
-    end
+        Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
+
+        socket
+        |> assign(:last_saved_cells, socket.assigns.cells)
+        |> assign(:save_state, :saved)
+      else
+        socket
+      end
+
+    Process.send_after(self(), :periodic_save, @periodic_save_interval)
+    {:noreply, socket}
   end
 
   defp handle_presence_change(socket, canvas_id) do
@@ -384,9 +394,27 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               />
             </.form>
           </div>
+          <%= cond do %>
+            <% @save_state == :saving -> %>
+              <UIBadge.badge variant="secondary" class="ml-4 shrink-0">
+                <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
+                </div>
+                <span>Saving...</span>
+              </UIBadge.badge>
+            <% @save_state == :saved -> %>
+              <UIBadge.badge variant="default" class="ml-4 shrink-0">
+                <.icon name="hero-check-circle" class="w-4 h-4" />
+                <span>Saved</span>
+              </UIBadge.badge>
+            <% true -> %>
+              <UIBadge.badge variant="outline" class="ml-4 shrink-0">
+                <.icon name="hero-exclamation-circle" class="w-4 h-4" />
+                <span>Unsaved</span>
+              </UIBadge.badge>
+          <% end %>
           <.link
             navigate={~p"/canvas-designer"}
-            class="text-sm text-base-content/60 hover:text-base-content transition-colors"
+            class="text-sm text-base-content/60 hover:text-base-content transition-colors ml-6 shrink-0"
           >
             Back to Canvases
           </.link>
