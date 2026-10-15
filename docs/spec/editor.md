@@ -1,0 +1,210 @@
+# Editor — Canvas Instance Editor
+
+## Overview
+
+The editor renders and edits an **unstructured canvas instance**. It is structure-agnostic: it decodes the canvas's `cells` map and renders whatever grid dimensions, cells, and cell fields are defined. All edits flow through CRDT operations for real-time multi-user collaboration.
+
+### Design principle
+
+The editor does **not** hardcode the 12-cell PSC grid. It reads `cells.rows`, `cells.columns`, `cells.layout`, and per-cell field data from the `cells` map and renders dynamically. This means any template (see `creator.md`) can be instantiated and edited without editor changes.
+
+## Design System
+
+See `creator.md` → **Design System** for the full design direction. The editor follows the same "calm analytical workspace" vibe. Key notes specific to the editor:
+
+### Editor-Specific UI
+
+- **The canvas grid is the hero.** It occupies the full viewport width minus the sidebar. No max-width constraint on the grid itself.
+- **Cell cards** have a subtle border that brightens on focus. The cell label sits in a compact header bar. Fields are stacked vertically with 8px gaps.
+- **Presence indicators** are a 3px colored dot in the top-right corner of each cell card, with a tooltip showing the username. Multiple users in the same cell show multiple dots.
+- **Structure-editing controls** (add/remove row/column, add/remove field) are hidden behind a "Structure" toggle in the editor header. When active, they appear as small outline buttons with accent color on hover.
+- **The sidebar** (presence + sharing) is fixed at 280px on the right, collapsible via a button in the header. On mobile, it becomes a slide-over panel.
+- **The editor header** contains: canvas name (editable inline), description (editable inline, below name), Structure toggle, Share button, and presence avatars.
+- **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
+
+### Screenshot Review Loop
+
+Specs and implementations are validated with screenshots. The app is screenshotted in the browser, and the screenshot is analyzed against this design system. Screenshots are the authoritative visual reference.
+
+## Data Model
+
+No schema changes. The editor works entirely within the existing `unstr_canvases.cells` map structure:
+
+```elixir
+%{
+  "rows" => [%{"id" => "r1", "label" => "Rationale"}, ...],
+  "columns" => [%{"id" => "c1", "label" => "Perceive"}, ...],
+  "layout" => [["r1_c1", "r1_c2", ...], ...],
+  "r1_c1" => %{
+    "row" => "r1",
+    "column" => "c1",
+    "content" => "user-edited text",
+    "custom_field" => "more text"
+  },
+  ...
+}
+```
+
+The editor treats everything except `rows`, `columns`, and `layout` as a cell key. Each cell's fields are whatever keys are present (beyond `row` and `column` which are metadata).
+
+## File Plan
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `lib/psc/canvas/unstr_canvas_crdt.ex` | **modify** | Add grid-structure operations (add/remove row/column, add/remove cell field) |
+| `lib/psc/canvas.ex` | **modify** | Add context helpers for grid-structure mutations |
+| `lib/psc_web/live/unstr_canvas_live/editor.ex` | **modify** | Dynamic grid rendering, cell field editing, cursor presence, structure editing UI |
+| `lib/psc_web/live/unstr_canvas_live/index.ex` | **modify** | Template selection on create (dropdown of available templates) |
+| `test/psc/canvas/unstr_canvas_crdt_test.exs` | **create** | Unit tests for all CRDT operations including new grid operations |
+| `test/psc_web/live/unstr_canvas_live_test.exs` | **create** | LiveView tests for editing, presence, cursors, structure editing |
+
+## CRDT Operations
+
+The existing operations (`update_cell`, `update_name`, `update_description`) are kept. New operations are added for grid-structure editing:
+
+### Existing operations (unchanged)
+
+```elixir
+%{"type" => "update_cell", "cell_key" => key, "field" => field, "value" => value}
+%{"type" => "update_name", "value" => value}
+%{"type" => "update_description", "value" => value}
+```
+
+### New operations
+
+```elixir
+# Add a row at the end of the grid
+%{"type" => "add_row", "row_id" => "r9", "row_label" => "New Row"}
+
+# Remove a row (and all its cells from the layout)
+%{"type" => "remove_row", "row_id" => "r9"}
+
+# Add a column at the end of the grid
+%{"type" => "add_column", "column_id" => "c9", "column_label" => "New Column"}
+
+# Remove a column (and all its cells from the layout)
+%{"type" => "remove_column", "column_id" => "c9"}
+
+# Add a new field to an existing cell
+%{"type" => "add_cell_field", "cell_key" => "r1_c1", "field" => "new_field"}
+
+# Remove a field from a cell
+%{"type" => "remove_cell_field", "cell_key" => "r1_c1", "field" => "new_field"}
+```
+
+### Operation semantics
+
+- `add_row` appends to `cells.rows` and appends a new empty row to `cells.layout`. New cell keys are NOT pre-created — cells are lazily created on first edit.
+- `remove_row` removes from `cells.rows`, removes the row from `cells.layout`, and deletes all cell keys matching `"#{row_id}_*"`.
+- `add_column` / `remove_column` follow the same pattern for columns.
+- `add_cell_field` adds the field key to the cell's data map with value `""`.
+- `remove_cell_field` removes the field key from the cell's data map.
+
+All operations follow the same event-sourcing pattern: insert `UnstrCanvasEvent` with monotonically increasing `seq`, broadcast via PubSub, and update the in-memory `cells` map.
+
+## Context API
+
+New functions in `Psc.Canvas`:
+
+```elixir
+# Grid structure operations (all return {:ok, cells} | {:error, reason})
+add_row(canvas_id, user_id, row_id, row_label) :: {:ok, map}
+remove_row(canvas_id, user_id, row_id) :: {:ok, map}
+add_column(canvas_id, user_id, column_id, column_label) :: {:ok, map}
+remove_column(canvas_id, user_id, column_id) :: {:ok, map}
+add_cell_field(canvas_id, user_id, cell_key, field) :: {:ok, map}
+remove_cell_field(canvas_id, user_id, cell_key, field) :: {:ok, map}
+```
+
+These follow the same pattern as `apply_unstr_canvas_operation/4`: insert event, broadcast, return updated cells.
+
+## UI Behavior
+
+### Grid rendering
+
+The editor renders a CSS grid based on `cells.rows` and `cells.columns`:
+
+1. Read `cells.rows` and `cells.columns` to determine grid dimensions.
+2. Read `cells.layout` (2D array of cell keys) to determine which cell goes in which position.
+3. For each cell key in the layout, look up the cell data in the `cells` map.
+4. Render the cell's fields as text inputs / textareas, in the order they appear in the cell map.
+
+### Cell editing
+
+- Each cell renders as a card with a header (cell label from template or `"Cell {key}"`) and one input per field.
+- Editing a field sends a `update_cell` CRDT operation with `{cell_key, field, value}`.
+- The cell shows a subtle highlight when another user is editing it (from cursor presence).
+
+### Cursor presence (cell-level)
+
+Presence meta is extended from `%{username: "..."}` to `%{username: "...", cell_key: "r1_c1" | nil}`:
+
+- When a user focuses a cell input, push presence with `cell_key` set.
+- When a user blurs the input or navigates away, push presence with `cell_key: nil`.
+- The editor renders a colored indicator on each cell showing which users are currently editing it.
+- The active-users sidebar shows each user's name and which cell they're editing (or "—" if not in a cell).
+
+### Grid structure editing
+
+A "Structure" toggle in the editor header reveals grid-editing controls:
+
+- **Add row** button — prompts for row ID and label, sends `add_row` operation.
+- **Add column** button — prompts for column ID and label, sends `add_column` operation.
+- Each row/column header has a small × button to remove it (sends `remove_row` / `remove_column`).
+- Each cell has an "Add field" button in its header (sends `add_cell_field`).
+- Each field label in a cell has a small × to remove it (sends `remove_cell_field`).
+
+Structure editing is **owner-only** — shared users can edit cell content but not the grid structure. (This is the binary role boundary.)
+
+### Sharing UI
+
+Unchanged from existing implementation:
+- Email input + "Share" button in the sidebar.
+- List of shared users with × to unshare.
+- `can_access_canvas?` gates the entire editor route.
+
+### Auto-save
+
+Unchanged from existing implementation:
+- Debounced: on idle (no CRDT operation for N seconds), call `save_unstr_canvas_content_to_db`.
+- Periodic: on a timer interval, save if dirty.
+- Saves the full `cells` map as the snapshot and updates `snapshot_seq`.
+
+### Create flow (index page)
+
+The index page has a "New canvas" button that opens a creation form with:
+- **Name** text input
+- **Template** dropdown — lists all templates the user can access (own + shared), plus "Blank canvas" (no template).
+- **Create** button — calls `instantiate_template` (if template selected) or `create_unstr_canvas` (if blank), then navigates to the editor.
+
+## Acceptance Criteria
+
+- [ ] Editor renders a 3×4 canvas with the correct grid layout from the template
+- [ ] Editing a cell field sends a CRDT operation and broadcasts to other connected users
+- [ ] Two users editing the same canvas see each other's changes in real time
+- [ ] Focusing a cell shows the user's name/cursor on that cell for other users
+- [ ] Active-users sidebar shows who is online and which cell they're editing
+- [ ] Owner can add a row — it appears on all connected clients
+- [ ] Owner can remove a column — it disappears on all connected clients
+- [ ] Owner can add a field to a cell — it appears as a new input
+- [ ] Owner can remove a field from a cell — the input disappears
+- [ ] Shared user can edit cell content but does not see structure-editing controls
+- [ ] Auto-save persists the `cells` map to the database on idle
+- [ ] Creating a canvas from a template copies the template's structure into the new canvas
+- [ ] Creating a blank canvas produces an empty 1×1 grid with one cell
+
+## Out of Scope
+
+- Inline comments or discussion threads on cells
+- Drag-and-drop cell reordering or resizing
+- Visual relation arrows between cells (from template relations)
+- Export or import of canvas content
+- User-facing version history or undo UI (CRDT log is internal only)
+- Telemetry or analytics instrumentation
+- Conflict resolution UI (CRDTs converge automatically; no manual merge)
+
+## Verification Methods
+
+- **Unit tests** (`unstr_canvas_crdt_test.exs`): all CRDT operations produce correct `cells` map state; event log replays correctly
+- **LiveView tests** (`unstr_canvas_live_test.exs`): editing, presence join/leave, cursor tracking, structure editing, access control
+- **Browser test**: two browser contexts editing the same canvas, verifying real-time sync and cursor visibility
