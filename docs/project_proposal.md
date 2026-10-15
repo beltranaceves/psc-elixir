@@ -136,6 +136,48 @@ Content-level coherence builds on design theory for visual inquiry tools (Avdiji
 	- system architecture
 	- and implications for supporting visual inquiry and innovation
 
+## Roadmap
+
+The roadmap follows continuous delivery: every milestone produces a working, demoable increment. The first four milestones form the **Core MVP**. Milestones 5 through 7 form the **Research Extensions**.
+
+1. **Template designer** (**Core MVP**): define reusable canvas structures, including cells, labels, relations, semantics, and layout.
+2. **Canvas instance editor** (**Core MVP**): instantiate templates, edit cell content, and save usable canvases.
+3. **Collaborative real-time experience** (**Core MVP**): add permission handling, invites, CRDT synchronization, and presence indicators.
+4. **Pivot system** (**Core MVP**): create named snapshots, record pivot rationale, navigate version history, compare versions, and restore or fork from a version.
+
+The Core MVP includes lightweight event instrumentation from the beginning. Basic events such as template instantiation, cell edits, collaborator joins and leaves, and pivot creation are recorded during normal use. This preserves useful research data without requiring the complete telemetry system. The first pivot slice is a named snapshot with rationale and history navigation; comparison and restore or fork complete the milestone.
+
+5. **Insights** (**Research Extension 1**): analyze canvas content for coherence, staleness, relevance, and quality signals, with optional LLM support. The initial insights work is content based and does not depend on the complete telemetry pipeline.
+6. **Telemetry capture** (**Research Extension 2**): provide durable event storage, metadata, querying, filtering, and export.
+7. **Telemetry analysis** (**Research Extension 2**): aggregate events into measures and datasets for studying collaboration dynamics and user archetypes.
+
+If Insights later includes activity-aware analysis, it can consume the telemetry stream delivered in milestone 6. The platform remains useful without these research extensions.
+
+```mermaid
+flowchart TB
+    T["Lightweight event instrumentation<br/>starts in the Core MVP"]
+    subgraph MVP["Core MVP"]
+        direction TB
+        M1["1. Template designer<br/><small>cells, labels, relations, layout</small>"]
+        M2["2. Canvas instance editor<br/><small>instantiate and edit canvases</small>"]
+        M3["3. Collaborative experience<br/><small>permissions, invites, CRDT sync, presence</small>"]
+        M4["4. Pivot system<br/><small>snapshots, rationale, history, diff/restore/fork</small>"]
+    end
+    subgraph EXT1["Research Extension 1: Insights"]
+        M5["5. Insights<br/><small>coherence, staleness, relevance, quality</small>"]
+    end
+    subgraph EXT2["Research Extension 2: Telemetry"]
+        direction TB
+        M6["6. Telemetry capture<br/><small>storage, metadata, query, filter, export</small>"]
+        M7["7. Telemetry analysis<br/><small>aggregation, archetypes, dynamics, datasets</small>"]
+    end
+    T -.-> M1
+    T -.-> M2
+    T -.-> M3
+    T -.-> M4
+    M1 --> M2 --> M3 --> M4 --> M5 --> M6 --> M7
+```
+
 # Future Work
 
 The following are out of scope for the MVP but are natural next steps once the core platform is in place.
@@ -143,6 +185,8 @@ The following are out of scope for the MVP but are natural next steps once the c
 - **Experiments on user behavior.** Design and run studies using the analytics engine to look at patterns of use, problem framing, and solution development; such as user archetypes, framing patterns, collaboration dynamics, and how they relate to outcomes. This would also mean scaling up the analytics side: experiment tooling, aggregation APIs, and dataset exports for larger studies.
 
 - **Non-table canvases.** The MVP assumes table-like canvases made of cells. Later we want templates that are not grids at all: a background image or SVG with floating text inputs placed on top of it. This would support more visual or spatial VITs (maps, diagrams, annotated pictures) using the same collaboration, versioning, and analytics foundations.
+
+- **Conversational agent with MCP-backed PSC access.** Embed a conversational agent that reads and writes canvas content only through a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server. Users reach the agent through a chat-like interface embedded alongside the canvas, keeping conversation, guidance, and analysis in context while editing. The MCP server exposes scoped tools such as listing templates, reading canvases and cells, updating cells, creating pivots with rationale, and querying versions, insights, and telemetry exports. This keeps agent actions permission checked, validated, and auditable, and it decouples the agent from direct database access. The agent serves three needs: (1) chatting with users about their problem to support framing, reframing, and reflection; (2) guiding users on VIT and PSC use, including cell semantics, relations, and suggested next steps; and (3) analyzing existing canvas content through pluggable SKILLs for coherence, staleness, theme drift, gaps, and summaries. Agent initiated edits are attributed and reversible through the pivot system, and LLM use remains optional and privacy aware so the platform stays fully usable without external AI services.
 
 # References
 

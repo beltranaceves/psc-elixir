@@ -25,6 +25,8 @@
 % --- Graphics & colors ------------------------------------------------------
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,fit}
 
 % --- Citations & bibliography -----------------------------------------------
 \usepackage[round]{natbib}
@@ -231,6 +233,57 @@ Content-level coherence builds on design theory for visual inquiry tools \citep{
   \end{itemize}
 \end{itemize}
 
+\subsection{Roadmap}
+
+The roadmap follows continuous delivery: every milestone produces a working, demoable increment. The first four milestones form the \textbf{Core MVP}. Milestones 5 through 7 form the \textbf{Research Extensions}.
+
+\paragraph{Core MVP.}
+\begin{enumerate}
+  \item \textbf{Template designer}: define reusable canvas structures, including cells, labels, relations, semantics, and layout;
+  \item \textbf{Canvas instance editor}: instantiate templates, edit cell content, and save usable canvases;
+  \item \textbf{Collaborative real-time experience}: add permission handling, invites, CRDT synchronization, and presence indicators;
+  \item \textbf{Pivot system}: create named snapshots, record pivot rationale, navigate version history, compare versions, and restore or fork from a version.
+\end{enumerate}
+
+The Core MVP includes lightweight event instrumentation from the beginning. Basic events such as template instantiation, cell edits, collaborator joins and leaves, and pivot creation are recorded during normal use. This preserves useful research data without requiring the complete telemetry system. The first pivot slice is a named snapshot with rationale and history navigation; comparison and restore or fork complete the milestone.
+
+\paragraph{Research Extensions.}
+\begin{enumerate}
+  \item[5.] \textbf{Insights}: analyze canvas content for coherence, staleness, relevance, and quality signals, with optional LLM support. The initial insights work is content based and does not depend on the complete telemetry pipeline;
+  \item[6.] \textbf{Telemetry capture}: provide durable event storage, metadata, querying, filtering, and export;
+  \item[7.] \textbf{Telemetry analysis}: aggregate events into measures and datasets for studying collaboration dynamics and user archetypes.
+\end{enumerate}
+
+If Insights later includes activity-aware analysis, it can consume the telemetry stream delivered in milestone 6. The platform remains useful without these research extensions.
+
+\begin{figure}[h]
+  \centering
+  \begin{tikzpicture}[
+    node distance=0.5cm,
+    box/.style={draw, rounded corners=3pt, align=center, font=\small, minimum height=1.0cm, text width=5cm},
+    group/.style={draw, dashed, rounded corners=5pt, inner sep=8pt},
+    arrow/.style={->, thick}
+  ]
+    \node[box] (m1) {1. Template designer};
+    \node[box, below=of m1] (m2) {2. Canvas instance editor};
+    \node[box, below=of m2] (m3) {3. Real-time collaboration};
+    \node[box, below=of m3] (m4) {4. Pivot system};
+    \node[group, fit=(m1) (m2) (m3) (m4), label={[font=\small\bfseries]above:Core MVP}] (g1) {};
+    \node[box, below=0.9cm of m4] (m5) {5. Insights};
+    \node[group, fit=(m5), label={[font=\small\bfseries]above:Research Extension 1}] (g2) {};
+    \node[box, below=0.9cm of m5] (m6) {6. Telemetry capture};
+    \node[box, below=of m6] (m7) {7. Telemetry analysis};
+    \node[group, fit=(m6) (m7), label={[font=\small\bfseries]above:Research Extension 2}] (g3) {};
+    \draw[arrow] (m1) -- (m2);
+    \draw[arrow] (m2) -- (m3);
+    \draw[arrow] (m3) -- (m4);
+    \draw[arrow] (m4) -- (m5);
+    \draw[arrow] (m5) -- (m6);
+    \draw[arrow] (m6) -- (m7);
+  \end{tikzpicture}
+  \caption{Roadmap milestones in delivery order. Lightweight instrumentation starts with the Core MVP.}
+\end{figure}
+
 % --- Future Work ------------------------------------------------------------
 \section{Future Work}
 
@@ -241,6 +294,9 @@ Design and run studies using the analytics engine to look at patterns of use, pr
 
 \paragraph{Non-table canvases.}
 The MVP assumes table-like canvases made of cells. Later we want templates that are not grids at all: a background image or SVG with floating text inputs placed on top of it. This would support more visual or spatial VITs (maps, diagrams, annotated pictures) using the same collaboration, versioning, and analytics foundations.
+
+\paragraph{Conversational agent with MCP-backed PSC access.}
+Embed a conversational agent that reads and writes canvas content only through a \href{https://modelcontextprotocol.io}{Model Context Protocol (MCP)} server. Users reach the agent through a chat-like interface embedded alongside the canvas, keeping conversation, guidance, and analysis in context while editing. The MCP server exposes scoped tools such as listing templates, reading canvases and cells, updating cells, creating pivots with rationale, and querying versions, insights, and telemetry exports. This keeps agent actions permission checked, validated, and auditable, and it decouples the agent from direct database access. The agent serves three needs: (1) chatting with users about their problem to support framing, reframing, and reflection; (2) guiding users on VIT and PSC use, including cell semantics, relations, and suggested next steps; and (3) analyzing existing canvas content through pluggable SKILLs for coherence, staleness, theme drift, gaps, and summaries. Agent initiated edits are attributed and reversible through the pivot system, and LLM use remains optional and privacy aware so the platform stays fully usable without external AI services.
 
 % --- References -------------------------------------------------------------
 \section{References}
