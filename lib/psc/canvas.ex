@@ -223,6 +223,144 @@ defmodule Psc.Canvas do
     Repo.delete(layout)
   end
 
+  # ─── Template functions ───
+
+  @doc """
+  List all templates a user can access (authored or shared with them).
+  """
+  def list_templates(user) do
+    from(l in Layout,
+      where: l.author_id == ^user.id or fragment("? = ANY(?)", ^user.email, l.shared_with),
+      order_by: [desc: l.updated_at]
+    )
+    |> preload(:author)
+    |> Repo.all()
+  end
+
+  @doc """
+  Get a template with author preloaded.
+  """
+  def get_template_with_author(id) do
+    Layout
+    |> preload(:author)
+    |> Repo.get(id)
+  end
+
+  @doc """
+  Create a template authored by the given user.
+  """
+  def create_template(user_id, attrs \\ %{}) do
+    %Layout{author_id: user_id}
+    |> Layout.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
+  Update a template.
+  """
+  def update_template(template, attrs) do
+    template
+    |> Layout.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Delete a template.
+  """
+  def delete_template(template) do
+    Repo.delete(template)
+  end
+
+  @doc """
+  Share a template with a user by email (idempotent).
+  """
+  def share_template_with(template, email) do
+    shared_with = template.shared_with || []
+    new_shared_with = Enum.uniq([email | shared_with])
+    update_template(template, %{"shared_with" => new_shared_with})
+  end
+
+  @doc """
+  Remove a user's access to a template.
+  """
+  def unshare_template(template, email) do
+    shared_with = template.shared_with || []
+    new_shared_with = List.delete(shared_with, email)
+    update_template(template, %{"shared_with" => new_shared_with})
+  end
+
+  @doc """
+  Check if a user can access a template (author or shared).
+  """
+  def can_access_template?(template, user_email) do
+    author = template.author
+
+    cond do
+      author && author.email == user_email -> true
+      user_email in (template.shared_with || []) -> true
+      true -> false
+    end
+  end
+
+  @doc """
+  Instantiate a canvas from a template.
+
+  Transforms the template's layout_map (cells nested under "cells" with
+  label/semantics/fields/defaults metadata) into the canvas cells shape
+  (flat cell keys with row/column metadata and field values), per the
+  editor spec.
+  """
+  def instantiate_template(template, user_id) do
+    lm = template.layout_map || %{}
+    rows = lm["rows"] || []
+    columns = lm["columns"] || []
+    layout = lm["layout"] || []
+    template_cells = lm["cells"] || %{}
+
+    cells =
+      %{"rows" => rows, "columns" => columns, "layout" => layout}
+      |> put_instantiated_cells(template_cells, layout, rows, columns)
+      |> Map.put("relations", lm["relations"] || [])
+
+    attrs = %{
+      "name" => template.name,
+      "description" => template.description || "",
+      "cells" => cells
+    }
+
+    create_unstr_canvas(user_id, attrs)
+  end
+
+  defp put_instantiated_cells(cells, template_cells, layout, rows, columns) do
+    layout
+    |> Enum.with_index()
+    |> Enum.reduce(cells, fn {row_keys, ri}, acc ->
+      row_keys
+      |> Enum.with_index()
+      |> Enum.reduce(acc, fn
+        {nil, _ci}, a ->
+          a
+
+        {key, ci}, a ->
+          meta = template_cells[key] || %{}
+          row_id = Enum.at(rows, ri, %{"id" => "r#{ri}"})["id"]
+          column_id = Enum.at(columns, ci, %{"id" => "c#{ci}"})["id"]
+
+          data =
+            (meta["fields"] || ["content"])
+            |> Map.new(fn field -> {field, Map.get(meta["defaults"] || %{}, field, "")} end)
+            |> Map.merge(%{
+              "row" => row_id,
+              "column" => column_id,
+              "label" => meta["label"] || key,
+              "semantics" => meta["semantics"] || "free"
+            })
+
+          Map.put(a, key, data)
+      end)
+    end)
+  end
+
   @doc """
   List all unstructured canvases authored by a user.
   """
