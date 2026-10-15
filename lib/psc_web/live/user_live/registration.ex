@@ -68,19 +68,16 @@ defmodule PscWeb.UserLive.Registration do
   def handle_event("save", %{"user" => user_params}, socket) do
     case Accounts.register_user(user_params) do
       {:ok, user} ->
-        {:ok, _} =
-          Accounts.deliver_login_instructions(
-            user,
-            &url(~p"/users/log-in/#{&1}")
-          )
+        # Email confirmation is disabled for the MVP demo: accounts are
+        # confirmed immediately and the magic-link token is handed to the
+        # browser directly instead of being emailed.
+        user = Accounts.confirm_user!(user)
+        token = Accounts.generate_login_token(user)
 
         {:noreply,
          socket
-         |> put_flash(
-           :info,
-           "An email was sent to #{user.email}, please access it to confirm your account."
-         )
-         |> push_navigate(to: ~p"/users/log-in")}
+         |> put_flash(:info, "Account created — welcome!")
+         |> redirect(to: ~p"/users/log-in/#{token}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}

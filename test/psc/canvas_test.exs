@@ -1,7 +1,10 @@
 defmodule Psc.CanvasTest do
   use Psc.DataCase, async: true
 
+  import Ecto.Query
+
   alias Psc.Canvas
+  alias Psc.Canvas.UnstrCanvasEvent
   alias Psc.CanvasFixtures
 
   describe "template CRUD" do
@@ -222,6 +225,63 @@ defmodule Psc.CanvasTest do
       canvas = Canvas.get_unstr_canvas_with_author(canvas.id)
 
       assert Canvas.can_access_unstr_canvas?(canvas, user.email)
+    end
+  end
+
+  describe "event pruning" do
+    test "save prunes folded-in events while content stays loadable" do
+      user = Psc.AccountsFixtures.user_fixture()
+      {:ok, canvas} = Canvas.create_unstr_canvas(user.id, %{"name" => "Prune test"})
+      id = canvas.id
+
+      {:ok, _seq} =
+        Canvas.apply_unstr_canvas_operation(id, user.id, %{
+          "type" => "update_name",
+          "value" => "Renamed"
+        })
+
+      {:ok, _seq} =
+        Canvas.apply_unstr_canvas_operation(id, user.id, %{
+          "type" => "update_cell",
+          "cell_key" => "problem",
+          "field" => "content",
+          "value" => "hello"
+        })
+
+      assert Canvas.get_unstr_canvas_content(id)["$name"] == "Renamed"
+
+      cells = Canvas.get_unstr_canvas_content(id)
+      assert {:ok, _} = Canvas.save_unstr_canvas_content_to_db(id, cells)
+
+      # Events folded into the snapshot are pruned
+      event_count =
+        Repo.aggregate(
+          from(e in UnstrCanvasEvent, where: e.unstr_canvas_id == ^id),
+          :count
+        )
+
+      assert event_count == 0
+
+      # Content still loads from the snapshot alone
+      assert Canvas.get_unstr_canvas_content(id)["problem"]["content"] == "hello"
+
+      # New operations keep numbering above the snapshot and survive
+      # another save/load cycle (the seq generator must be floored at
+      # snapshot_seq after pruning)
+      {:ok, seq} =
+        Canvas.apply_unstr_canvas_operation(id, user.id, %{
+          "type" => "update_cell",
+          "cell_key" => "problem",
+          "field" => "content",
+          "value" => "world"
+        })
+
+      assert seq > 0
+      assert Canvas.get_unstr_canvas_content(id)["problem"]["content"] == "world"
+
+      cells = Canvas.get_unstr_canvas_content(id)
+      assert {:ok, _} = Canvas.save_unstr_canvas_content_to_db(id, cells)
+      assert Canvas.get_unstr_canvas_content(id)["problem"]["content"] == "world"
     end
   end
 end

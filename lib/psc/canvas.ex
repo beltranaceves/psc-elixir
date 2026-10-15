@@ -464,17 +464,25 @@ defmodule Psc.Canvas do
     canvas.author.email == user_email || Enum.any?(canvas.shared_with, &(&1 == user_email))
   end
 
-  # Get the next seq number for the given unstr_canvas
+  # Get the next seq number for the given unstr_canvas.
+  #
+  # Floored at snapshot_seq: events at or below the snapshot are pruned
+  # (see save_unstr_canvas_content_to_db/2), so max(seq) alone restarts at 1
+  # after pruning and would place new events below the snapshot point,
+  # where get_unstr_canvas_content/1 never replays them.
   defp next_unstr_canvas_sequence(canvas_id) do
-    case Repo.one(
-           from(e in Psc.Canvas.UnstrCanvasEvent,
-             where: e.unstr_canvas_id == ^canvas_id,
-             select: max(e.seq)
-           )
-         ) do
-      nil -> 1
-      max_seq -> max_seq + 1
-    end
+    max_event_seq =
+      Repo.one(
+        from(e in Psc.Canvas.UnstrCanvasEvent,
+          where: e.unstr_canvas_id == ^canvas_id,
+          select: max(e.seq)
+        )
+      ) || 0
+
+    snapshot_seq =
+      Repo.one(from(c in UnstrCanvas, where: c.id == ^canvas_id, select: c.snapshot_seq)) || 0
+
+    max(max_event_seq, snapshot_seq) + 1
   end
 
   def pubsub_topic_unstr(canvas_id), do: "unstr_canvas:#{canvas_id}"
@@ -560,9 +568,22 @@ defmodule Psc.Canvas do
         )
       ) || 0
 
-    canvas_id
-    |> get_unstr_canvas()
-    |> UnstrCanvas.changeset(%{cells: cells, snapshot_seq: max_seq})
-    |> Repo.update()
+    result =
+      canvas_id
+      |> get_unstr_canvas()
+      |> UnstrCanvas.changeset(%{cells: cells, snapshot_seq: max_seq})
+      |> Repo.update()
+
+    # Prune events already folded into the snapshot. The snapshot fully
+    # captures state through max_seq and loading replays only seq >
+    # snapshot_seq, so pruned rows are dead weight. This keeps the event
+    # table small (free-tier Postgres is limited to 10k rows per table).
+    Repo.delete_all(
+      from(e in Psc.Canvas.UnstrCanvasEvent,
+        where: e.unstr_canvas_id == ^canvas_id and e.seq <= ^max_seq
+      )
+    )
+
+    result
   end
 end

@@ -1,7 +1,23 @@
 defmodule Psc.Canvas.UnstrCanvasCRDT do
   @moduledoc """
-  CRDT operations for unstr_canvas maps.
+  CRDT-like state application for unstructured canvas `cells` maps.
+
+  Operations are plain maps describing what to update:
+
+    * `%{"type" => "update_cell", "cell_key" => key, "field" => field, "value" => value}`
+    * `%{"type" => "update_name", "value" => value}`
+    * `%{"type" => "update_description", "value" => value}`
+
+  State shape notes (kept consistent across editor, templates and replay):
+
+    * Cell data lives at **flat top-level keys** (`cells[cell_key][field]`),
+      matching the default PSC structure created by `create_unstr_canvas/2`
+      and the shape produced by `Canvas.instantiate_template/2`.
+    * The canvas title/description edited in the editor live under the
+      reserved `"$name"` / `"$description"` keys (the editor reads these
+      into its `@c_name` / `@c_desc` assigns).
   """
+
   alias Psc.Canvas.UnstrCanvasEvent
   alias Psc.Repo
   import Ecto.Query
@@ -36,58 +52,11 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
   end
 
   def apply_operation(_op, cells), do: cells
-end
 
-defmodule Psc.Canvas.UnstrCanvasCRDT do
-  @moduledoc """
-  CRDT-like state application for UnstrCanvas properties (name, description, cells).
-  Operations are maps representing what to update.
+  @doc """
+  Rebuilds the cells map by folding a list of events (or event structs)
+  over an initial state.
   """
-
-  alias Psc.Repo
-  import Ecto.Query
-  alias Psc.Canvas.UnstrCanvasEvent
-
-  def load_events(canvas_id) do
-    from(e in UnstrCanvasEvent,
-      where: e.unstr_canvas_id == ^canvas_id,
-      order_by: [asc: e.seq]
-    )
-    |> Repo.all()
-  end
-
-  def apply_operation(event, state) when is_struct(event) do
-    apply_operation(event.operation, state)
-  end
-
-  # Name updates
-  def apply_operation(%{"type" => "update_name", "value" => value}, state) do
-    Map.put(state, "name", value)
-  end
-
-  # Description updates
-  def apply_operation(%{"type" => "update_description", "value" => value}, state) do
-    Map.put(state, "description", value)
-  end
-
-  # Cell updates
-  def apply_operation(
-        %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => value},
-        state
-      ) do
-    cells = Map.get(state, "cells") || %{}
-    cell_data = Map.get(cells, cell_key) || %{}
-
-    updated_cell = Map.put(cell_data, field, value)
-    updated_cells = Map.put(cells, cell_key, updated_cell)
-
-    Map.put(state, "cells", updated_cells)
-  end
-
-  # Fallback for unknown
-  def apply_operation(_op, state), do: state
-
-  # Rebuild state from events starting from a given initial state (or default empty map)
   def rebuild_state(events, initial_state \\ %{}) do
     Enum.reduce(events, initial_state, &apply_operation/2)
   end

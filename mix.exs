@@ -31,6 +31,18 @@ defmodule Psc.MixProject do
     ]
   end
 
+  def release do
+    [
+      app: :psc,
+      version: current_version(),
+      runtime_tools: [:logger, :runtime_tools]
+    ]
+  end
+
+  defp current_version do
+    Mix.Project.config()[:version]
+  end
+
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]

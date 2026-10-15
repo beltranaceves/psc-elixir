@@ -159,10 +159,20 @@ defmodule Psc.Documents do
         )
       ) || 0
 
-    document_id
-    |> get_document()
-    |> Document.changeset(%{content: content, snapshot_seq: max_seq})
-    |> Repo.update()
+    result =
+      document_id
+      |> get_document()
+      |> Document.changeset(%{content: content, snapshot_seq: max_seq})
+      |> Repo.update()
+
+    # Prune events already folded into the content snapshot (loading
+    # replays only seq > snapshot_seq). Keeps the event table small —
+    # free-tier Postgres is limited to 10k rows per table.
+    Repo.delete_all(
+      from(e in DocumentEvent, where: e.document_id == ^document_id and e.seq <= ^max_seq)
+    )
+
+    result
   end
 
   @doc """
@@ -211,15 +221,23 @@ defmodule Psc.Documents do
   end
 
   # Get next sequence number for a document.
+  #
+  # Floored at snapshot_seq: events at or below the snapshot are pruned
+  # (see save_content_to_db/2), so max(seq) alone restarts at 1 after
+  # pruning and would place new events where load_with_snapshot/1 never
+  # replays them.
   defp next_sequence(document_id) do
-    case Repo.one(
-           from(e in DocumentEvent,
-             where: e.document_id == ^document_id,
-             select: max(e.seq)
-           )
-         ) do
-      nil -> 1
-      max_seq -> max_seq + 1
-    end
+    max_event_seq =
+      Repo.one(
+        from(e in DocumentEvent,
+          where: e.document_id == ^document_id,
+          select: max(e.seq)
+        )
+      ) || 0
+
+    snapshot_seq =
+      Repo.one(from(d in Document, where: d.id == ^document_id, select: d.snapshot_seq)) || 0
+
+    max(max_event_seq, snapshot_seq) + 1
   end
 end

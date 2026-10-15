@@ -92,8 +92,14 @@ defmodule PscWeb.UserLive.Confirmation do
     if user = Accounts.get_user_by_magic_link_token(token) do
       form = to_form(%{"token" => token}, as: "user")
 
-      {:ok, assign(socket, user: user, form: form, trigger_submit: false),
-       temporary_assigns: [form: nil]}
+      {:ok,
+       assign(socket,
+         user: user,
+         form: form,
+         # Confirmed users skip the confirmation choice: auto-submit the
+         # login form on mount so the magic link signs them in directly.
+         trigger_submit: not is_nil(user.confirmed_at)
+       ), temporary_assigns: [form: nil]}
     else
       {:ok,
        socket

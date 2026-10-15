@@ -288,4 +288,49 @@ defmodule Psc.DocumentsTest do
       assert Documents.pubsub_topic(42) == "document:42"
     end
   end
+
+  describe "event pruning" do
+    test "save_content_to_db prunes folded-in events while content stays loadable" do
+      user = AccountsFixtures.user_fixture()
+      {:ok, document} = Documents.create_document(user.id, %{title: "Prune doc"})
+
+      {:ok, _} =
+        Documents.apply_operation(document.id, user.id, %{
+          "type" => "insert",
+          "pos" => 0,
+          "char" => "H"
+        })
+
+      {:ok, _} =
+        Documents.apply_operation(document.id, user.id, %{
+          "type" => "insert",
+          "pos" => 1,
+          "char" => "i"
+        })
+
+      assert Documents.get_document_content(document.id) == "Hi"
+
+      assert {:ok, _} = Documents.save_content_to_db(document.id, "Hi")
+
+      # Events folded into the snapshot are pruned
+      event_count =
+        Repo.aggregate(
+          from(e in Psc.Documents.DocumentEvent, where: e.document_id == ^document.id),
+          :count
+        )
+
+      assert event_count == 0
+
+      # Content still loads, and new operations replay on top of the
+      # snapshot (seq numbering is floored at snapshot_seq after pruning)
+      {:ok, _} =
+        Documents.apply_operation(document.id, user.id, %{
+          "type" => "insert",
+          "pos" => 2,
+          "char" => "!"
+        })
+
+      assert Documents.get_document_content(document.id) == "Hi!"
+    end
+  end
 end

@@ -36,18 +36,21 @@ defmodule PscWeb.UserLive.RegistrationTest do
   end
 
   describe "register user" do
-    test "creates account but does not log in", %{conn: conn} do
+    test "creates an auto-confirmed account and hands over a magic link", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/register")
 
       email = unique_user_email()
       form = form(lv, "#registration_form", user: valid_user_attributes(email: email))
 
-      {:ok, _lv, html} =
-        render_submit(form)
-        |> follow_redirect(conn, ~p"/users/log-in")
+      # Email confirmation is disabled: registration redirects straight to
+      # the magic-link login page (no email round-trip).
+      assert {:error, {:redirect, %{to: "/users/log-in/" <> token}}} = render_submit(form)
+      assert token != ""
 
-      assert html =~
-               ~r/An email was sent to .*, please access it to confirm your account/
+      {:ok, _lv, html} = live(conn, ~p"/users/log-in/#{token}")
+
+      assert html =~ "Welcome"
+      assert Psc.Accounts.get_user_by_email(email).confirmed_at
     end
 
     test "renders errors for duplicated email", %{conn: conn} do

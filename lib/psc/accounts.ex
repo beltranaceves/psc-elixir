@@ -274,6 +274,31 @@ defmodule Psc.Accounts do
   end
 
   @doc """
+  Confirms a user account by setting `confirmed_at`.
+
+  Used while email confirmation is disabled for the MVP demo:
+  registration is email-less, so accounts are confirmed immediately.
+  """
+  def confirm_user!(%User{} = user) do
+    user
+    |> User.confirm_changeset()
+    |> Repo.update!()
+  end
+
+  @doc """
+  Generates and persists a login magic-link token, returning the
+  encoded token without emailing it.
+
+  Unlike `deliver_login_instructions/2`, the caller navigates to the
+  magic-link URL directly (email delivery is disabled for the MVP).
+  """
+  def generate_login_token(%User{} = user) do
+    {encoded_token, user_token} = UserToken.build_email_token(user, "login")
+    Repo.insert!(user_token)
+    encoded_token
+  end
+
+  @doc """
   Deletes the signed token with the given context.
   """
   def delete_user_session_token(token) do
