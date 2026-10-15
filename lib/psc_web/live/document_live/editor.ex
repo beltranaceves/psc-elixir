@@ -317,15 +317,15 @@ defmodule PscWeb.DocumentLive.Editor do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="flex h-screen flex-col bg-gray-50">
+      <div class="flex h-screen flex-col bg-base-100">
         <%!-- Header --%>
-        <div class="border-b border-gray-300 bg-white px-6 py-4 shadow-sm">
+        <div class="border-b border-white/10 bg-base-200/60 px-6 py-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
               <input
                 type="text"
                 value={@document.title}
-                class="text-2xl font-bold text-gray-900 bg-white border-b-2 border-transparent hover:border-blue-300 focus:outline-none focus:border-blue-500 px-2"
+                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-white/20 focus:outline-none focus:border-primary px-2"
                 placeholder="Untitled Document"
               />
               <%!-- Save Status Indicator --%>
@@ -350,14 +350,14 @@ defmodule PscWeb.DocumentLive.Editor do
             </div>
             <.link
               navigate={~p"/documents"}
-              class="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+              class="inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors"
             >
               <.icon name="hero-arrow-left" class="w-4 h-4" /> Back
             </.link>
           </div>
         </div>
 
-        <div class="flex flex-1 overflow-hidden bg-gray-50">
+        <div class="flex flex-1 overflow-hidden bg-base-100">
           <%!-- Editor --%>
           <div class="flex-1 flex flex-col">
             <.form for={%{}} id="editor-form" phx-change="update_content" class="flex-1 flex flex-col">
@@ -367,7 +367,7 @@ defmodule PscWeb.DocumentLive.Editor do
                 phx-hook="EditorHook"
                 phx-update="ignore"
                 data-current-user-id={@user_id}
-                class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-base-100 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
                 placeholder="Start typing..."
                 value={@content}
               ></textarea>
@@ -375,22 +375,22 @@ defmodule PscWeb.DocumentLive.Editor do
           </div>
 
           <%!-- Presence Sidebar --%>
-          <div class="w-64 border-l border-gray-300 bg-white p-4 shadow-sm overflow-y-auto">
-            <h3 class="font-semibold text-gray-900 mb-4">Active Users</h3>
+          <div class="w-64 border-l border-white/10 bg-base-200 p-4 overflow-y-auto">
+            <h3 class="text-sm font-medium text-base-content mb-4">Active Users</h3>
             <div class="space-y-2">
               <%= for {user_id, %{metas: metas}} <- @presence do %>
                 <% meta = List.first(metas) %>
-                <div class="text-sm text-gray-900 p-3 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 transition">
-                  <div class="font-medium text-gray-900">{meta[:username]}</div>
-                  <div class="text-xs text-gray-600 mt-1">
+                <div class="text-sm p-3 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/15 transition">
+                  <div class="font-medium text-base-content">{meta[:username]}</div>
+                  <div class="text-xs text-base-content/60 mt-1">
                     Cursor: <span class="font-mono">{meta[:cursor_pos]}</span>
                   </div>
                 </div>
               <% end %>
             </div>
 
-            <div class="mt-8 pt-4 border-t border-gray-200">
-              <h4 class="font-semibold text-gray-900 mb-3">Share Document</h4>
+            <div class="mt-8 pt-4 border-t border-white/10">
+              <h4 class="text-sm font-medium text-base-content mb-3">Share Document</h4>
 
               <%!-- Share with email form (only for owner) --%>
               <%= if @document.user_id == @user_id do %>
@@ -410,16 +410,16 @@ defmodule PscWeb.DocumentLive.Editor do
               <%!-- List of shared users --%>
               <%= if @document.shared_with && Enum.any?(@document.shared_with) do %>
                 <div class="mb-4">
-                  <p class="text-xs font-medium text-gray-600 mb-2">Shared with:</p>
+                  <p class="text-xs font-medium text-base-content/50 mb-2">Shared with:</p>
                   <div class="space-y-1">
                     <%= for email <- @document.shared_with do %>
-                      <div class="text-xs text-gray-700 px-3 py-2 bg-green-50 rounded border border-green-200 flex items-center justify-between">
+                      <div class="text-xs text-base-content px-3 py-2 bg-primary/5 rounded border border-primary/20 flex items-center justify-between">
                         <span>{email}</span>
                         <%= if @document.user_id == @user_id do %>
                           <button
                             phx-click="remove_access"
                             phx-value-email={email}
-                            class="ml-2 px-2 py-1 text-white text-xs font-bold bg-red-600 border border-red-700 rounded hover:bg-red-700 transition"
+                            class="ml-2 px-2 py-1 text-error text-xs font-bold border border-error/40 rounded hover:bg-error/10 transition"
                           >
                             ×
                           </button>
@@ -430,17 +430,17 @@ defmodule PscWeb.DocumentLive.Editor do
                 </div>
               <% end %>
 
-              <p class="text-xs text-gray-500 mb-3">Copy link to share with anyone:</p>
+              <p class="text-xs text-base-content/50 mb-3">Copy link to share with anyone:</p>
               <div class="flex gap-2">
                 <input
                   type="text"
                   readonly
                   value={document_url(assigns)}
-                  class="flex-1 text-xs px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-mono"
+                  class="flex-1 text-xs px-3 py-2 bg-base-300 border border-white/10 rounded-lg text-base-content/70 font-mono"
                 />
                 <button
                   onclick={"navigator.clipboard.writeText('#{document_url(assigns)}')"}
-                  class="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition"
+                  class="px-3 py-2 bg-primary text-primary-content text-xs font-medium rounded-lg hover:opacity-90 transition-opacity"
                 >
                   Copy
                 </button>

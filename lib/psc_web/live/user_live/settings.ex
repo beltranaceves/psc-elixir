@@ -38,7 +38,7 @@ defmodule PscWeb.UserLive.Settings do
         <UIButton.button phx-disable-with="Changing...">Change Email</UIButton.button>
       </.form>
 
-      <div class="divider" />
+      <div class="my-6 h-px bg-white/10" />
 
       <.form
         for={@password_form}

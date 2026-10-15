@@ -24,7 +24,7 @@ defmodule PscWeb.UserLive.Login do
               <% else %>
                 Don't have an account? <.link
                   navigate={~p"/users/register"}
-                  class="font-semibold text-brand hover:underline"
+                  class="font-semibold text-primary hover:underline"
                   phx-no-format
                 >Sign up</.link> for an account now.
               <% end %>
@@ -68,7 +68,11 @@ defmodule PscWeb.UserLive.Login do
           </UIButton.button>
         </.form>
 
-        <div class="divider">or</div>
+        <div class="my-4 flex items-center gap-3 text-xs text-base-content/50">
+          <div class="h-px flex-1 bg-white/10"></div>
+          or
+          <div class="h-px flex-1 bg-white/10"></div>
+        </div>
 
         <.form
           :let={f}

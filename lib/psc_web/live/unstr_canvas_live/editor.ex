@@ -210,7 +210,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
           if trimmed == "" do
             # placeholder HTML for empty fields (keeps area clickable)
-            "<div class=\"p-2 rounded bg-gray-50 text-gray-400\">Click to edit</div>"
+            "<div class=\"p-2 rounded bg-base-300 text-base-content/40\">Click to edit</div>"
           else
             try do
               Earmark.as_html!(v || "")
@@ -379,20 +379,23 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 type="text"
                 value={@c_name}
                 phx-debounce="1000"
-                class="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none w-full"
+                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-white/20 focus:border-primary focus:outline-none w-full"
                 placeholder="Canvas name"
               />
             </.form>
           </div>
-          <.link navigate={~p"/canvas-designer"} class="text-sm text-blue-600 hover:text-blue-700">
+          <.link
+            navigate={~p"/canvas-designer"}
+            class="text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
             Back to Canvases
           </.link>
         </div>
 
         <%!-- Presence Sidebar --%>
-        <div class="flex flex-col gap-4 mb-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div class="flex flex-col gap-4 mb-4 rounded-xl border border-white/10 bg-base-200 p-4">
           <div>
-            <div class="text-xs text-gray-500 self-center mr-2 mb-2">Active Users:</div>
+            <div class="text-xs text-base-content/50 self-center mr-2 mb-2">Active Users:</div>
             <div class="flex gap-2">
               <%= for {_user_id, %{metas: metas}} <- @presence do %>
                 <% meta = List.first(metas) %>
@@ -403,8 +406,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             </div>
           </div>
 
-          <div class="pt-4 border-t border-gray-200">
-            <h4 class="font-semibold text-gray-900 mb-3">Share Canvas</h4>
+          <div class="pt-4 border-t border-white/10">
+            <h4 class="text-sm font-medium text-base-content mb-3">Share Canvas</h4>
 
             <%= if @canvas.author_id == @user_id do %>
               <.form for={%{}} id="share-form" phx-submit="share_canvas" class="flex gap-2 mb-4">
@@ -422,16 +425,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
             <%= if @canvas.shared_with && Enum.any?(@canvas.shared_with) do %>
               <div class="mb-4">
-                <p class="text-xs font-medium text-gray-600 mb-2">Shared with:</p>
+                <p class="text-xs font-medium text-base-content/50 mb-2">Shared with:</p>
                 <div class="space-y-1">
                   <%= for email <- @canvas.shared_with do %>
-                    <div class="text-xs text-gray-700 px-3 py-2 bg-green-50 rounded border border-green-200 flex items-center justify-between">
+                    <div class="text-xs text-base-content px-3 py-2 bg-primary/5 rounded border border-primary/20 flex items-center justify-between">
                       <span>{email}</span>
                       <%= if @canvas.author_id == @user_id do %>
                         <button
                           phx-click="remove_access"
                           phx-value-email={email}
-                          class="ml-2 px-2 py-1 text-white text-xs font-bold bg-red-600 border border-red-700 rounded hover:bg-red-700 transition"
+                          class="ml-2 px-2 py-1 text-error text-xs font-bold border border-error/40 rounded hover:bg-error/10 transition"
                         >
                           ×
                         </button>
@@ -450,21 +453,21 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <textarea
               name="value"
               phx-debounce="1000"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-4 py-2 border border-white/10 rounded-lg bg-base-200 text-base-content/70 focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="Canvas description..."
               rows="2"
             ><%= @c_desc %></textarea>
           </.form>
         </div>
-        <div class="bg-white rounded-lg shadow p-8 w-full">
-          <h2 class="text-2xl font-bold text-gray-900 mb-6">Canvas Structure</h2>
+        <div class="rounded-xl border border-white/10 bg-base-200 p-8 w-full">
+          <h2 class="text-lg font-medium text-base-content mb-6">Canvas Structure</h2>
 
           <%!-- Display columns and rows --%>
           <div class="mb-8">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Columns</h3>
+            <h3 class="text-sm font-medium text-base-content/70 mb-3">Columns</h3>
             <div class="flex flex-wrap gap-2">
               <%= for column <- @cells["columns"] || [] do %>
-                <div class="px-3 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
+                <div class="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-medium">
                   {column["label"]}
                 </div>
               <% end %>
@@ -472,10 +475,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           </div>
 
           <div class="mb-8">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Rows</h3>
+            <h3 class="text-sm font-medium text-base-content/70 mb-3">Rows</h3>
             <div class="flex flex-wrap gap-2">
               <%= for row <- @cells["rows"] || [] do %>
-                <div class="px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium">
+                <div class="px-3 py-1.5 bg-success/10 text-success rounded-lg text-sm font-medium">
                   {row["label"]}
                 </div>
               <% end %>
@@ -487,9 +490,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <table class="w-full border-collapse">
               <thead>
                 <tr>
-                  <th class="px-4 py-2 border border-gray-300 bg-gray-100"></th>
+                  <th class="px-4 py-2 border border-white/10 bg-white/5"></th>
                   <%= for column <- @cells["columns"] || [] do %>
-                    <th class="px-4 py-2 border border-gray-300 bg-gray-100 font-semibold text-gray-900">
+                    <th class="px-4 py-2 border border-white/10 bg-white/5 font-medium text-base-content/70 text-sm">
                       {column["label"]}
                     </th>
                   <% end %>
@@ -498,23 +501,23 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <tbody>
                 <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
                   <tr>
-                    <td class="px-4 py-2 border border-gray-300 bg-gray-100 font-semibold text-gray-900">
+                    <td class="px-4 py-2 border border-white/10 bg-white/5 font-medium text-base-content/70 text-sm">
                       {row["label"]}
                     </td>
                     <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                       <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                      <td class="px-4 py-2 border border-gray-300">
+                      <td class="px-4 py-2 border border-white/10 align-top">
                         <%= if cell_key do %>
                           <% cell_data =
                             get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
                           <% title =
                             Map.get(cell_data, "name") || Map.get(cell_data, "title") || cell_key %>
 
-                          <div class="bg-white p-3 rounded-md shadow-sm">
+                          <div class="bg-base-300 p-3 rounded-lg">
                             <div class="mb-2">
-                              <div class="text-base font-semibold text-gray-900">{title}</div>
-                              <div class="text-xs text-gray-500">{cell_key}</div>
+                              <div class="text-sm font-medium text-base-content">{title}</div>
+                              <div class="text-xs text-base-content/40">{cell_key}</div>
                             </div>
 
                             <.form for={%{}} id={"cell-form-#{cell_key}"} phx-change="update_cell">
@@ -524,7 +527,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                 <%= for {field, value} <- cell_data do %>
                                   <%= if field not in ["row", "column"] do %>
                                     <div class="flex flex-col">
-                                      <label class="text-xs font-medium text-gray-600 uppercase tracking-wide mb-1">
+                                      <label class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-1">
                                         {field}
                                       </label>
 
@@ -539,7 +542,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                       >
                                         <div
                                           id={"md-render-" <> cell_key <> "-" <> field}
-                                          class="md-render prose prose-sm prose-stone dark:prose-invert break-words mb-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-2 rounded"
+                                          class="md-render prose prose-sm prose-invert break-words mb-1 bg-base-300 text-base-content p-2 rounded"
                                           phx-update="ignore"
                                         >
                                           {value}
@@ -547,7 +550,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         <textarea
                                           name={"values[" <> field <> "]"}
                                           phx-debounce="150"
-                                          class="hidden w-full px-2 py-1 border border-gray-200 rounded-md text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 resize-none"
+                                          class="hidden w-full px-2 py-1 border border-white/10 rounded-md text-base-content bg-base-300 placeholder-base-content/40 focus:ring-1 focus:ring-primary resize-none"
                                           placeholder="Enter value..."
                                           rows="3"
                                         ><%= value %></textarea>

@@ -67,15 +67,18 @@ defmodule PscWeb.CanvasLive.Index do
     >
       <div class="max-w-6xl mx-auto px-4 py-8">
         <div class="flex items-center justify-between mb-8">
-          <h1 class="text-3xl font-bold text-gray-900">Canvases</h1>
-          <.link navigate={~p"/documents"} class="text-sm text-blue-600 hover:text-blue-700">
+          <h1 class="text-2xl font-semibold text-base-content">Canvases</h1>
+          <.link
+            navigate={~p"/documents"}
+            class="text-sm text-base-content/60 hover:text-base-content transition-colors"
+          >
             Back to Documents
           </.link>
         </div>
 
         <%!-- Create New Canvas Form --%>
-        <div class="mb-8 bg-white rounded-lg shadow p-6">
-          <h2 class="text-xl font-semibold text-gray-900 mb-4">Create New Canvas</h2>
+        <div class="mb-8 rounded-xl border border-white/10 bg-base-200 p-6">
+          <h2 class="text-lg font-medium text-base-content mb-4">Create New Canvas</h2>
           <.form
             for={@new_canvas_form}
             id="new-canvas-form"
@@ -103,21 +106,21 @@ defmodule PscWeb.CanvasLive.Index do
 
         <%!-- My Canvases --%>
         <div class="mb-12">
-          <h2 class="text-2xl font-bold text-gray-900 mb-4">My Canvases</h2>
+          <h2 class="text-lg font-medium text-base-content mb-4">My Canvases</h2>
           <%= if Enum.empty?(@my_canvases) do %>
-            <div class="bg-gray-50 rounded-lg p-8 text-center">
-              <p class="text-gray-600">No canvases yet. Create one to get started!</p>
+            <div class="rounded-xl border border-white/10 bg-base-200 p-8 text-center">
+              <p class="text-base-content/60">No canvases yet. Create one to get started!</p>
             </div>
           <% else %>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for canvas <- @my_canvases do %>
-                <div class="bg-white rounded-lg shadow hover:shadow-md transition p-6">
-                  <h3 class="text-lg font-semibold text-gray-900">{canvas.name}</h3>
-                  <p class="text-sm text-gray-600 mt-2">{canvas.description}</p>
+                <div class="rounded-xl border border-white/10 bg-base-200 p-6 hover:border-white/25 transition-colors">
+                  <h3 class="font-medium text-base-content">{canvas.name}</h3>
+                  <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4 flex gap-2">
                     <.link
                       navigate={~p"/canvases/#{canvas.id}"}
-                      class="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition text-center"
+                      class="flex-1 px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       Edit
                     </.link>
@@ -139,21 +142,21 @@ defmodule PscWeb.CanvasLive.Index do
         <%!-- Shared with Me --%>
         <%= if Enum.any?(@shared_canvases) do %>
           <div>
-            <h2 class="text-2xl font-bold text-gray-900 mb-4">Shared with Me</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <h2 class="text-lg font-medium text-base-content mb-4">Shared with Me</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for canvas <- @shared_canvases do %>
-                <div class="bg-white rounded-lg shadow hover:shadow-md transition p-6 border-l-4 border-green-500">
+                <div class="rounded-xl border border-primary/20 bg-primary/5 p-6 hover:border-primary/40 transition-colors">
                   <div class="flex items-start justify-between">
                     <div>
-                      <h3 class="text-lg font-semibold text-gray-900">{canvas.name}</h3>
-                      <p class="text-sm text-gray-600 mt-1">by {canvas.author.email}</p>
+                      <h3 class="font-medium text-base-content">{canvas.name}</h3>
+                      <p class="text-sm text-base-content/60 mt-1">by {canvas.author.email}</p>
                     </div>
                   </div>
-                  <p class="text-sm text-gray-600 mt-2">{canvas.description}</p>
+                  <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4">
                     <.link
                       navigate={~p"/canvases/#{canvas.id}"}
-                      class="block w-full px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition text-center"
+                      class="block w-full px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       View
                     </.link>

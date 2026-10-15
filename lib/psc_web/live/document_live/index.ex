@@ -82,14 +82,14 @@ defmodule PscWeb.DocumentLive.Index do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="mx-auto max-w-2xl px-6 py-12">
         <div class="mb-8 flex items-center justify-between">
-          <h1 class="text-3xl font-bold text-gray-900">My Documents</h1>
+          <h1 class="text-2xl font-semibold text-base-content">My Documents</h1>
           <.button phx-click="show_new_form">
             <.icon name="hero-plus" class="w-5 h-5" /> New Document
           </.button>
         </div>
 
         <%= if @show_new_form do %>
-          <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6">
+          <div class="mb-8 rounded-xl border border-white/10 bg-base-200 p-6">
             <.form
               for={nil}
               id="new-document-form"
@@ -116,25 +116,25 @@ defmodule PscWeb.DocumentLive.Index do
         <% end %>
 
         <%= if Enum.empty?(@documents) do %>
-          <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-12 text-center">
-            <.icon name="hero-document-text" class="mx-auto w-12 h-12 text-gray-400 mb-4" />
-            <p class="text-gray-600">No documents yet. Create one to get started!</p>
+          <div class="rounded-xl border border-dashed border-white/10 bg-base-200 p-12 text-center">
+            <.icon name="hero-document-text" class="mx-auto w-12 h-12 text-base-content/30 mb-4" />
+            <p class="text-base-content/60">No documents yet. Create one to get started!</p>
           </div>
         <% else %>
-          <div class="grid gap-4">
+          <div class="grid gap-3">
             <%= for doc <- @documents do %>
               <.link
                 navigate={~p"/documents/#{doc.id}"}
-                class="block rounded-lg border border-gray-200 bg-white p-4 hover:shadow-md transition-shadow"
+                class="block rounded-xl border border-white/10 bg-base-200 p-4 hover:border-white/25 transition-colors"
               >
                 <div class="flex items-center justify-between">
                   <div>
-                    <h3 class="font-semibold text-gray-900">{doc.title}</h3>
-                    <p class="text-sm text-gray-500">
+                    <h3 class="font-medium text-base-content">{doc.title}</h3>
+                    <p class="text-sm text-base-content/50">
                       Updated {Calendar.strftime(doc.updated_at, "%b %d, %Y")}
                     </p>
                   </div>
-                  <.icon name="hero-arrow-right" class="w-5 h-5 text-gray-400" />
+                  <.icon name="hero-arrow-right" class="w-5 h-5 text-base-content/30" />
                 </div>
               </.link>
             <% end %>
@@ -144,21 +144,21 @@ defmodule PscWeb.DocumentLive.Index do
         <%!-- Shared with me section --%>
         <%= if !Enum.empty?(@shared_documents) do %>
           <div class="mt-12">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">Shared with me</h2>
-            <div class="grid gap-4">
+            <h2 class="text-lg font-medium text-base-content mb-4">Shared with me</h2>
+            <div class="grid gap-3">
               <%= for doc <- @shared_documents do %>
                 <.link
                   navigate={~p"/documents/#{doc.id}"}
-                  class="block rounded-lg border border-gray-200 bg-blue-50 p-4 hover:shadow-md transition-shadow"
+                  class="block rounded-xl border border-primary/20 bg-primary/5 p-4 hover:border-primary/40 transition-colors"
                 >
                   <div class="flex items-center justify-between">
                     <div>
-                      <h3 class="font-semibold text-gray-900">{doc.title}</h3>
-                      <p class="text-sm text-gray-600">
+                      <h3 class="font-medium text-base-content">{doc.title}</h3>
+                      <p class="text-sm text-base-content/50">
                         By {doc.user.email} • Updated {Calendar.strftime(doc.updated_at, "%b %d, %Y")}
                       </p>
                     </div>
-                    <.icon name="hero-arrow-right" class="w-5 h-5 text-gray-400" />
+                    <.icon name="hero-arrow-right" class="w-5 h-5 text-base-content/30" />
                   </div>
                 </.link>
               <% end %>

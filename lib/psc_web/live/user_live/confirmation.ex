@@ -76,7 +76,10 @@ defmodule PscWeb.UserLive.Confirmation do
           <% end %>
         </.form>
 
-        <p :if={!@user.confirmed_at} class="alert alert-outline mt-8">
+        <p
+          :if={!@user.confirmed_at}
+          class="mt-8 p-3 rounded-lg border border-white/10 bg-base-200 text-sm text-base-content/70"
+        >
           Tip: If you prefer passwords, you can enable them in the user settings.
         </p>
       </div>

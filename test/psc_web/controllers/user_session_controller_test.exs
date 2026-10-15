@@ -20,8 +20,11 @@ defmodule PscWeb.UserSessionControllerTest do
       assert get_session(conn, :user_token)
       assert redirected_to(conn) == ~p"/"
 
-      # Now do a logged in request and assert on the menu
+      # "/" routes logged-in users to /documents; account menu is in the navbar
       conn = get(conn, ~p"/")
+      assert redirected_to(conn) == ~p"/documents"
+
+      conn = get(conn, ~p"/documents")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"
@@ -84,8 +87,12 @@ defmodule PscWeb.UserSessionControllerTest do
       assert get_session(conn, :user_token)
       assert redirected_to(conn) == ~p"/"
 
-      # Now do a logged in request and assert on the menu
+      # "/" is now an entry point: logged-in users are routed to /documents
+      # and the account menu lives in the app navbar there.
       conn = get(conn, ~p"/")
+      assert redirected_to(conn) == ~p"/documents"
+
+      conn = get(conn, ~p"/documents")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"
@@ -108,8 +115,11 @@ defmodule PscWeb.UserSessionControllerTest do
 
       assert Accounts.get_user!(user.id).confirmed_at
 
-      # Now do a logged in request and assert on the menu
+      # "/" routes logged-in users to /documents; account menu is in the navbar
       conn = get(conn, ~p"/")
+      assert redirected_to(conn) == ~p"/documents"
+
+      conn = get(conn, ~p"/documents")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"

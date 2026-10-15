@@ -39,46 +39,80 @@ defmodule PscWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar bg-base-200 text-base-content px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-      </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.link navigate={~p"/documents"} class="btn btn-ghost">Documents</.link>
-          </li>
-          <li>
-            <.link navigate={~p"/canvases"} class="btn btn-ghost">Canvases</.link>
-          </li>
-          <li>
-            <.link navigate={~p"/canvas-designer"} class="btn btn-ghost">Canvas Designer</.link>
-          </li>
-          <li>
-            <.link navigate={~p"/canvas-layouts"} class="btn btn-ghost">New Layout</.link>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
+    <header class="h-14 shrink-0 border-b border-white/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-6">
+      <.link navigate={~p"/"} class="flex items-center gap-2 text-base-content">
+        <span class="flex size-7 items-center justify-center rounded-md bg-primary text-primary-content text-sm font-bold">
+          P
+        </span>
+        <span class="text-sm font-semibold tracking-tight">PSC</span>
+      </.link>
+
+      <nav class="flex items-center gap-1">
+        <.link
+          navigate={~p"/documents"}
+          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
+        >
+          Documents
+        </.link>
+        <.link
+          navigate={~p"/canvases"}
+          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
+        >
+          Canvases
+        </.link>
+        <.link
+          navigate={~p"/canvas-designer"}
+          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
+        >
+          Canvas Designer
+        </.link>
+        <.link
+          navigate={~p"/canvas-layouts"}
+          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
+        >
+          Templates
+        </.link>
+      </nav>
+
+      <div class="ml-auto flex items-center gap-4">
+        <.theme_toggle />
+        <%= if @current_scope && @current_scope.user do %>
+          <div class="flex items-center gap-3 text-sm">
+            <span class="text-base-content/60">{@current_scope.user.email}</span>
+            <.link
+              href={~p"/users/settings"}
+              class="text-base-content/70 hover:text-base-content transition-colors"
+            >
+              Settings
+            </.link>
+            <.link
+              href={~p"/users/log-out"}
+              method="delete"
+              class="text-base-content/70 hover:text-base-content transition-colors"
+            >
+              Log out
+            </.link>
+          </div>
+        <% else %>
+          <div class="flex items-center gap-3 text-sm">
+            <.link
+              href={~p"/users/register"}
+              class="text-base-content/70 hover:text-base-content transition-colors"
+            >
+              Register
+            </.link>
+            <.link
+              href={~p"/users/log-in"}
+              class="px-3 py-1.5 rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
+            >
+              Log in
+            </.link>
+          </div>
+        <% end %>
       </div>
     </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8 bg-transparent text-base-content">
+    <main class="px-4 py-8 sm:px-6 lg:px-8 bg-transparent text-base-content">
       <div class={@container_class}>
         {render_slot(@inner_block)}
       </div>

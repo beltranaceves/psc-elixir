@@ -23,6 +23,6 @@ test.describe('authenticated app', () => {
   test('canvas layouts index loads', async ({ page }) => {
     await page.goto('/canvas-layouts');
     await expect(page).toHaveURL(/\/canvas-layouts/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Canvas Layouts' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Templates' })).toBeVisible();
   });
 });
