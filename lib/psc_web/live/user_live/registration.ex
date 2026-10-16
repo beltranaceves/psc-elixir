@@ -30,12 +30,14 @@ defmodule PscWeb.UserLive.Registration do
 
         <.form for={@form} id="registration_form" phx-submit="save" phx-change="validate">
           <UIForm.form_item>
+            <UIForm.form_label field={@form[:email]}>Email</UIForm.form_label>
             <UIForm.form_control>
               <UIInput.input
                 field={@form[:email]}
                 type="email"
                 autocomplete="username"
                 spellcheck="false"
+                placeholder="you@example.com"
                 required
                 phx-mounted={JS.focus()}
               />

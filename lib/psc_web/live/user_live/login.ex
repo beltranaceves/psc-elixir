@@ -50,6 +50,7 @@ defmodule PscWeb.UserLive.Login do
           phx-submit="submit_magic"
         >
           <UIForm.form_item>
+            <UIForm.form_label field={f[:email]}>Email</UIForm.form_label>
             <UIForm.form_control>
               <UIInput.input
                 readonly={!!@current_scope}
@@ -57,13 +58,14 @@ defmodule PscWeb.UserLive.Login do
                 type="email"
                 autocomplete="username"
                 spellcheck="false"
+                placeholder="you@example.com"
                 required
                 phx-mounted={JS.focus()}
               />
             </UIForm.form_control>
             <UIForm.form_message field={f[:email]} />
           </UIForm.form_item>
-          <UIButton.button class="w-full">
+          <UIButton.button class="w-full gap-2">
             Log in with email <span aria-hidden="true">→</span>
           </UIButton.button>
         </.form>
@@ -83,6 +85,7 @@ defmodule PscWeb.UserLive.Login do
           phx-trigger-action={@trigger_submit}
         >
           <UIForm.form_item>
+            <UIForm.form_label field={f[:email]}>Email</UIForm.form_label>
             <UIForm.form_control>
               <UIInput.input
                 readonly={!!@current_scope}
@@ -90,24 +93,27 @@ defmodule PscWeb.UserLive.Login do
                 type="email"
                 autocomplete="username"
                 spellcheck="false"
+                placeholder="you@example.com"
                 required
               />
             </UIForm.form_control>
             <UIForm.form_message field={f[:email]} />
           </UIForm.form_item>
           <UIForm.form_item>
+            <UIForm.form_label field={@form[:password]}>Password</UIForm.form_label>
             <UIForm.form_control>
               <UIInput.input
                 field={@form[:password]}
                 type="password"
                 autocomplete="current-password"
                 spellcheck="false"
+                placeholder="Your password"
               />
             </UIForm.form_control>
             <UIForm.form_message field={@form[:password]} />
           </UIForm.form_item>
           <UIButton.button
-            class="w-full"
+            class="w-full gap-2"
             name={@form[:remember_me].name}
             value="true"
           >
