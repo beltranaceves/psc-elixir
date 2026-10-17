@@ -15,74 +15,94 @@ defmodule PscWeb.UserLive.Settings do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="text-center">
-        <.header>
-          Account Settings
-          <:subtitle>Manage your account email address and password settings</:subtitle>
-        </.header>
+      <div class="mx-auto max-w-sm space-y-4">
+        <div class="text-center">
+          <.header>
+            Account Settings
+            <:subtitle>Manage your account email address and password settings</:subtitle>
+          </.header>
+        </div>
+
+        <.form
+          for={@email_form}
+          id="email_form"
+          phx-submit="update_email"
+          phx-change="validate_email"
+        >
+          <UIForm.form_item>
+            <UIForm.form_label field={@email_form[:email]}>Email</UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@email_form[:email]}
+                type="email"
+                autocomplete="username"
+                spellcheck="false"
+                placeholder="you@example.com"
+                required
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@email_form[:email]} />
+          </UIForm.form_item>
+          <UIButton.button phx-disable-with="Changing..." class="w-full mt-3">
+            Change Email
+          </UIButton.button>
+        </.form>
+
+        <div class="h-px bg-white/10" />
+
+        <.form
+          for={@password_form}
+          id="password_form"
+          action={~p"/users/update-password"}
+          method="post"
+          phx-change="validate_password"
+          phx-submit="update_password"
+          phx-trigger-action={@trigger_submit}
+        >
+          <input
+            name={@password_form[:email].name}
+            type="hidden"
+            id="hidden_user_email"
+            spellcheck="false"
+            value={@current_email}
+          />
+          <UIForm.form_item>
+            <UIForm.form_label field={@password_form[:password]}>
+              New password
+            </UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@password_form[:password]}
+                type="password"
+                autocomplete="new-password"
+                spellcheck="false"
+                placeholder="At least 12 characters"
+                required
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@password_form[:password]} />
+          </UIForm.form_item>
+          <UIForm.form_item>
+            <UIForm.form_label field={@password_form[:password_confirmation]}>
+              Confirm new password
+            </UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@password_form[:password_confirmation]}
+                type="password"
+                autocomplete="new-password"
+                spellcheck="false"
+                placeholder="Repeat your password"
+                required
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@password_form[:password_confirmation]} />
+          </UIForm.form_item>
+          <UIButton.button phx-disable-with="Saving..." class="w-full mt-3">
+            Save Password
+          </UIButton.button>
+        </.form>
       </div>
-
-      <.form for={@email_form} id="email_form" phx-submit="update_email" phx-change="validate_email">
-        <UIForm.form_item>
-          <UIForm.form_control>
-            <UIInput.input
-              field={@email_form[:email]}
-              type="email"
-              autocomplete="username"
-              spellcheck="false"
-              required
-            />
-          </UIForm.form_control>
-          <UIForm.form_message field={@email_form[:email]} />
-        </UIForm.form_item>
-        <UIButton.button phx-disable-with="Changing...">Change Email</UIButton.button>
-      </.form>
-
-      <div class="my-6 h-px bg-white/10" />
-
-      <.form
-        for={@password_form}
-        id="password_form"
-        action={~p"/users/update-password"}
-        method="post"
-        phx-change="validate_password"
-        phx-submit="update_password"
-        phx-trigger-action={@trigger_submit}
-      >
-        <input
-          name={@password_form[:email].name}
-          type="hidden"
-          id="hidden_user_email"
-          spellcheck="false"
-          value={@current_email}
-        />
-        <UIForm.form_item>
-          <UIForm.form_control>
-            <UIInput.input
-              field={@password_form[:password]}
-              type="password"
-              autocomplete="new-password"
-              spellcheck="false"
-              required
-            />
-          </UIForm.form_control>
-          <UIForm.form_message field={@password_form[:password]} />
-        </UIForm.form_item>
-        <UIForm.form_item>
-          <UIForm.form_control>
-            <UIInput.input
-              field={@password_form[:password_confirmation]}
-              type="password"
-              autocomplete="new-password"
-              spellcheck="false"
-            />
-          </UIForm.form_control>
-          <UIForm.form_message field={@password_form[:password_confirmation]} />
-        </UIForm.form_item>
-        <UIButton.button phx-disable-with="Saving...">
-          Save Password
-        </UIButton.button>
-      </.form>
     </Layouts.app>
     """
   end

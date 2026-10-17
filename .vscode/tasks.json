@@ -1,38 +1,243 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "label": "mix verify",
-      "detail": "Fast gate: nif.fix, format, compile --warnings-as-errors, test --max-failures 1",
-      "type": "shell",
-      "command": "mix.bat verify",
-      "group": { "kind": "test", "isDefault": true },
-      "problemMatcher": []
-    },
-    {
-      "label": "mix test",
-      "detail": "Full ExUnit suite",
-      "type": "shell",
-      "command": "mix.bat test",
-      "group": "test",
-      "problemMatcher": []
-    },
-    {
-      "label": "e2e (playwright)",
-      "detail": "Browser regression suite; auto-starts Phoenix on port 4001 (psc_e2e DB)",
-      "type": "shell",
-      "command": "npx.cmd playwright test",
-      "options": { "cwd": "${workspaceFolder}/test/e2e" },
-      "group": "test",
-      "problemMatcher": []
-    },
-    {
-      "label": "phx.server",
-      "detail": "Start the dev server (http://localhost:4000)",
-      "type": "shell",
-      "command": "mix.bat phx.server",
-      "isBackground": true,
-      "problemMatcher": []
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "mix verify",
+			"detail": "Fast gate: nif.fix, format, compile --warnings-as-errors, test --max-failures 1",
+			"type": "shell",
+			"command": "mix.bat verify",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "mix test",
+			"detail": "Full ExUnit suite",
+			"type": "shell",
+			"command": "mix.bat test",
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "e2e (playwright)",
+			"detail": "Browser regression suite; auto-starts Phoenix on port 4001 (psc_e2e DB)",
+			"type": "shell",
+			"command": "npx.cmd playwright test",
+			"options": {
+				"cwd": "${workspaceFolder}/test/e2e"
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "phx.server",
+			"detail": "Start the dev server (http://localhost:4000)",
+			"type": "shell",
+			"command": "mix.bat phx.server",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "gigalixir-status",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && (if exist tmp\\agent-logs\\deploy.log (echo === deploy.log size === && for %F in (tmp\\agent-logs\\deploy.log) do @echo %~zF bytes && echo === tail === && more +0 tmp\\agent-logs\\deploy.log) else (echo no deploy.log)) > tmp\\agent-logs\\status.log 2>&1 && git status --short --branch >> tmp\\agent-logs\\status.log 2>&1 && git --no-pager log --oneline -3 >> tmp\\agent-logs\\status.log 2>&1\""
+		},
+		{
+			"label": "gigalixir-ps",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && (echo === deploy.log tail === && powershell -NoProfile -Command \\\"Get-Content tmp/agent-logs/deploy.log -Tail 6\\\" && echo === ps === && \\\"%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe\\\" ps -a psc) > tmp\\agent-logs\\status2.log 2>&1\""
+		},
+		{
+			"label": "deploy-log-tail",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\deploy.log -Tail 8\""
+		},
+		{
+			"label": "psc-ps-check",
+			"type": "shell",
+			"command": "\"%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe\" ps -a psc"
+		},
+		{
+			"label": "psc-logs",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && \\\"%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe\\\" logs -a psc > tmp\\agent-logs\\psc-logs.txt 2>&1\""
+		},
+		{
+			"label": "psc-logs2",
+			"type": "shell",
+			"command": "cmd /c \"set GXL=%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe && cd /d c:\\software\\psc-elixir && %GXL% logs -a psc > tmp\\agent-logs\\psc-logs.txt 2>&1\""
+		},
+		{
+			"label": "psc-logs3",
+			"type": "shell",
+			"command": "%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe logs -a psc > c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs.txt 2>&1"
+		},
+		{
+			"label": "read-psc-logs",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 10; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs.txt -Tail 25\""
+		},
+		{
+			"label": "fix-commit-push",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && mix.bat compile --warnings-as-errors > tmp\\agent-logs\\compile.log 2>&1 && git add config/runtime.exs && git commit -m \"fix(deploy): parse PORT in tcp:// URL form (Gigalixir emits both)\" > nul && git push gigalixir main > tmp\\agent-logs\\deploy2.log 2>&1 && echo DONE >> tmp\\agent-logs\\deploy2.log\""
+		},
+		{
+			"label": "check-deploy",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 200; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\compile.log -Tail 3; Write-Output '=== deploy tail ==='; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\deploy2.log -Tail 6\""
+		},
+		{
+			"label": "psc-ps-check2",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 45; & $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe ps -a psc\""
+		},
+		{
+			"label": "read-psc-logs2",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs.txt -Tail 20\""
+		},
+		{
+			"label": "v2-logs",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Select-String -Path c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs.txt -Pattern 'mqfsd' | Select-Object -Last 15 | ForEach-Object { $s = $_.Line -replace '.*mqfsd.: ', ''; $s }\""
+		},
+		{
+			"label": "psc-config-check",
+			"type": "shell",
+			"command": "%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe config -a psc | findstr /V SECRET"
+		},
+		{
+			"label": "revision-check",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"git -C c:\\software\\psc-elixir show 1ff67ce:config/runtime.exs | Select-Object -Index (38..43); Write-Output '=== env vars in build ==='; Select-String -Path c:\\software\\psc-elixir\\tmp\\agent-logs\\deploy2.log -Pattern 'PSC_PORT|PORT' | Select-Object -First 6 | ForEach-Object { $_.Line }\""
+		},
+		{
+			"label": "fix2-commit-push",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && mix.bat compile --warnings-as-errors > tmp\\agent-logs\\compile.log 2>&1 && git add config/runtime.exs && git commit -m \"fix(deploy): tolerate tcp:// PORT forms for both PORT and PSC_PORT\" > nul && git push gigalixir main > tmp\\agent-logs\\deploy3.log 2>&1 && echo DONE >> tmp\\agent-logs\\deploy3.log\""
+		},
+		{
+			"label": "check-deploy2",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 230; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\deploy3.log -Tail 3; Write-Output '=== ps ==='; & $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe ps -a psc | Select-String 'status|sha|replicas_running'\""
+		},
+		{
+			"label": "check-deploy3",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 60; & $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe ps -a psc | Select-String 'status|sha|replicas_running|name'\""
+		},
+		{
+			"label": "fix3-commit-push",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && mix.bat compile --warnings-as-errors > tmp\\agent-logs\\compile.log 2>&1 && git add config/runtime.exs && git commit -m \"fix(deploy): listen on 4000 when PORT env is a URL (health-check port)\" > nul && git push gigalixir main > tmp\\agent-logs\\deploy4.log 2>&1 && echo DONE >> tmp\\agent-logs\\deploy4.log\""
+		},
+		{
+			"label": "psc-ps-fix3",
+			"type": "shell",
+			"command": "%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe ps -a psc"
+		},
+		{
+			"label": "psc-migrate",
+			"type": "shell",
+			"command": "set GXL=%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe && %GXL% ps:migrate -a psc > c:\\software\\psc-elixir\\tmp\\agent-logs\\migrate.log 2>&1 && echo MIGRATE_OK >> c:\\software\\psc-elixir\\tmp\\agent-logs\\migrate.log"
+		},
+		{
+			"label": "psc-migrate2",
+			"type": "shell",
+			"command": "%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe ps:migrate -a psc > c:\\software\\psc-elixir\\tmp\\agent-logs\\migrate.log 2>&1"
+		},
+		{
+			"label": "check-ssh-keys",
+			"type": "shell",
+			"command": "%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe account:ssh_keys"
+		},
+		{
+			"label": "procfile-commit-push",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && git add Procfile rel/overlays/Procfile elixir_buildpack.config && git commit -m \"fix(deploy): migrate at boot via Procfile; drop release=true per Gigalixir docs\" > nul && git push gigalixir main > tmp\\agent-logs\\deploy5.log 2>&1 && echo DONE >> tmp\\agent-logs\\deploy5.log\""
+		},
+		{
+			"label": "check-deploy5",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 240; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\deploy5.log -Tail 3; Write-Output '=== ps ==='; & $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe ps -a psc | Select-String 'status|sha|replicas_running'\""
+		},
+		{
+			"label": "check-deploy5b",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 120; & $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe ps -a psc\""
+		},
+		{
+			"label": "v5-logs",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 15; Select-String -Path c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs.txt -Pattern 'pknh7' | Select-Object -Last 25 | ForEach-Object { ($_.Line -replace '.*pknh7.: ', '') }\""
+		},
+		{
+			"label": "v5-logs2",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"$p = Start-Process -FilePath $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe -ArgumentList 'logs','-a','psc' -RedirectStandardOutput c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs2.txt -PassThru; Start-Sleep 25; $p.Kill(); Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\psc-logs2.txt -Tail 25\""
+		},
+		{
+			"label": "procfile2-commit-push",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && git add Procfile rel/overlays/Procfile && git commit -m \"fix(deploy): start release via bin/psc directly (overlay exec-bit issue)\" > nul && git push gigalixir main > tmp\\agent-logs\\deploy6.log 2>&1 && echo DONE >> tmp\\agent-logs\\deploy6.log\""
+		},
+		{
+			"label": "check-deploy6",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 270; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\deploy6.log -Tail 3; Write-Output '=== ps ==='; & $env:LOCALAPPDATA\\Programs\\gigalixir\\gigalixir.exe ps -a psc | Select-String 'status|sha|replicas_running'\""
+		},
+		{
+			"label": "final-commit",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && git add AGENTS.md config/runtime.exs && git commit -m \"docs: Gigalixir deployment LIVE at psc.gigalixirapp.com; record port/Procfile lessons\" && git --no-pager log --oneline -6\""
+		},
+		{
+			"label": "ps-migrate-test",
+			"type": "shell",
+			"command": "%LOCALAPPDATA%\\Programs\\gigalixir\\gigalixir.exe ps:migrate -a psc > c:\\software\\psc-elixir\\tmp\\agent-logs\\migrate2.log 2>&1"
+		},
+		{
+			"label": "read-migrate-log",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Start-Sleep 20; Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\migrate2.log\""
+		},
+		{
+			"label": "agents-ssh-commit",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && git add AGENTS.md && git commit -m \"docs: record ps:migrate + ssh config fix in AGENTS.md\" && git --no-pager log --oneline -2\""
+		},
+		{
+			"label": "verify-auth",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && mix.bat verify > tmp\\agent-logs\\verify2.log 2>&1\""
+		},
+		{
+			"label": "read-verify2",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\verify2.log -Tail 40\""
+		},
+		{
+			"label": "verify-auth2",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && mix.bat verify > tmp\\agent-logs\\verify3.log 2>&1\""
+		},
+		{
+			"label": "verify3-summary",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\verify3.log | Select-String -Pattern '\\d\\) test|Result:' | ForEach-Object { $_.Line }\""
+		},
+		{
+			"label": "verify3-detail",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"$log = Get-Content c:\\software\\psc-elixir\\tmp\\agent-logs\\verify3.log -Raw; $i = $log.IndexOf('confirms unconfirmed user'); $log.Substring($i - 100, 1200)\""
+		},
+		{
+			"label": "verify-auth3",
+			"type": "shell",
+			"command": "cmd /c \"cd /d c:\\software\\psc-elixir && mix.bat verify > tmp\\agent-logs\\verify4.log 2>&1\""
+		}
+	]
 }

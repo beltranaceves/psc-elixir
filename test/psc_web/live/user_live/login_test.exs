@@ -47,12 +47,12 @@ defmodule PscWeb.UserLive.LoginTest do
   end
 
   describe "login navigation" do
-    test "redirects to registration page when the Register button is clicked", %{conn: conn} do
+    test "redirects to registration page when the Sign up button is clicked", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/log-in")
 
       {:ok, _login_live, login_html} =
         lv
-        |> element("main a", "Sign up")
+        |> element("#sign_up_link")
         |> render_click()
         |> follow_redirect(conn, ~p"/users/register")
 
@@ -71,6 +71,7 @@ defmodule PscWeb.UserLive.LoginTest do
 
       assert html =~ "You need to reauthenticate"
       refute html =~ "Register"
+      refute html =~ ~s(id="sign_up_link")
 
       # The password form's email is prefilled and readonly for re-auth
       assert html =~ ~s(id="login_form_password_email")

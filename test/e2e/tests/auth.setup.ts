@@ -33,8 +33,6 @@ setup('authenticate as e2e user', async ({ page }) => {
   await expect(emailInput).toHaveValue(EMAIL);
   await expect(passwordInput).toHaveValue(PASSWORD);
 
-  // exact: true — the secondary button is "Log in only this time", which a
-  // loose "Log in" would also match.
   await passwordForm.getByRole('button', { name: 'Log in', exact: true }).click();
 
   // A fresh login lands on "/" — `UserAuth.signed_in_path/1` only redirects to

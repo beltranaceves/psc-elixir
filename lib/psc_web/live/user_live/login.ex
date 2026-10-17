@@ -5,6 +5,7 @@ defmodule PscWeb.UserLive.Login do
   # CoreComponents is global via html_helpers and defines the same names.
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Form, as: UIForm
+  alias PscWeb.Components.UI.Helpers, as: UIHelpers
   alias PscWeb.Components.UI.Input, as: UIInput
 
   @impl true
@@ -72,9 +73,14 @@ defmodule PscWeb.UserLive.Login do
           >
             Log in <span aria-hidden="true">→</span>
           </UIButton.button>
-          <UIButton.button variant="secondary" class="w-full mt-2">
-            Log in only this time
-          </UIButton.button>
+          <.link
+            :if={is_nil(@current_scope)}
+            id="sign_up_link"
+            navigate={~p"/users/register"}
+            class={[UIHelpers.button_variant(%{variant: "secondary"}), "mt-2 w-full"]}
+          >
+            Sign up
+          </.link>
         </.form>
       </div>
     </Layouts.app>
