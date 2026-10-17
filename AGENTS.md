@@ -59,9 +59,23 @@ remote build log; PowerShell mangles stderr, redirect: `git push gigalixir main 
 
 **Migrations run at boot** — no SSH, no `ps:migrate`:
 `Procfile` → `web: bin/psc eval "Psc.Release.migrate()" && PHX_SERVER=true bin/psc start`
-(idempotent; logs "Migrations already up" on later boots). `ps:migrate` exists but needs an
-SSH key (`account:ssh_keys:add` — our key is the non-default `lightning_rsa`, so plain `ssh`
-won't find it) — the Procfile route avoids all of that.
+(idempotent; logs "Migrations already up" on later boots).
+
+**`ps:migrate` also works** (verified 2026-10-17) as a fallback — it SSHes into the running
+node and runs the migrator in a remote console against the *currently deployed* code. It
+needed two things, both now in place: the key registered on the account
+(`account:ssh_keys:add` — ours is the non-default `lightning_rsa`, so plain `ssh` won't offer
+it by default) and a `~/.ssh/config` block so ssh knows to use it for Gigalixir hosts:
+
+```sshconfig
+Host *.gigalixir.com
+  IdentityFile C:\Users\Beltran\.ssh\lightning_rsa
+  IdentitiesOnly yes
+```
+
+Without that block the symptom is `root@us-central1.gcp.ssh.gigalixir.com: Permission denied (publickey)`
+even though the key IS registered. When nothing is pending it exits silently (boot already
+applied everything); it prints migration output only when it actually applies something.
 
 **Required deploy files (all committed):**
 - `elixir_buildpack.config` — `elixir_version=1.20.4`, `erlang_version=29.1` (work on
