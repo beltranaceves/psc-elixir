@@ -25,25 +25,20 @@ end
 # (the deployment convention), falling back to 4000. The E2E harness in
 # `test/e2e/` relies on this to run alongside a dev server.
 #
-# `PORT` may arrive as a bare port ("4000") or as a URL
+# `PORT`/`PSC_PORT` may arrive as a bare port ("4000") or as a URL
 # ("tcp://10.x.x.x:80") depending on how the platform provisions the pod
-# (Gigalixir emits both forms) — take the last ":"-segment either way.
+# (Gigalixir emits both forms, and may set EITHER variable) — take the
+# last ":"-segment either way so both forms parse to the same integer.
 parse_port = fn default ->
-  System.get_env("PORT", default)
+  (System.get_env("PSC_PORT") || System.get_env("PORT", default))
   |> String.split(":")
   |> List.last()
   |> String.to_integer()
 end
 
-endpoint_port =
-  case System.get_env("PSC_PORT") do
-    nil -> parse_port.("4000")
-    value -> String.to_integer(value)
-  end
-
 config :psc, PscWeb.Endpoint,
   http: [
-    port: endpoint_port
+    port: parse_port.("4000")
   ]
 
 if config_env() == :prod do
