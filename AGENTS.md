@@ -50,42 +50,50 @@ The essentials — see `DEVELOPMENT.md` ("Environment & tooling guide") for deta
 
 ### Deployment (Gigalixir)
 
-Production runs on **Gigalixir** (free tier): app `defiant-orange-weasel` →
-`https://defiant-orange-weasel.gigalixirapp.com` (GCP us-central1, stack `gigalixir-26`,
-Postgres `us-central1-free-tier-barley`).
+**Status 2026-10-17: PAUSED — no live app.** A free-tier deployment previously ran at
+`defiant-orange-weasel.gigalixirapp.com`; it was destroyed during an attempted rename to `psc`
+(free tier allows only ONE app, so renaming = destroy + recreate; the recreate stalled on an
+interactive git-credential prompt, so the account was cleanly emptied instead).
+There is currently **no `gigalixir` git remote** in this repo.
 
-- **CLI**: `%LOCALAPPDATA%\Programs\gigalixir\gigalixir.exe` — often **not on PATH** in a new
-  terminal; use the full path (`$gxl = …`). Logged in via `gigalixir login:google` (writes `~/.netrc`).
-- **Command names are `config` / `config:set`** (not `env:set`), plus `ps`, `ps:migrate`,
-  `releases`, `logs`, `pg`, `open`.
-- **`pg:create --free` prompts interactively** — pipe the confirmation:
-  `Write-Output "y" | & $gxl pg:create --free`.
-- **Deploy = `git push gigalixir main`.** PowerShell mangles the remote build output
-  (`NativeCommandError` noise, truncated logs) — redirect it:
-  `git push gigalixir main 2>&1 | Out-File tmp\agent-logs\deploy.log`
-- **Required deploy files (all committed):**
-  - `elixir_buildpack.config` — `elixir_version=1.20.4`, `erlang_version=29.1` (both confirmed to
-    exist on the `gigalixir-26` stack), `release=true`, `hook_post_compile="mix assets.deploy"`.
-  - `Procfile` — `web: bin/server`.
-  - `def release` in `mix.exs` (the releases buildpack runs `mix release`; missing → build fails).
+To redeploy from scratch (~5 min, everything below is proven):
+1. `$gxl = "$env:LOCALAPPDATA\Programs\gigalixir\gigalixir.exe"` (often NOT on PATH).
+2. `& $gxl create [-n <name>]` — run it **from a throwaway git repo** (e.g. `%TEMP%` + `git init`)
+   if this repo's remotes would trip the CLI's deploy-target check; then
+   `git -C <project> remote add gigalixir https://git.gigalixir.com/<name>.git/`.
+3. `Write-Output "y" | & $gxl pg:create --free` (interactive confirmations everywhere → pipe `y`).
+4. `& $gxl config:set SECRET_KEY_BASE=$(mix.bat phx.gen.secret)` — **run mix from the project dir**
+   (a temp-dir mix run silently sets an EMPTY secret) — and `PHX_HOST=<name>.gigalixirapp.com`.
+5. `git push gigalixir main` — the HTTPS remote to `git.gigalixir.com` **prompts for credentials
+   interactively**; do this while at the keyboard (the push is the step that stalled last time).
+6. `& $gxl ps` until Healthy → `account:ssh_keys:add (Get-Content ~\.ssh\lightning_rsa.pub -Raw).Trim()`
+   (non-default key name! ~2 min propagation) → `& $gxl ps:migrate` (prints nothing on success).
+
+**Destroy order** (enforced by the CLI): `ps:scale --replicas=0` → wait ~1 min for pods to drop
+DB sessions → `pg:destroy -a <app> --database-id <id>` (id from `pg:create` output or `pg`) →
+`apps:destroy -a <app>`. App names are **immutable** on Gigalixir; free tier = 1 app, 1 DB,
+10k rows/table, 2 connections, idle connections killed after 5 min, inactive DBs destroyed.
+
+**Required deploy files (all committed):**
+- `elixir_buildpack.config` — `elixir_version=1.20.4`, `erlang_version=29.1` (confirmed working
+  on stack `gigalixir-26`), `release=true`, `hook_post_compile="mix assets.deploy"`.
+- `Procfile` — `web: bin/server`.
+- `def release` in `mix.exs` (the releases buildpack runs `mix release`; missing → build fails).
+
+**Other proven gotchas:**
 - **SSL is mandatory**: Gigalixir Postgres requires `ssl: true` + `ssl_opts: [verify: :verify_none]`
   in the prod block of `config/runtime.exs`. **Symptom if missing:** app boots `Healthy`, static
-  pages render, but *every DB call hangs* — browser console shows `push timeout` on LiveView
-  events, and `ps:migrate` silently no-ops.
-- **Env vars** via `gigalixir config:set KEY=VALUE` (setting any var restarts the app):
-  `SECRET_KEY_BASE` (from `mix.bat phx.gen.secret`), `PHX_HOST=<app>.gigalixirapp.com`.
-  `DATABASE_URL` + `POOL_SIZE=2` are set by `pg:create` — free tier allows **max 2 connections**
-  and kills idle connections after 5 minutes.
-- **Migrations:** `$gxl account:ssh_keys:add (Get-Content ~\.ssh\lightning_rsa.pub -Raw).Trim()`
-  (the key has a **non-default name**, `lightning_rsa` — plain `id_rsa` checks find nothing).
-  Allow ~2 min propagation, app must be `Healthy`, then `$gxl ps:migrate` (runs
-  `Psc.Release.migrate` through a remote console; prints nothing on success).
-- **Free-tier caveats:** 10k rows per table (event pruning in
-  `save_unstr_canvas_content_to_db` / `save_content_to_db` keeps CRDT event tables under it —
-  don't remove the pruning), inactive apps' databases get destroyed, no backups.
+  pages render, but *every DB call hangs* — browser shows `push timeout` on LiveView events,
+  `ps:migrate` silently no-ops.
+- PowerShell mangles the remote build output (`NativeCommandError` noise) — redirect:
+  `git push gigalixir main 2>&1 | Out-File tmp\agent-logs\deploy.log`
+- CLI command names: `config` / `config:set` (not `env:set`), `ps`, `ps:migrate`, `releases`,
+  `logs`, `pg`, `open`. Many commands need `-a <app>` when ambiguous.
 - **No mailer in prod:** registration is email-less (auto-confirm + in-process magic link);
   the "Log in with email" form on the login page **will error** in prod — register fresh or use
   a password set in Settings.
+- Keep the event pruning in `save_unstr_canvas_content_to_db` / `save_content_to_db` — the free
+  tier's 10k-row/table limit depends on it.
 
 ### Retrieval over recall — never guess an API
 
