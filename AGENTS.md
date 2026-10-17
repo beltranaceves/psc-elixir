@@ -50,50 +50,54 @@ The essentials — see `DEVELOPMENT.md` ("Environment & tooling guide") for deta
 
 ### Deployment (Gigalixir)
 
-**Status 2026-10-17: PAUSED — no live app.** A free-tier deployment previously ran at
-`defiant-orange-weasel.gigalixirapp.com`; it was destroyed during an attempted rename to `psc`
-(free tier allows only ONE app, so renaming = destroy + recreate; the recreate stalled on an
-interactive git-credential prompt, so the account was cleanly emptied instead).
-There is currently **no `gigalixir` git remote** in this repo.
+**Status 2026-10-17: LIVE** at `psc.gigalixirapp.com` (app `psc`, free tier, GCP us-central1,
+stack `gigalixir-26`, free Postgres). Local commits may lag the deployed SHA — check
+`gigalixir ps` `sha` vs `git log`.
 
-To redeploy from scratch (~5 min, everything below is proven):
-1. `$gxl = "$env:LOCALAPPDATA\Programs\gigalixir\gigalixir.exe"` (often NOT on PATH).
-2. `& $gxl create [-n <name>]` — run it **from a throwaway git repo** (e.g. `%TEMP%` + `git init`)
-   if this repo's remotes would trip the CLI's deploy-target check; then
-   `git -C <project> remote add gigalixir https://git.gigalixir.com/<name>.git/`.
-3. `Write-Output "y" | & $gxl pg:create --free` (interactive confirmations everywhere → pipe `y`).
-4. `& $gxl config:set SECRET_KEY_BASE=$(mix.bat phx.gen.secret)` — **run mix from the project dir**
-   (a temp-dir mix run silently sets an EMPTY secret) — and `PHX_HOST=<name>.gigalixirapp.com`.
-5. `git push gigalixir main` — the HTTPS remote to `git.gigalixir.com` **prompts for credentials
-   interactively**; do this while at the keyboard (the push is the step that stalled last time).
-6. `& $gxl ps` until Healthy → `account:ssh_keys:add (Get-Content ~\.ssh\lightning_rsa.pub -Raw).Trim()`
-   (non-default key name! ~2 min propagation) → `& $gxl ps:migrate` (prints nothing on success).
+Deploy = `git push gigalixir main` (HTTPS remote; credentials cached — the push streams the
+remote build log; PowerShell mangles stderr, redirect: `git push gigalixir main 2>&1 | Out-File tmp\agent-logs\deploy.log`).
 
-**Destroy order** (enforced by the CLI): `ps:scale --replicas=0` → wait ~1 min for pods to drop
-DB sessions → `pg:destroy -a <app> --database-id <id>` (id from `pg:create` output or `pg`) →
-`apps:destroy -a <app>`. App names are **immutable** on Gigalixir; free tier = 1 app, 1 DB,
-10k rows/table, 2 connections, idle connections killed after 5 min, inactive DBs destroyed.
+**Migrations run at boot** — no SSH, no `ps:migrate`:
+`Procfile` → `web: bin/psc eval "Psc.Release.migrate()" && PHX_SERVER=true bin/psc start`
+(idempotent; logs "Migrations already up" on later boots). `ps:migrate` exists but needs an
+SSH key (`account:ssh_keys:add` — our key is the non-default `lightning_rsa`, so plain `ssh`
+won't find it) — the Procfile route avoids all of that.
 
 **Required deploy files (all committed):**
-- `elixir_buildpack.config` — `elixir_version=1.20.4`, `erlang_version=29.1` (confirmed working
-  on stack `gigalixir-26`), `release=true`, `hook_post_compile="mix assets.deploy"`.
-- `Procfile` — `web: bin/server`.
+- `elixir_buildpack.config` — `elixir_version=1.20.4`, `erlang_version=29.1` (work on
+  `gigalixir-26`). **Do NOT add `release=true`** — the releases buildpack owns the release;
+  a second one from the elixir buildpack conflicts (docs-explicit). `hook_post_compile="mix
+  assets.deploy"` builds + digests assets on the build server (no Node needed).
+- `Procfile` (root; also mirrored in `rel/overlays/`) — **start `bin/psc` directly, never
+  `bin/server`**: overlay scripts (copied from git on Windows) lose the exec bit in the
+  release tarball → boot dies with `bin/server: Permission denied`. `bin/psc` is generated
+  on Linux by `mix release` and always executable.
 - `def release` in `mix.exs` (the releases buildpack runs `mix release`; missing → build fails).
 
-**Other proven gotchas:**
-- **SSL is mandatory**: Gigalixir Postgres requires `ssl: true` + `ssl_opts: [verify: :verify_none]`
-  in the prod block of `config/runtime.exs`. **Symptom if missing:** app boots `Healthy`, static
-  pages render, but *every DB call hangs* — browser shows `push timeout` on LiveView events,
-  `ps:migrate` silently no-ops.
-- PowerShell mangles the remote build output (`NativeCommandError` noise) — redirect:
-  `git push gigalixir main 2>&1 | Out-File tmp\agent-logs\deploy.log`
-- CLI command names: `config` / `config:set` (not `env:set`), `ps`, `ps:migrate`, `releases`,
-  `logs`, `pg`, `open`. Many commands need `-a <app>` when ambiguous.
+**Port/env landmines (all hit and fixed in `config/runtime.exs`):**
+- **Gigalixir injects a `tcp://<pod-ip>:80` URL** into port-ish env vars, and — because the
+  app is named *psc* — sets **`PSC_PORT`** (colliding with our E2E numeric override!). Only
+  honor *numeric* values of `PSC_PORT`/`PORT`; otherwise **listen on 4000** (their health
+  check + proxy port). Symptoms if wrong: boot crash
+  `binary_to_integer("tcp://…")` or pod stuck "isn't listening on port 4000 yet".
+- **SSL is mandatory** for Gigalixir Postgres: `ssl: true` + `ssl_opts: [verify: :verify_none]`
+  in the prod block. Symptom if missing: app boots Healthy but every DB call hangs
+  ("push timeout" on LiveView events).
+- `SECRET_KEY_BASE` via `config:set` — generate with `mix.bat phx.gen.secret` **from the
+  project dir** (a temp-dir run silently yields an EMPTY secret).
+
+**Other facts:**
+- CLI: `%LOCALAPPDATA%\Programs\gigalixir\gigalixir.exe` (often NOT on PATH); commands are
+  `config`/`config:set` (not `env:set`), `ps`, `pg`, `releases`, `logs`, `apps`; many need
+  `-a <app>`; interactive confirmations → pipe `Write-Output "y" |`.
+- App names are **immutable**; free tier = 1 app, 1 DB, 10k rows/table, 2 connections, idle
+  conns killed after 5 min, inactive DBs destroyed. Teardown order: `ps:scale --replicas=0` →
+  wait ~1 min → `pg:destroy -a <app> --database-id <id>` → `apps:destroy -a <app>`.
 - **No mailer in prod:** registration is email-less (auto-confirm + in-process magic link);
-  the "Log in with email" form on the login page **will error** in prod — register fresh or use
-  a password set in Settings.
-- Keep the event pruning in `save_unstr_canvas_content_to_db` / `save_content_to_db` — the free
-  tier's 10k-row/table limit depends on it.
+  the "Log in with email" form **errors** in prod — register fresh or use a password from
+  Settings.
+- Keep the event pruning in `save_unstr_canvas_content_to_db` / `save_content_to_db` — the
+  free tier's 10k-row/table limit depends on it.
 
 ### Retrieval over recall — never guess an API
 
