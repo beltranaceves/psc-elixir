@@ -107,9 +107,11 @@ applied everything); it prints migration output only when it actually applies so
 - App names are **immutable**; free tier = 1 app, 1 DB, 10k rows/table, 2 connections, idle
   conns killed after 5 min, inactive DBs destroyed. Teardown order: `ps:scale --replicas=0` →
   wait ~1 min → `pg:destroy -a <app> --database-id <id>` → `apps:destroy -a <app>`.
-- **No mailer in prod:** registration is email-less (auto-confirm + in-process magic link);
-  the "Log in with email" form **errors** in prod — register fresh or use a password from
-  Settings.
+- **Auth is plain email + password** (no email confirmation, no mailer needed — confirmation
+  is a much-later feature). Registration auto-confirms and auto-logs-in via a one-time token
+  URL (`/users/log-in/:token`, handled by the Confirmation LiveView with auto-submit).
+  Unconfirmed users cannot log in via that path (auth layer rejects magic-link login for
+  unconfirmed users with passwords — by design here).
 - Keep the event pruning in `save_unstr_canvas_content_to_db` / `save_content_to_db` — the
   free tier's 10k-row/table limit depends on it.
 

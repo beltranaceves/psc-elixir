@@ -14,7 +14,9 @@ defmodule Psc.AccountsFixtures do
 
   def valid_user_attributes(attrs \\ %{}) do
     Enum.into(attrs, %{
-      email: unique_user_email()
+      email: unique_user_email(),
+      password: valid_user_password(),
+      password_confirmation: valid_user_password()
     })
   end
 
@@ -28,17 +30,9 @@ defmodule Psc.AccountsFixtures do
   end
 
   def user_fixture(attrs \\ %{}) do
-    user = unconfirmed_user_fixture(attrs)
-
-    token =
-      extract_user_token(fn url ->
-        Accounts.deliver_login_instructions(user, url)
-      end)
-
-    {:ok, {user, _expired_tokens}} =
-      Accounts.login_user_by_magic_link(token)
-
-    user
+    attrs
+    |> unconfirmed_user_fixture()
+    |> Accounts.confirm_user!()
   end
 
   def user_scope_fixture do

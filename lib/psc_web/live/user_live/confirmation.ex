@@ -17,38 +17,10 @@ defmodule PscWeb.UserLive.Confirmation do
         </div>
 
         <.form
-          :if={!@user.confirmed_at}
-          for={@form}
-          id="confirmation_form"
-          phx-mounted={JS.focus_first()}
-          phx-submit="submit"
-          action={~p"/users/log-in?_action=confirmed"}
-          phx-trigger-action={@trigger_submit}
-        >
-          <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
-          <UIButton.button
-            name={@form[:remember_me].name}
-            value="true"
-            phx-disable-with="Confirming..."
-            class="w-full"
-          >
-            Confirm and stay logged in
-          </UIButton.button>
-          <UIButton.button
-            variant="secondary"
-            phx-disable-with="Confirming..."
-            class="w-full mt-2"
-          >
-            Confirm and log in only this time
-          </UIButton.button>
-        </.form>
-
-        <.form
-          :if={@user.confirmed_at}
           for={@form}
           id="login_form"
-          phx-submit="submit"
           phx-mounted={JS.focus_first()}
+          phx-submit="submit"
           action={~p"/users/log-in"}
           phx-trigger-action={@trigger_submit}
         >
@@ -75,13 +47,6 @@ defmodule PscWeb.UserLive.Confirmation do
             </UIButton.button>
           <% end %>
         </.form>
-
-        <p
-          :if={!@user.confirmed_at}
-          class="mt-8 p-3 rounded-lg border border-white/10 bg-base-200 text-sm text-base-content/70"
-        >
-          Tip: If you prefer passwords, you can enable them in the user settings.
-        </p>
       </div>
     </Layouts.app>
     """
@@ -89,22 +54,26 @@ defmodule PscWeb.UserLive.Confirmation do
 
   @impl true
   def mount(%{"token" => token}, _session, socket) do
-    if user = Accounts.get_user_by_magic_link_token(token) do
-      form = to_form(%{"token" => token}, as: "user")
+    case Accounts.get_user_by_magic_link_token(token) do
+      %{confirmed_at: confirmed_at} = user when not is_nil(confirmed_at) ->
+        form = to_form(%{"token" => token}, as: "user")
 
-      {:ok,
-       assign(socket,
-         user: user,
-         form: form,
-         # Confirmed users skip the confirmation choice: auto-submit the
-         # login form on mount so the magic link signs them in directly.
-         trigger_submit: not is_nil(user.confirmed_at)
-       ), temporary_assigns: [form: nil]}
-    else
-      {:ok,
-       socket
-       |> put_flash(:error, "Magic link is invalid or it has expired.")
-       |> push_navigate(to: ~p"/users/log-in")}
+        {:ok,
+         assign(socket,
+           user: user,
+           form: form,
+           # Auto-submit the login form on mount so the token URL signs the
+           # user in directly — zero clicks after registration.
+           trigger_submit: true
+         ), temporary_assigns: [form: nil]}
+
+      _ ->
+        # Invalid, expired, or unconfirmed: accounts are confirmed at
+        # registration in this app, so anything else is not a usable link.
+        {:ok,
+         socket
+         |> put_flash(:error, "Magic link is invalid or it has expired.")
+         |> push_navigate(to: ~p"/users/log-in")}
     end
   end
 

@@ -1,14 +1,11 @@
 defmodule PscWeb.UserLive.Login do
   use PscWeb, :live_view
 
-  # SaladUI alert/button/input/form called qualified (UIAlert/UIButton/UIInput/UIForm):
+  # SaladUI button/input/form called qualified (UIButton/UIInput/UIForm):
   # CoreComponents is global via html_helpers and defines the same names.
-  alias PscWeb.Components.UI.Alert, as: UIAlert
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Form, as: UIForm
   alias PscWeb.Components.UI.Input, as: UIInput
-
-  alias Psc.Accounts
 
   @impl true
   def render(assigns) do
@@ -30,50 +27,6 @@ defmodule PscWeb.UserLive.Login do
               <% end %>
             </:subtitle>
           </.header>
-        </div>
-
-        <UIAlert.alert :if={local_mail_adapter?()}>
-          <UIAlert.alert_title>Local mail adapter</UIAlert.alert_title>
-          <UIAlert.alert_description>
-            You are running the local mail adapter. To see sent emails, visit <.link
-              href="/dev/mailbox"
-              class="underline"
-            >the mailbox page</.link>.
-          </UIAlert.alert_description>
-        </UIAlert.alert>
-
-        <.form
-          :let={f}
-          for={@form}
-          id="login_form_magic"
-          action={~p"/users/log-in"}
-          phx-submit="submit_magic"
-        >
-          <UIForm.form_item>
-            <UIForm.form_label field={f[:email]}>Email</UIForm.form_label>
-            <UIForm.form_control>
-              <UIInput.input
-                readonly={!!@current_scope}
-                field={f[:email]}
-                type="email"
-                autocomplete="username"
-                spellcheck="false"
-                placeholder="you@example.com"
-                required
-                phx-mounted={JS.focus()}
-              />
-            </UIForm.form_control>
-            <UIForm.form_message field={f[:email]} />
-          </UIForm.form_item>
-          <UIButton.button class="w-full gap-2">
-            Log in with email <span aria-hidden="true">→</span>
-          </UIButton.button>
-        </.form>
-
-        <div class="my-4 flex items-center gap-3 text-xs text-base-content/50">
-          <div class="h-px flex-1 bg-white/10"></div>
-          or
-          <div class="h-px flex-1 bg-white/10"></div>
         </div>
 
         <.form
@@ -142,26 +95,5 @@ defmodule PscWeb.UserLive.Login do
   @impl true
   def handle_event("submit_password", _params, socket) do
     {:noreply, assign(socket, :trigger_submit, true)}
-  end
-
-  def handle_event("submit_magic", %{"user" => %{"email" => email}}, socket) do
-    if user = Accounts.get_user_by_email(email) do
-      Accounts.deliver_login_instructions(
-        user,
-        &url(~p"/users/log-in/#{&1}")
-      )
-    end
-
-    info =
-      "If your email is in our system, you will receive instructions for logging in shortly."
-
-    {:noreply,
-     socket
-     |> put_flash(:info, info)
-     |> push_navigate(to: ~p"/users/log-in")}
-  end
-
-  defp local_mail_adapter? do
-    Application.get_env(:psc, Psc.Mailer)[:adapter] == Swoosh.Adapters.Local
   end
 end

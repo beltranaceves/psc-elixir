@@ -29,6 +29,20 @@ defmodule Psc.Accounts.User do
     |> validate_email(opts)
   end
 
+  @doc """
+  A user changeset for registration with an email and password.
+
+  No email confirmation: the account is confirmed by the caller immediately
+  after insert (email-based confirmation is a much-later feature).
+  """
+  def registration_changeset(user, attrs, opts \\ []) do
+    user
+    |> cast(attrs, [:email, :password])
+    |> validate_email(opts)
+    |> validate_confirmation(:password, message: "does not match password")
+    |> validate_password(opts)
+  end
+
   defp validate_email(changeset, opts) do
     changeset =
       changeset

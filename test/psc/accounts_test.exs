@@ -77,13 +77,15 @@ defmodule Psc.AccountsTest do
       assert "has already been taken" in errors_on(changeset).email
     end
 
-    test "registers users without password" do
+    test "requires a password" do
       email = unique_user_email()
+
+      {:error, changeset} = Accounts.register_user(%{email: email})
+      assert "can't be blank" in errors_on(changeset).password
+
       {:ok, user} = Accounts.register_user(valid_user_attributes(email: email))
       assert user.email == email
-      assert is_nil(user.hashed_password)
-      assert is_nil(user.confirmed_at)
-      assert is_nil(user.password)
+      assert user.hashed_password
     end
   end
 
@@ -330,17 +332,6 @@ defmodule Psc.AccountsTest do
   end
 
   describe "login_user_by_magic_link/1" do
-    test "confirms user and expires tokens" do
-      user = unconfirmed_user_fixture()
-      refute user.confirmed_at
-      {encoded_token, hashed_token} = generate_user_magic_link_token(user)
-
-      assert {:ok, {user, [%{token: ^hashed_token}]}} =
-               Accounts.login_user_by_magic_link(encoded_token)
-
-      assert user.confirmed_at
-    end
-
     test "returns user and (deleted) token for confirmed user" do
       user = user_fixture()
       assert user.confirmed_at

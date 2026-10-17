@@ -45,7 +45,37 @@ defmodule PscWeb.UserLive.Registration do
             <UIForm.form_message field={@form[:email]} />
           </UIForm.form_item>
 
-          <UIButton.button phx-disable-with="Creating account..." class="w-full">
+          <UIForm.form_item>
+            <UIForm.form_label field={@form[:password]}>Password</UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@form[:password]}
+                type="password"
+                autocomplete="new-password"
+                placeholder="At least 12 characters"
+                required
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@form[:password]} />
+          </UIForm.form_item>
+
+          <UIForm.form_item>
+            <UIForm.form_label field={@form[:password_confirmation]}>
+              Confirm password
+            </UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@form[:password_confirmation]}
+                type="password"
+                autocomplete="new-password"
+                placeholder="Repeat your password"
+                required
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@form[:password_confirmation]} />
+          </UIForm.form_item>
+
+          <UIButton.button phx-disable-with="Creating account..." class="w-full mt-2">
             Create an account
           </UIButton.button>
         </.form>
@@ -61,18 +91,24 @@ defmodule PscWeb.UserLive.Registration do
   end
 
   def mount(_params, _session, socket) do
-    changeset = Accounts.change_user_email(%User{}, %{}, validate_unique: false)
+    changeset = Accounts.change_user_registration(%User{}, %{})
 
     {:ok, assign_form(socket, changeset), temporary_assigns: [form: nil]}
+  end
+
+  @impl true
+  def handle_event("validate", %{"user" => user_params}, socket) do
+    changeset = Accounts.change_user_registration(%User{}, user_params)
+    {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
 
   @impl true
   def handle_event("save", %{"user" => user_params}, socket) do
     case Accounts.register_user(user_params) do
       {:ok, user} ->
-        # Email confirmation is disabled for the MVP demo: accounts are
-        # confirmed immediately and the magic-link token is handed to the
-        # browser directly instead of being emailed.
+        # No email confirmation: the account is confirmed immediately. The
+        # one-time token URL is handed to the browser directly (no email) so
+        # the Confirmation LiveView auto-logs the user in — register and done.
         user = Accounts.confirm_user!(user)
         token = Accounts.generate_login_token(user)
 
@@ -84,11 +120,6 @@ defmodule PscWeb.UserLive.Registration do
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
     end
-  end
-
-  def handle_event("validate", %{"user" => user_params}, socket) do
-    changeset = Accounts.change_user_email(%User{}, user_params, validate_unique: false)
-    {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
 
   defp assign_form(socket, %Ecto.Changeset{} = changeset) do
