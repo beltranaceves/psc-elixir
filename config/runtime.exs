@@ -25,20 +25,23 @@ end
 # (the deployment convention), falling back to 4000. The E2E harness in
 # `test/e2e/` relies on this to run alongside a dev server.
 #
-# `PORT`/`PSC_PORT` may arrive as a bare port ("4000") or as a URL
-# ("tcp://10.x.x.x:80") depending on how the platform provisions the pod
-# (Gigalixir emits both forms, and may set EITHER variable) — take the
-# last ":"-segment either way so both forms parse to the same integer.
-parse_port = fn default ->
-  (System.get_env("PSC_PORT") || System.get_env("PORT", default))
-  |> String.split(":")
-  |> List.last()
-  |> String.to_integer()
-end
+# Port resolution: only NUMERIC values of `PSC_PORT`/`PORT` are honored,
+# anything else falls back to 4000 — the port Gigalixir's health checks and
+# proxy expect (their runner also injects `PSC_PORT`/`PORT` as URLs like
+# "tcp://10.x.x.x:80"; `PSC_PORT` collides with our app-name-derived var
+# and our E2E harness uses it as a numeric override).
+port_from_env = System.get_env("PSC_PORT") || System.get_env("PORT", "")
+
+endpoint_port =
+  if Regex.match?(~r/^\d+$/, port_from_env) do
+    String.to_integer(port_from_env)
+  else
+    4000
+  end
 
 config :psc, PscWeb.Endpoint,
   http: [
-    port: parse_port.("4000")
+    port: endpoint_port
   ]
 
 if config_env() == :prod do
@@ -83,7 +86,7 @@ if config_env() == :prod do
     url: [host: host, port: 443, scheme: "https"],
     http: [
       ip: {0, 0, 0, 0},
-      port: parse_port.("4000")
+      port: endpoint_port
     ],
     secret_key_base: secret_key_base
 
