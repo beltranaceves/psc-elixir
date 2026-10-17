@@ -66,11 +66,11 @@ defmodule PscWeb.UserLive.Login do
             <UIForm.form_message field={@form[:password]} />
           </UIForm.form_item>
           <UIButton.button
-            class="w-full gap-2"
+            class="w-full gap-2 mt-3"
             name={@form[:remember_me].name}
             value="true"
           >
-            Log in and stay logged in <span aria-hidden="true">→</span>
+            Log in <span aria-hidden="true">→</span>
           </UIButton.button>
           <UIButton.button variant="secondary" class="w-full mt-2">
             Log in only this time
