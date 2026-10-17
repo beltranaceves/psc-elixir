@@ -1,1 +1,1 @@
-web: bin/psc eval "Psc.Release.migrate()" && bin/server
+web: bin/psc eval "Psc.Release.migrate()" && PHX_SERVER=true bin/psc start
