@@ -124,7 +124,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
             {:noreply,
              socket
              |> put_flash(:info, "Canvas created from template")
-             |> redirect(to: ~p"/canvas-designer/#{canvas.id}")}
+             |> redirect(to: ~p"/canvases/#{canvas.id}")}
 
           {:error, _changeset} ->
             {:noreply, put_flash(socket, :error, "Failed to create canvas from template")}
@@ -182,7 +182,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         <div class="flex items-center justify-between mb-8">
           <h1 class="text-2xl font-semibold text-base-content">Templates</h1>
           <.link
-            navigate={~p"/canvas-layouts/new"}
+            navigate={~p"/templates/new"}
             class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
           >
             New Template
@@ -278,7 +278,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           Use Template
         </UIButton.button>
         <.link
-          navigate={~p"/canvas-layouts/#{@template.id}"}
+          navigate={~p"/templates/#{@template.id}"}
           class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-white/10 text-base-content hover:bg-white/5 transition-colors"
         >
           Edit

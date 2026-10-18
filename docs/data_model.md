@@ -1,8 +1,19 @@
 # Data model
 
 Ecto schemas as persisted today. Sharing is by email via the `shared_with` string
-array on documents, canvases, unstructured canvases, and canvas layouts; the
-`*_events` tables are the append-only operation logs used to rebuild state.
+array on documents, canvases, and templates; the `*_events` tables are the append-only
+operation logs used to rebuild state.
+
+**Terminology.** The domain words and the code identifiers differ:
+
+| Domain | Table | Schema | Surface |
+|---|---|---|---|
+| Canvas (configurable workspace) | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | `/canvases`, `PscWeb.UnstrCanvasLive` |
+| Template (reusable structure) | `canvas_layouts` | `Psc.Canvas.Layout` | `/templates`, `PscWeb.CanvasLayoutLive` |
+| Problem–Solution Canvas (fixed 12 cells) | `canvases` | `Psc.Canvas.Canvas` | `/psc-canvas`, `PscWeb.CanvasLive` |
+
+The `unstr_` prefix and the `canvas_layouts` name are historical; the vocabulary above
+is what docs and the UI use.
 
 ```mermaid
 erDiagram
@@ -109,4 +120,4 @@ Notes on the two canvas representations:
 
 - [architecture.md](architecture.md) — system-wide layering
 - [documents_collaboration_flow.md](documents_collaboration_flow.md) — how the event tables are written and pruned
-- [unstr_canvas_collaboration_flow.md](unstr_canvas_collaboration_flow.md) — how `cells` is updated
+- [canvas_collaboration_flow.md](canvas_collaboration_flow.md) — how `cells` is updated

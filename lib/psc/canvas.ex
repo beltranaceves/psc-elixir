@@ -309,8 +309,11 @@ defmodule Psc.Canvas do
   label/semantics/fields/defaults metadata) into the canvas cells shape
   (flat cell keys with row/column metadata and field values), per the
   editor spec.
+
+  `overrides` lets the caller supply a user-chosen name/description; anything
+  not given falls back to the template's own values.
   """
-  def instantiate_template(template, user_id) do
+  def instantiate_template(template, user_id, overrides \\ %{}) do
     lm = template.layout_map || %{}
     rows = lm["rows"] || []
     columns = lm["columns"] || []
@@ -322,11 +325,13 @@ defmodule Psc.Canvas do
       |> put_instantiated_cells(template_cells, layout, rows, columns)
       |> Map.put("relations", lm["relations"] || [])
 
-    attrs = %{
-      "name" => template.name,
-      "description" => template.description || "",
-      "cells" => cells
-    }
+    attrs =
+      %{
+        "name" => template.name,
+        "description" => template.description || "",
+        "cells" => cells
+      }
+      |> Map.merge(Map.reject(overrides || %{}, fn {_k, v} -> is_nil(v) or v == "" end))
 
     create_unstr_canvas(user_id, attrs)
   end

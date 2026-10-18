@@ -49,5 +49,5 @@ Two invariants worth remembering when changing this code:
 ## Related diagrams
 
 - [architecture.md](architecture.md) — system-wide layering
-- [unstr_canvas_collaboration_flow.md](unstr_canvas_collaboration_flow.md) — the per-cell equivalent
+- [canvas_collaboration_flow.md](canvas_collaboration_flow.md) — the per-cell equivalent
 - [data_model.md](data_model.md) — `documents` / `document_events` tables

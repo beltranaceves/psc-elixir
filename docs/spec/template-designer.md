@@ -1,12 +1,14 @@
-# Creator — Canvas Template Designer
+# Template designer
 
 ## Overview
 
-The creator lets users define **reusable canvas templates** and share them across users. A template captures the full structure of a canvas: grid dimensions, per-cell metadata (label, semantics, content fields), and relations between cells. Templates are the instantiation source for canvas instances — when a user creates a canvas from a template, the template's structure is copied into the canvas's `cells` map.
+The template designer lets users define **reusable templates** and share them across users. A template captures the full structure of a canvas: grid dimensions, per-cell metadata (label, semantics, content fields), and relations between cells. Templates are the instantiation source for canvases — when a user creates a canvas from a template, the template's structure is copied into the canvas's `cells` map.
+
+> **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.CanvasLayoutLive` (this template designer) and `PscWeb.UnstrCanvasLive` (the canvas editor), and the routes are `/templates` and `/canvases`.
 
 ### Design principle
 
-The Ecto entity is intentionally **flexible** (`:map` columns). The template stores its entire definition as a map, so the creator UI can support arbitrary grid sizes and cell configurations without schema migrations. The editor (see `editor.md`) decodes the same map structure at runtime — it is structure-agnostic and renders whatever the template defines.
+The Ecto entity is intentionally **flexible** (`:map` columns). The template stores its entire definition as a map, so the template designer UI can support arbitrary grid sizes and cell configurations without schema migrations. The editor (see `canvas-editor.md`) decodes the same map structure at runtime — it is structure-agnostic and renders whatever the template defines.
 
 ## Design System
 

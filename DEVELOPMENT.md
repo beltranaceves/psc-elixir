@@ -35,8 +35,8 @@ next. There is no silent auto-retry.
 DEVELOPMENT.md                    # HOW — this workflow document
 AGENTS.md                         # RULES — conventions (auth scopes, streams, forms, tests)
 docs/spec/                        # WHAT — one structured spec per feature area
-  creator.md                      #   canvas template creator/configurator  (stub — empty)
-  editor.md                       #   canvas editor                        (stub — empty)
+  template-designer.md            #   template designer (templates, cells, relations)
+  canvas-editor.md                #   canvas editor (grid, cells, presence)
   deltas.md                       #   delta model & versioning             (stub — empty)
   telemetry.md                    #   analytics / interaction capture      (stub — empty)
   analytics.md                    #   analytics derived views              (stub — empty)
@@ -513,15 +513,14 @@ pattern: `mix run scripts/verify_<topic>.exs`, deterministic output, exit non-ze
 
 ## First Specs
 
-The stubs in `docs/spec/` are empty and ready to be filled in. The first two to write are
-**`docs/spec/creator.md`** (the canvas template creator/configurator) and
-**`docs/spec/editor.md`** (the canvas editor). Together they are foundational: every other area
-(versioning, analytics, insights) operates on canvases instantiated from templates.
+The specs in `docs/spec/` are written: **`docs/spec/template-designer.md`** (the template
+designer) and **`docs/spec/canvas-editor.md`** (the canvas editor). Together they are
+foundational: every other area (versioning, analytics, insights) operates on canvases
+instantiated from templates.
 
-- `creator.md` — defining canvas structure (cells, relations, semantics) and templates;
+- `template-designer.md` — defining canvas structure (cells, relations, semantics) and templates;
   template persistence and instantiation of canvases
-- `editor.md` — the editor UI and components for creating and editing cells, on an
-  instantiated canvas
+- `canvas-editor.md` — the canvas editor UI and components for editing cells on a canvas
 
 Write them in the structured format above, with acceptance criteria and verification methods
 for each.

@@ -10,14 +10,14 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
   describe "index (template library)" do
     test "renders the template library page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts")
+      {:ok, _lv, html} = live(conn, ~p"/templates")
 
       assert html =~ "Templates"
       assert html =~ "Create New Template"
     end
 
     test "creates a template from the index form", %{conn: conn, user: user} do
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts")
+      {:ok, lv, _html} = live(conn, ~p"/templates")
 
       html =
         lv
@@ -35,7 +35,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
     test "own templates show the Owner badge", %{conn: conn, user: user} do
       CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Owned Tpl"})
 
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts")
+      {:ok, _lv, html} = live(conn, ~p"/templates")
 
       assert html =~ "Owned Tpl"
       assert html =~ "Owner"
@@ -47,7 +47,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       template = Canvas.list_templates(owner) |> List.first()
       {:ok, _} = Canvas.share_template_with(template, user.email)
 
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts")
+      {:ok, _lv, html} = live(conn, ~p"/templates")
 
       assert html =~ "Shared Tpl"
       assert html =~ "Shared"
@@ -58,7 +58,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Doomed Tpl"})
       [template] = Canvas.list_templates(user)
 
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts")
+      {:ok, lv, _html} = live(conn, ~p"/templates")
 
       lv
       |> element("button[phx-click='confirm_delete'][phx-value-id='#{template.id}']")
@@ -78,9 +78,9 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Instantiable"})
       [template] = Canvas.list_templates(user)
 
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts")
+      {:ok, lv, _html} = live(conn, ~p"/templates")
 
-      assert {:error, {:redirect, %{to: "/canvas-designer/" <> canvas_id}}} =
+      assert {:error, {:redirect, %{to: "/canvases/" <> canvas_id}}} =
                lv
                |> element("button[phx-click='instantiate'][phx-value-id='#{template.id}']")
                |> render_click()
@@ -92,15 +92,15 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
   describe "editor (designer)" do
     test "renders the new template page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts/new")
+      {:ok, _lv, html} = live(conn, ~p"/templates/new")
 
-      assert html =~ "New Template"
+      assert html =~ "New template"
       assert html =~ "Add Column"
       assert html =~ "Add Row"
     end
 
     test "adds a column and a row to the grid", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts/new")
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       html = lv |> element("button[phx-click='add_row']") |> render_click()
@@ -110,7 +110,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
     end
 
     test "selecting a cell opens the metadata panel with fields", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts/new")
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_row']") |> render_click()
@@ -128,7 +128,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
     end
 
     test "adds a field to the selected cell", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts/new")
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_row']") |> render_click()
@@ -146,7 +146,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
     end
 
     test "adds a relation between cells", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts/new")
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_column']") |> render_click()
@@ -165,17 +165,17 @@ defmodule PscWeb.CanvasLayoutLiveTest do
     end
 
     test "saves a new template and redirects to the library", %{conn: conn, user: user} do
-      {:ok, lv, _html} = live(conn, ~p"/canvas-layouts/new")
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_row']") |> render_click()
 
-      assert {:error, {:redirect, %{to: "/canvas-layouts"}}} =
+      assert {:error, {:redirect, %{to: "/templates"}}} =
                lv
                |> form("#template-form", %{"name" => "Saved Tpl", "description" => "desc"})
                |> render_submit()
 
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts")
+      {:ok, _lv, html} = live(conn, ~p"/templates")
       assert html =~ "Saved Tpl"
       assert Canvas.list_templates(user) |> Enum.any?(&(&1.name == "Saved Tpl"))
     end
@@ -183,9 +183,9 @@ defmodule PscWeb.CanvasLayoutLiveTest do
     test "editing an existing template loads its structure", %{conn: conn, user: user} do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Loaded Tpl"})
 
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts/#{template.id}")
+      {:ok, _lv, html} = live(conn, ~p"/templates/#{template.id}")
 
-      assert html =~ "Edit Template"
+      assert html =~ "Template designer"
       assert html =~ "Loaded Tpl"
       assert html =~ "Row 1"
       assert html =~ "Column 1"
@@ -195,8 +195,8 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       stranger = Psc.AccountsFixtures.user_fixture()
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: stranger.id})
 
-      assert {:error, {:redirect, %{to: "/canvas-layouts"}}} =
-               live(conn, ~p"/canvas-layouts/#{template.id}")
+      assert {:error, {:redirect, %{to: "/templates"}}} =
+               live(conn, ~p"/templates/#{template.id}")
     end
 
     test "shared non-owner sees read-only view without save controls", %{conn: conn, user: user} do
@@ -204,7 +204,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id, name: "RO Tpl"})
       {:ok, _} = Canvas.share_template_with(template, user.email)
 
-      {:ok, _lv, html} = live(conn, ~p"/canvas-layouts/#{template.id}")
+      {:ok, _lv, html} = live(conn, ~p"/templates/#{template.id}")
 
       assert html =~ "read-only"
       refute html =~ "Save Template"

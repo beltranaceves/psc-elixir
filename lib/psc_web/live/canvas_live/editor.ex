@@ -48,7 +48,7 @@ defmodule PscWeb.CanvasLive.Editor do
 
       {:ok, socket}
     else
-      {:ok, redirect(socket, to: ~p"/canvases")}
+      {:ok, redirect(socket, to: ~p"/psc-canvas")}
     end
   end
 
@@ -361,7 +361,7 @@ defmodule PscWeb.CanvasLive.Editor do
               <% end %>
             </div>
             <.link
-              navigate={~p"/canvases"}
+              navigate={~p"/psc-canvas"}
               class="inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors mt-4"
             >
               <.icon name="hero-arrow-left" class="w-4 h-4" /> Back

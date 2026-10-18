@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * Unstructured canvas editor (/canvas-designer) E2E tests.
+ * Unstructured canvas editor (/canvases) E2E tests.
  *
  * test 1 — single-player: create a canvas, edit a cell through the
  *   MarkdownField hook (click → type → blur), watch the autosave badge go
@@ -37,7 +37,7 @@ async function dismissFlash(page: Page): Promise<void> {
 
 /** Create a canvas from the index page and open its editor. */
 async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
-  await page.goto('/canvas-designer');
+  await page.goto('/canvases');
   await page.locator('.phx-connected').first().waitFor();
 
   await page.getByPlaceholder('Enter canvas name...').fill(name);
@@ -50,7 +50,7 @@ async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
   const card = page.locator(`h3:text-is("${name}")`).locator('..');
   await card.getByRole('link', { name: 'Edit' }).click();
 
-  await page.waitForURL(/\/canvas-designer\/[0-9a-f-]{36}/);
+  await page.waitForURL(/\/canvases\/[0-9a-f-]{36}/);
   await expect(page.locator('#canvas-name-form')).toBeVisible();
   return page.url();
 }

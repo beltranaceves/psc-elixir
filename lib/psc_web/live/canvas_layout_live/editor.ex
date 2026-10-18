@@ -51,14 +51,14 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
               {:ok,
                socket
                |> put_flash(:error, "Template not found")
-               |> redirect(to: ~p"/canvas-layouts")}
+               |> redirect(to: ~p"/templates")}
             end
 
           _ ->
             {:ok,
              socket
              |> put_flash(:error, "Template not found")
-             |> redirect(to: ~p"/canvas-layouts")}
+             |> redirect(to: ~p"/templates")}
         end
     end
   end
@@ -219,7 +219,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
         {:noreply,
          socket
          |> put_flash(:info, "Template saved")
-         |> redirect(to: ~p"/canvas-layouts")}
+         |> redirect(to: ~p"/templates")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to save template")}
@@ -376,7 +376,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       <div class="px-4 py-8">
         <div class="flex items-center justify-between mb-6">
           <h1 class="text-2xl font-semibold text-base-content">
-            {if @editing_layout, do: "Edit Template", else: "New Template"}
+            {if @editing_layout, do: "Template designer", else: "New template"}
           </h1>
           <div class="flex items-center gap-2">
             <%= if @owner? do %>
@@ -385,7 +385,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
               </UIButton.button>
             <% end %>
             <.link
-              navigate={~p"/canvas-layouts"}
+              navigate={~p"/templates"}
               class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-white/10 text-base-content hover:bg-white/5 transition-colors"
             >
               Back to Templates

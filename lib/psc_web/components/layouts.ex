@@ -55,13 +55,13 @@ defmodule PscWeb.Layouts do
           Documents
         </.link>
         <.link
-          navigate={~p"/canvas-designer"}
+          navigate={~p"/canvases"}
           class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
         >
-          Canvas Designer
+          Canvases
         </.link>
         <.link
-          navigate={~p"/canvas-layouts"}
+          navigate={~p"/templates"}
           class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
         >
           Templates

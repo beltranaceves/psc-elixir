@@ -18,6 +18,8 @@ it costs, and the evidence it was verified against.
 | [ADR-006](#adr-006--prune-what-is-folded-never-overwrite-the-oldest-rows) | Prune what is folded; never overwrite the oldest rows | Accepted | 2026-10-18 |
 | [ADR-007](#adr-007--fold-immediately-when-pending-operations-exceed-a-threshold) | Fold immediately when pending operations exceed a threshold | Accepted | 2026-10-18 |
 | [ADR-008](#adr-008--documentscontent-is-the-single-folded-representation) | `documents.content` is the single folded representation | Accepted | 2026-10-18 |
+| [ADR-009](#adr-009--creating-a-canvas-from-a-template-goes-through-the-context) | Creating a canvas from a template goes through the context | Accepted | 2026-10-18 |
+| [ADR-010](#adr-010--vocabulary-canvas-template-canvas-editor-template-designer) | Vocabulary: canvas, template, canvas editor, template designer | Accepted | 2026-10-18 |
 
 ---
 
@@ -42,7 +44,7 @@ the configurable canvas (`unstr_canvases`).
   a bare read, because saving deletes the operations it covered.
 
 See [documents_collaboration_flow.md](documents_collaboration_flow.md) and
-[unstr_canvas_collaboration_flow.md](unstr_canvas_collaboration_flow.md) for the
+[canvas_collaboration_flow.md](canvas_collaboration_flow.md) for the
 sequence diagrams.
 
 **Alternatives considered.**
@@ -296,6 +298,67 @@ is re-added. The migration ran at boot on the first deploy after this change
 
 ---
 
+## ADR-009 — Creating a canvas from a template goes through the context
+
+**Context.** Templates store cell data nested (`layout_map["cells"]["r1_c1"] = %{label, semantics, fields, defaults}`), while a canvas stores it flat (`cells["r1_c1"] = %{row, column, content, …}`). `Canvas.instantiate_template/2` performs that transformation, but the Canvas list page's create form didn't call it — it copied the template's `layout_map` straight into the canvas:
+
+```elixir
+case Canvas.get_canvas_layout(layout_id) do
+  %{} = layout -> Map.put(attrs, "cells", layout.layout_map || %{})
+```
+
+`UnstrCanvas.validate_cells_structure/1` requires a flat entry for every key in `layout`, so the changeset rejected it and the user saw "Failed to create canvas". Proven in a rolled-back transaction:
+
+```
+PATH A (index: copies layout_map verbatim):
+  FAILED validation: [cells: {"Missing cell data for keys: r1_c1", []}]
+PATH B (spec: Canvas.instantiate_template/2):
+  created, cells keys = ["columns", "layout", "r1_c1", "relations", "rows"]
+```
+
+The Templates library's "Use template" button was already correct — only this second entry point was broken. It is the same failure mode as ADR-002: a tested context function that the UI bypassed.
+
+**Decision.** The create form instantiates through the context, and only from a template the user may use:
+
+```elixir
+defp create_canvas(user, name, description, template_id) do
+  case template_for(user, template_id) do
+    {:ok, template} -> Canvas.instantiate_template(template, user.id, %{"name" => name, ...})
+    :blank          -> Canvas.create_unstr_canvas(user.id, %{"name" => name, ...})
+    {:error, reason} -> {:error, reason}
+  end
+end
+```
+
+`instantiate_template/3` gained an `overrides` argument so the name and description the user typed win over the template's own. The dropdown is populated by the scoped `Canvas.list_templates/1` (own templates plus ones shared with the user), not the unscoped `Canvas.list_canvas_layouts/0` — which previously listed **every** template in the database, i.e. a name leak that would have become un-authorised instantiation once the transformation was fixed. The handler also re-checks `can_access_template?/2`, so a forged id is refused rather than trusted.
+
+**Consequences.** There is now one path from template to canvas, and the access rule is enforced at the point of use rather than by UI omission. Covered by `test/psc_web/live/unstr_canvas_live_test.exs`: template create produces flat cell keys, blank create still yields the default PSC structure, the options exclude other users' templates, and a forged id leaves the canvas list empty.
+
+---
+
+## ADR-010 — Vocabulary: canvas, template, canvas editor, template designer
+
+**Context.** The codebase accumulated four names for two concepts: an *unstructured canvas* / *unstr canvas* / *canvas instance*, and a *canvas layout* / *layout* / *template* / *creator*. The routes made it worse — `/canvas-designer` was the canvas **editor** while `/canvas-layouts` was the **template** designer — and `/canvases` was already taken by the earlier fixed-12-cell PSC implementation, which duplicated the newer one. For a report and for users, this is noise.
+
+**Decision.** Two nouns, two surface names:
+
+| Domain | Table | Schema | Route | Surface |
+|---|---|---|---|---|
+| **Canvas** | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | `/canvases` | **canvas editor** (`PscWeb.UnstrCanvasLive`) |
+| **Template** | `canvas_layouts` | `Psc.Canvas.Layout` | `/templates` | **template designer** (`PscWeb.CanvasLayoutLive`) |
+| Problem–Solution Canvas (fixed 12 cells) | `canvases` | `Psc.Canvas.Canvas` | `/psc-canvas` | legacy canvas |
+
+- `/canvas-designer` → `/canvases`; `/canvas-layouts` → `/templates`.
+- UI text follows the nouns (nav reads Documents · Canvases · Templates; the create form's "Layout" selector is now "Template"; the template designer's heading is "Template designer").
+- Docs follow too: `docs/spec/creator.md` → `template-designer.md`, `docs/spec/editor.md` → `canvas-editor.md`, and `unstr_canvas_collaboration_flow.md` → `canvas_collaboration_flow.md`. Each spec opens with a table bridging the domain words to the identifiers.
+- **Module, table and function names are unchanged.** Renaming `unstr_canvases`/`canvas_layouts` would mean a table migration and a wide rename for no user-visible gain; instead the mapping is documented once ([data_model.md](data_model.md)) and repeated at the top of each spec.
+
+**Alternatives considered.** A full rename of tables and modules to match the vocabulary — deferred as churn with migration risk. Keeping the old routes as redirects — skipped because the app is pre-release and no external links depend on them.
+
+**Consequences.** The legacy fixed-PSC canvas moved from `/canvases` to `/psc-canvas`; it is unreachable from the navigation and its fate (retire, or fold its data into a built-in template) is an open question, recorded below rather than decided here.
+
+---
+
 ## Measurement summary
 
 Numbers referenced above, all taken on 2026-10-18 against a local Postgres and the
@@ -326,3 +389,10 @@ deployed Gigalixir instance:
 5. **Free-tier row ceiling** (ADR-006) — the numbers above make a single document fit
    comfortably, but the ceiling is still a design constraint for the analytics work in
    the proposal.
+6. **The legacy fixed-PSC canvas** (`/psc-canvas`, ADR-010) is still routed and tested
+   but unreachable from the navigation; decide whether to retire it or express the PSC
+   as a built-in template for the configurable canvas.
+7. **Canvas structure editing is template-only** — the canvas editor spec defines
+   `add_row` / `remove_row` / `add_column` / `remove_column` / `add_cell_field` /
+   `remove_cell_field` as CRDT operations, but grid structure can currently only be
+   changed in the template designer.

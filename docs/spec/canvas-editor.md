@@ -1,16 +1,18 @@
-# Editor — Canvas Instance Editor
+# Canvas editor
 
 ## Overview
 
-The editor renders and edits an **unstructured canvas instance**. It is structure-agnostic: it decodes the canvas's `cells` map and renders whatever grid dimensions, cells, and cell fields are defined. All edits flow through CRDT operations for real-time multi-user collaboration.
+The canvas editor renders and edits a **canvas**. It is structure-agnostic: it decodes the canvas's `cells` map and renders whatever grid dimensions, cells, and cell fields are defined. All edits flow through CRDT operations for real-time multi-user collaboration.
+
+> **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.UnstrCanvasLive` (this canvas editor) and `PscWeb.CanvasLayoutLive` (the template designer), and the routes are `/canvases` and `/templates`.
 
 ### Design principle
 
-The editor does **not** hardcode the 12-cell PSC grid. It reads `cells.rows`, `cells.columns`, `cells.layout`, and per-cell field data from the `cells` map and renders dynamically. This means any template (see `creator.md`) can be instantiated and edited without editor changes.
+The editor does **not** hardcode the 12-cell PSC grid. It reads `cells.rows`, `cells.columns`, `cells.layout`, and per-cell field data from the `cells` map and renders dynamically. This means any template (see `template-designer.md`) can be instantiated and edited without editor changes.
 
 ## Design System
 
-See `creator.md` → **Design System** for the full design direction. The editor follows the same "calm analytical workspace" vibe. Key notes specific to the editor:
+See `template-designer.md` → **Design System** for the full design direction. The editor follows the same "calm analytical workspace" vibe. Key notes specific to the editor:
 
 ### Editor-Specific UI
 
@@ -45,7 +47,7 @@ No schema changes. The editor works entirely within the existing `unstr_canvases
 }
 ```
 
-The editor treats everything except `rows`, `columns`, and `layout` as a cell key. Each cell's fields are whatever keys are present (beyond `row` and `column` which are metadata).
+The editor treats everything except `rows`, `columns`, and `layout` as a cell key. Each cell's fields are whatever keys are present **beyond the metadata keys** — `row` and `column`, plus `label` (rendered as the cell header) and `semantics` (the cell's classification, reserved for iconography and insights). Metadata is never rendered as an editable content field.
 
 ## File Plan
 

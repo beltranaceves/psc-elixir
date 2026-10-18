@@ -5,6 +5,9 @@ Authentication lives entirely at the router level: `:fetch_current_scope_for_use
 in the `:browser` pipeline, and each `live_session` attaches the matching `on_mount`
 hook.
 
+Terminology: a **canvas** is a configurable workspace instance; a **template** is the
+reusable structure it is created from.
+
 ```mermaid
 flowchart TD
     subgraph PUB["pipeline :browser (no auth) — live_session :current_user"]
@@ -17,9 +20,9 @@ flowchart TD
 
     subgraph PRIV["require_authenticated_user — live_session :require_authenticated_user"]
         R6["/documents · /documents/:id"] --> V4["DocumentLive.Index · Editor"]
-        R7["/canvases · /canvases/:id"] --> V5["CanvasLive.Index · Editor"]
-        R8["/canvas-designer · /canvas-designer/:id"] --> V6["UnstrCanvasLive.Index · Editor"]
-        R9["/canvas-layouts · new · :id"] --> V7["CanvasLayoutLive.Index · Editor"]
+        R7["/canvases · /canvases/:id"] --> V5["UnstrCanvasLive.Index · Editor<br/>(canvas editor)"]
+        R8["/templates · /templates/new · /templates/:id"] --> V6["CanvasLayoutLive.Index · Editor<br/>(template designer)"]
+        R9["/psc-canvas · /psc-canvas/:id"] --> V7["CanvasLive.Index · Editor<br/>(fixed 12-cell PSC)"]
         R10["/users/settings"] --> V8["UserLive.Settings"]
     end
 
@@ -29,9 +32,9 @@ flowchart TD
     end
 
     V4 --> DC2["Psc.Documents"]
-    V5 --> CA2["Psc.Canvas (Canvas + cell embeds)"]
+    V5 --> CA2["Psc.Canvas (UnstrCanvas + cells)"]
     V6 --> CA2
-    V7 --> CA2
+    V7 --> CA3["Psc.Canvas (Canvas + cell embeds)"]
     V3 --> AC2["Psc.Accounts"]
     V8 --> AC2
     C1 --> AC2

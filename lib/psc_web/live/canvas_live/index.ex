@@ -119,7 +119,7 @@ defmodule PscWeb.CanvasLive.Index do
                   <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4 flex gap-2">
                     <.link
-                      navigate={~p"/canvases/#{canvas.id}"}
+                      navigate={~p"/psc-canvas/#{canvas.id}"}
                       class="flex-1 px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       Edit
@@ -155,7 +155,7 @@ defmodule PscWeb.CanvasLive.Index do
                   <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4">
                     <.link
-                      navigate={~p"/canvases/#{canvas.id}"}
+                      navigate={~p"/psc-canvas/#{canvas.id}"}
                       class="block w-full px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       View

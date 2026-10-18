@@ -20,9 +20,9 @@ test.describe('authenticated app', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Canvases' })).toBeVisible();
   });
 
-  test('canvas layouts index loads', async ({ page }) => {
-    await page.goto('/canvas-layouts');
-    await expect(page).toHaveURL(/\/canvas-layouts/);
+  test('templates index loads', async ({ page }) => {
+    await page.goto('/templates');
+    await expect(page).toHaveURL(/\/templates/);
     await expect(page.getByRole('heading', { level: 1, name: 'Templates' })).toBeVisible();
   });
 });

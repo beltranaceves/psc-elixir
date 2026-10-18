@@ -54,7 +54,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       {:ok,
        socket
        |> put_flash(:error, "Canvas not found")
-       |> redirect(to: ~p"/canvas-designer")}
+       |> redirect(to: ~p"/canvases")}
     end
   end
 
@@ -413,7 +413,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               </UIBadge.badge>
           <% end %>
           <.link
-            navigate={~p"/canvas-designer"}
+            navigate={~p"/canvases"}
             class="text-sm text-base-content/60 hover:text-base-content transition-colors ml-6 shrink-0"
           >
             Back to Canvases
@@ -540,7 +540,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                           <% cell_data =
                             get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
                           <% title =
-                            Map.get(cell_data, "name") || Map.get(cell_data, "title") || cell_key %>
+                            Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
+                              Map.get(cell_data, "title") || cell_key %>
 
                           <div class="bg-base-300 p-3 rounded-lg">
                             <div class="mb-2">
@@ -553,7 +554,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
                               <div class="mt-2 grid gap-2 text-sm">
                                 <%= for {field, value} <- cell_data do %>
-                                  <%= if field not in ["row", "column"] do %>
+                                  <%= if field not in ["row", "column", "label", "semantics"] do %>
                                     <div class="flex flex-col">
                                       <label class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-1">
                                         {field}

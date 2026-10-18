@@ -13,46 +13,38 @@ defmodule PscWeb.UnstrCanvasLive.Index do
 
     my_canvases = Canvas.list_user_unstr_canvases(user_id)
     shared_canvases = Canvas.list_shared_unstr_canvases(user_email)
-    layouts = Canvas.list_canvas_layouts()
-    layout_options = [{"Default", ""} | Enum.map(layouts, fn l -> {l.name, l.id} end)]
+    # Only templates this user may use: their own plus ones shared with them.
+    templates = Canvas.list_templates(socket.assigns.current_scope.user)
+    template_options = [{"Blank canvas", ""} | Enum.map(templates, &{&1.name, &1.id})]
 
     {:ok,
      socket
      |> assign(:my_canvases, my_canvases)
      |> assign(:shared_canvases, shared_canvases)
      |> assign(:new_canvas_form, to_form(%{}))
-     |> assign(:layouts, layouts)
-     |> assign(:layout_options, layout_options)}
+     |> assign(:templates, templates)
+     |> assign(:template_options, template_options)}
   end
 
   @impl true
   def handle_event("create_canvas", params, socket) do
     name = params["name"]
     description = params["description"]
-    layout_id = params["layout_id"]
+    template_id = params["template_id"]
 
-    user_id = socket.assigns.current_scope.user.id
+    user = socket.assigns.current_scope.user
 
-    attrs = %{"name" => name, "description" => description}
-
-    attrs =
-      if is_binary(layout_id) and layout_id != "" do
-        case Canvas.get_canvas_layout(layout_id) do
-          %{} = layout -> Map.put(attrs, "cells", layout.layout_map || %{})
-          _ -> attrs
-        end
-      else
-        attrs
-      end
-
-    case Canvas.create_unstr_canvas(user_id, attrs) do
+    case create_canvas(user, name, description, template_id) do
       {:ok, _canvas} ->
-        my_canvases = Canvas.list_user_unstr_canvases(user_id)
+        my_canvases = Canvas.list_user_unstr_canvases(user.id)
 
         {:noreply,
          socket
          |> assign(:my_canvases, my_canvases)
          |> put_flash(:info, "Canvas created successfully")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You do not have access to that template")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to create canvas")}
@@ -77,6 +69,43 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     end
   end
 
+  # A template is instantiated through the context, which transforms the
+  # template's nested cell metadata into the flat cell shape a canvas expects —
+  # copying the template's layout_map verbatim is rejected by the canvas
+  # changeset. The name/description typed in the form win over the template's.
+  defp create_canvas(user, name, description, template_id) do
+    case template_for(user, template_id) do
+      {:ok, template} ->
+        Canvas.instantiate_template(template, user.id, %{
+          "name" => name,
+          "description" => description || ""
+        })
+
+      :blank ->
+        Canvas.create_unstr_canvas(user.id, %{"name" => name, "description" => description})
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp template_for(_user, template_id) when template_id in [nil, ""], do: :blank
+
+  defp template_for(user, template_id) do
+    # get_template_with_author/1 preloads :author, which can_access_template?/2 reads
+    case Canvas.get_template_with_author(template_id) do
+      nil ->
+        {:error, :not_found}
+
+      template ->
+        if Canvas.can_access_template?(template, user.email) do
+          {:ok, template}
+        else
+          {:error, :unauthorized}
+        end
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -87,7 +116,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     >
       <div class="max-w-6xl mx-auto px-4 py-8">
         <div class="flex items-center justify-between mb-8">
-          <h1 class="text-2xl font-semibold text-base-content">Canvas Designer</h1>
+          <h1 class="text-2xl font-semibold text-base-content">Canvases</h1>
           <.link
             navigate={~p"/documents"}
             class="text-sm text-base-content/60 hover:text-base-content transition-colors"
@@ -119,10 +148,10 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               placeholder="Enter canvas description..."
             />
             <.input
-              field={@new_canvas_form[:layout_id]}
+              field={@new_canvas_form[:template_id]}
               type="select"
-              options={@layout_options}
-              label="Layout"
+              options={@template_options}
+              label="Template"
             />
             <.button type="submit">
               Create Canvas
@@ -145,7 +174,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                   <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4 flex gap-2">
                     <.link
-                      navigate={~p"/canvas-designer/#{canvas.id}"}
+                      navigate={~p"/canvases/#{canvas.id}"}
                       class="flex-1 px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       Edit
@@ -181,7 +210,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                   <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4">
                     <.link
-                      navigate={~p"/canvas-designer/#{canvas.id}"}
+                      navigate={~p"/canvases/#{canvas.id}"}
                       class="block w-full px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       View
