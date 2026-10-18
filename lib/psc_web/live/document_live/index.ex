@@ -5,6 +5,7 @@ defmodule PscWeb.DocumentLive.Index do
   import PscWeb.Components.UI.Button
 
   alias Psc.Documents
+  alias PscWeb.Components.UI.Input, as: UIInput
 
   @impl true
   def mount(_params, _session, socket) do
@@ -89,28 +90,49 @@ defmodule PscWeb.DocumentLive.Index do
         </div>
 
         <%= if @show_new_form do %>
-          <div class="mb-8 rounded-xl border border-white/10 bg-base-200 p-6">
+          <div class="mb-8 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-base-200 to-base-200 p-6 shadow-xl shadow-primary/5">
+            <div class="flex items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                <.icon name="hero-document-plus" class="h-5 w-5" />
+              </div>
+              <div>
+                <h2 class="font-semibold text-base-content">Start a new document</h2>
+                <p class="mt-1 text-sm text-base-content/60">
+                  Give your document a name, then start writing in Markdown.
+                </p>
+              </div>
+            </div>
+
             <.form
               for={nil}
               id="new-document-form"
               phx-submit="create_document"
               phx-change="update_title"
-              class="flex gap-4"
+              class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start"
             >
-              <.input
-                name="title"
-                type="text"
-                placeholder="Document title..."
-                value={@new_title}
-                required
-                class="flex-1"
-              />
-              <.button type="submit" disabled={String.trim(@new_title) == ""}>
-                Create
-              </.button>
-              <.button type="button" variant="secondary" phx-click="cancel_new">
-                Cancel
-              </.button>
+              <div class="relative min-w-0 flex-1">
+                <.icon
+                  name="hero-pencil-square"
+                  class="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-base-content/40"
+                />
+                <UIInput.input
+                  id="new-document-title"
+                  name="title"
+                  type="text"
+                  placeholder="Give your document a name..."
+                  value={@new_title}
+                  required
+                  class="h-12 rounded-xl border-white/10 bg-base-300/70 pl-11 pr-4 shadow-inner transition focus:border-primary focus:bg-base-300 focus:ring-4 focus:ring-primary/10"
+                />
+              </div>
+              <div class="flex gap-2 sm:shrink-0">
+                <.button type="submit" class="h-12 px-5" disabled={String.trim(@new_title) == ""}>
+                  Create
+                </.button>
+                <.button type="button" variant="secondary" class="h-12" phx-click="cancel_new">
+                  Cancel
+                </.button>
+              </div>
             </.form>
           </div>
         <% end %>

@@ -12,7 +12,7 @@ flowchart LR
     subgraph CLIENT["Browser — assets/js (esbuild + Tailwind v4)"]
         direction TB
         LS["LiveView client<br/>websocket /live"]
-        EH["EditorHook<br/>textarea diff + cursor"]
+        DEH["DocumentEditorHook<br/>focus-driven Markdown preview + cursor"]
         CH["CellHook<br/>markdown cell editing"]
         MF["MarkdownField"]
         SUI["SaladUI component hooks<br/>dialog · tabs · popover · toast …"]
@@ -50,11 +50,11 @@ flowchart LR
     PG[("PostgreSQL")]
     GIG["Gigalixir release<br/>migrate-on-boot"]
 
-    LS --- EH
+    LS --- DEH
     LS --- CH
     LS --- MF
     LS --- SUI
-    EH -->|"update_content · update_cursor"| LV
+    DEH -->|"update_content · render_document · update_cursor"| LV
     CH -->|"update_cell · render_field"| LV
     LV -->|"content_updated · cell_updated · field_rendered"| LS
 

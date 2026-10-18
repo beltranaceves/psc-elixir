@@ -11,6 +11,7 @@ defmodule PscWeb.DocumentLive.Editor do
   alias Psc.Documents
   alias Psc.Documents.CRDT
   alias Psc.Documents.ConsistencyManager
+  alias PscWeb.Markdown
   alias PscWeb.Presence
 
   # Check every 5 seconds
@@ -131,7 +132,12 @@ defmodule PscWeb.DocumentLive.Editor do
         |> assign(:pending_events, pending_events)
       end
 
-    {:noreply, assign(socket, :content, new_content)}
+    socket =
+      socket
+      |> assign(:content, new_content)
+      |> push_document_render(new_content)
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -142,6 +148,11 @@ defmodule PscWeb.DocumentLive.Editor do
     })
 
     {:noreply, assign(socket, cursor_pos: pos)}
+  end
+
+  @impl true
+  def handle_event("render_document", %{"content" => content}, socket) do
+    {:noreply, push_document_render(socket, content)}
   end
 
   @impl true
@@ -273,6 +284,7 @@ defmodule PscWeb.DocumentLive.Editor do
           "newContent" => new_content,
           "fromUserId" => user_id
         })
+        |> push_document_render(new_content)
 
       {:noreply, assign(socket, content: new_content)}
     else
@@ -302,6 +314,7 @@ defmodule PscWeb.DocumentLive.Editor do
             # Special ID indicating server resync
             "fromUserId" => -1
           })
+          |> push_document_render(server_text)
 
         # Log the divergence for debugging
         :telemetry.execute(
@@ -317,6 +330,13 @@ defmodule PscWeb.DocumentLive.Editor do
   defp handle_presence_change(socket, document_id) do
     presence_list = Presence.list("presence:#{document_id}")
     assign(socket, presence: presence_list)
+  end
+
+  defp push_document_render(socket, content) do
+    push_event(socket, "document_rendered", %{
+      content: content,
+      html: Markdown.render(content, empty_message: "Start writing in the editor.")
+    })
   end
 
   @impl true
@@ -363,27 +383,53 @@ defmodule PscWeb.DocumentLive.Editor do
           </div>
         </div>
 
-        <div class="flex flex-1 overflow-hidden bg-base-100">
-          <%!-- Editor --%>
-          <div class="flex-1 flex flex-col">
-            <.form
-              for={%{}}
-              id="editor-form"
-              phx-change="update_content"
-              phx-debounce="300"
-              class="flex-1 flex flex-col"
+        <div class="flex min-h-0 flex-1 overflow-hidden bg-base-100">
+          <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div
+              id="document-editor"
+              phx-hook="DocumentEditorHook"
+              phx-update="ignore"
+              class="flex min-h-0 flex-1 flex-col"
             >
-              <textarea
-                name="content"
-                id="editor"
-                phx-hook="EditorHook"
-                phx-update="ignore"
-                data-current-user-id={@user_id}
-                class="flex-1 resize-none border-0 p-6 font-mono text-sm bg-base-100 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
-                placeholder="Start typing..."
-                value={@content}
-              ></textarea>
-            </.form>
+              <div class="flex items-center justify-between border-b border-white/10 bg-base-200/40 px-6 py-3">
+                <span class="text-sm font-medium text-base-content" data-editor-mode>
+                  Markdown preview
+                </span>
+                <span class="text-xs text-base-content/50" data-editor-hint>Click to edit</span>
+              </div>
+              <div class="relative min-h-0 flex-1">
+                <.form
+                  for={%{}}
+                  id="editor-form"
+                  phx-change="update_content"
+                  phx-debounce="300"
+                  class="absolute inset-0 hidden h-full"
+                >
+                  <textarea
+                    name="content"
+                    id="editor"
+                    data-current-user-id={@user_id}
+                    class="h-full w-full resize-none border-0 bg-base-100 p-6 font-mono text-sm leading-6 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                    placeholder="Start writing in Markdown..."
+                    value={@content}
+                  ></textarea>
+                </.form>
+
+                <div
+                  id="document-markdown-preview"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Edit document content"
+                  class="absolute inset-0 cursor-text overflow-y-auto bg-base-100 p-6 transition-colors hover:bg-base-200/30"
+                >
+                  <article class="markdown-preview prose prose-invert max-w-none break-words">
+                    {Phoenix.HTML.raw(
+                      Markdown.render(@content, empty_message: "Start writing in the editor.")
+                    )}
+                  </article>
+                </div>
+              </div>
+            </div>
           </div>
 
           <%!-- Presence Sidebar --%>

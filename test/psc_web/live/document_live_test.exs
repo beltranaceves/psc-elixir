@@ -23,6 +23,7 @@ defmodule PscWeb.DocumentLiveTest do
       lv |> element("button[phx-click='show_new_form']") |> render_click()
 
       assert has_element?(lv, "#new-document-form")
+      assert has_element?(lv, "#new-document-title")
     end
 
     test "lists only the current user's documents", %{conn: conn, user: user} do
@@ -65,6 +66,19 @@ defmodule PscWeb.DocumentLiveTest do
   end
 
   describe "editor" do
+    test "renders Markdown content in the inline preview", %{conn: conn, user: user} do
+      document = DocumentsFixtures.document_fixture(%{user: user})
+      {:ok, _document} = Documents.save_content_to_db(document.id, "# Project notes\n\n**Ready**")
+
+      {:ok, lv, html} = live(conn, ~p"/documents/#{document.id}")
+
+      assert has_element?(lv, "#document-editor[phx-hook='DocumentEditorHook']")
+      assert has_element?(lv, "#document-markdown-preview")
+      assert has_element?(lv, "#editor-form")
+      assert html =~ "<h1>\nProject notes</h1>"
+      assert html =~ "<strong>Ready</strong>"
+    end
+
     test "debounces content changes on the server round trip", %{conn: conn, user: user} do
       document = DocumentsFixtures.document_fixture(%{user: user})
       {:ok, lv, _html} = live(conn, ~p"/documents/#{document.id}")

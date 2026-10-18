@@ -8,7 +8,7 @@ ticks. Loading replays only the events after `snapshot_seq`.
 sequenceDiagram
     autonumber
     actor U as User (browser)
-    participant H as "EditorHook (JS)"
+    participant H as "DocumentEditorHook (JS)"
     participant LW as "DocumentLive.Editor"
     participant D as "Psc.Documents"
     participant DB as "PostgreSQL"
@@ -16,6 +16,9 @@ sequenceDiagram
     participant O as "Other editors' LiveViews"
 
     Note over LW,PS: mount/3 — subscribe "document:id" + "presence:id",<br/>Presence.track/4, load content via SnapshotManager
+    H->>H: preview mode until the editor receives focus
+    U->>H: click preview
+    H->>H: show raw Markdown textarea
     U->>H: keystroke (debounced 300 ms by phx-debounce)
     H->>LW: pushEvent "update_content" (full text)
     LW->>D: CRDT.text_to_deltas(old, new)
@@ -29,6 +32,10 @@ sequenceDiagram
     end
     LW->>PS: Presence.update(cursor_pos)
     PS-->>O: presence_diff → peer list / cursors
+    U->>H: blur textarea
+    H->>LW: pushEvent "render_document" (current text)
+    LW-->>H: push_event "document_rendered" (Earmark Markdown → HTML)
+    H->>H: show inline preview
     Note over LW,DB: fold when pending ops reach 500,<br/>else on idle (1.5 s) or periodic (10 s) tick
     LW->>D: save_content_to_db(content)
     D->>DB: UPDATE documents SET content, snapshot_seq = max(seq)<br/>DELETE document_events folded into the snapshot

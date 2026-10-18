@@ -9,6 +9,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias PscWeb.Components.UI.Input, as: UIInput
 
   alias Psc.Canvas
+  alias PscWeb.Markdown
   alias PscWeb.Presence
   require Logger
 
@@ -202,25 +203,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         %{"cell_key" => cell_key, "field" => field, "value" => value},
         socket
       ) do
-    html =
-      case value do
-        nil ->
-          ""
-
-        v ->
-          trimmed = String.trim(v || "")
-
-          if trimmed == "" do
-            # placeholder HTML for empty fields (keeps area clickable)
-            "<div class=\"p-2 rounded bg-base-300 text-base-content/40\">Click to edit</div>"
-          else
-            try do
-              Earmark.as_html!(v || "")
-            rescue
-              _ -> Phoenix.HTML.html_escape(v || "") |> Phoenix.HTML.safe_to_string()
-            end
-          end
-      end
+    html = Markdown.render(value)
 
     socket = push_event(socket, "field_rendered", %{cell_key: cell_key, field: field, html: html})
     {:noreply, socket}
