@@ -47,7 +47,7 @@ No schema changes. The editor works entirely within the existing `unstr_canvases
 }
 ```
 
-The editor treats everything except `rows`, `columns`, and `layout` as a cell key. Each cell's fields are whatever keys are present **beyond the metadata keys** — `row` and `column`, plus `label` (rendered as the cell header) and `semantics` (the cell's classification, reserved for iconography and insights). Metadata is never rendered as an editable content field.
+The editor treats everything except `rows`, `columns`, and `layout` as a cell key. Each cell's fields are whatever keys are present **beyond the metadata keys** — `row` and `column`, plus `label` (rendered as the cell header). Metadata is never rendered as an editable content field. Older canvases may still contain a `semantics` key from earlier templates; it is filtered out and never shown.
 
 ## File Plan
 
@@ -71,6 +71,20 @@ The existing operations (`update_cell`, `update_name`, `update_description`) are
 %{"type" => "update_name", "value" => value}
 %{"type" => "update_description", "value" => value}
 ```
+
+### Accents (read-only in the editor)
+
+Accents are authored exclusively in the template designer and stored in the template's
+`layout_map` JSON (`rows[].accent` / `columns[].accent`, tokens from
+`Psc.Canvas.Accent`). `Canvas.instantiate_template/3` copies the row/column metadata
+verbatim, so the canvas editor renders the bars from its own `cells` JSON:
+
+- `accent_bar` on the top edge of each column header (`accent-bar-column-<id>`).
+- `accent_bar` on the left edge of each row header (`accent-bar-row-<id>`).
+
+There is **no picker and no accent operation** in the editor — no
+`update_column_accent` / `update_row_accent` CRDT ops exist. Recolouring a template does
+not retro-update canvases already created from it (same rule as labels). See ADR-011.
 
 ### New operations
 
@@ -160,9 +174,8 @@ Structure editing is **owner-only** — shared users can edit cell content but n
 
 ### Sharing UI
 
-Unchanged from existing implementation:
-- Email input + "Share" button in the sidebar.
-- List of shared users with × to unshare.
+- A **Share** combo button in the header (heroicons `hero-share` + label), visible to the owner.
+- It opens the shared `PscWeb.Components.ShareDialog` modal: email invite form, the list of people with access (each with a remove ×), and a Done action. The old inline sidebar sharing block is gone; the sidebar keeps presence badges only.
 - `can_access_canvas?` gates the entire editor route.
 
 ### Auto-save
@@ -199,7 +212,6 @@ The index page has a "New canvas" button that opens a creation form with:
 
 - Inline comments or discussion threads on cells
 - Drag-and-drop cell reordering or resizing
-- Visual relation arrows between cells (from template relations)
 - Export or import of canvas content
 - User-facing version history or undo UI (CRDT log is internal only)
 - Telemetry or analytics instrumentation

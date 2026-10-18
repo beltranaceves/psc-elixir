@@ -5,8 +5,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # because CoreComponents is imported globally via html_helpers and defines
   # the same names — unqualified imports would conflict.
   alias PscWeb.Components.UI.Badge, as: UIBadge
-  alias PscWeb.Components.UI.Button, as: UIButton
-  alias PscWeb.Components.UI.Input, as: UIInput
+  alias PscWeb.Components.UI.Tooltip, as: UITooltip
+
+  import PscWeb.Components.Accent
+  import PscWeb.Components.ShareDialog
 
   alias Psc.Canvas
   alias PscWeb.Markdown
@@ -44,6 +46,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:last_saved_cells, cells)
         |> assign(:idle_timer_ref, nil)
         |> assign(:save_state, :saved)
+        |> assign(:share_open, false)
         |> subscribe_to_canvas(id)
 
       if connected?(socket) do
@@ -110,6 +113,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> assign(:c_desc, c_desc)
     |> assign(:idle_timer_ref, idle_timer_ref)
     |> assign(:save_state, :unsaved)
+  end
+
+  @impl true
+  def handle_event("open_share", _params, socket) do
+    {:noreply, assign(socket, :share_open, true)}
+  end
+
+  @impl true
+  def handle_event("share_closed", _params, socket) do
+    {:noreply, assign(socket, :share_open, false)}
   end
 
   @impl true
@@ -360,51 +373,67 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     <Layouts.app
       flash={@flash}
       current_scope={@current_scope}
-      container_class="w-full mx-auto max-w-screen-xl space-y-4"
+      header_title="Canvases"
+      container_class="mx-auto w-full max-w-none space-y-4 lg:w-[85vw]"
     >
-      <div class="w-full max-w-screen-xl mx-auto px-4 py-8">
+      <div id="canvas-workspace" class="w-full">
         <%!-- Header --%>
-        <div class="flex items-center justify-between mb-8">
-          <div class="flex-1">
+        <div id="canvas-header" class="flex items-start justify-between gap-4 mb-8">
+          <div class="min-w-0 flex-1">
             <.form for={%{}} id="canvas-name-form" phx-change="update_name">
               <input
                 name="value"
                 type="text"
                 value={@c_name}
                 phx-debounce="1000"
-                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-white/20 focus:border-primary focus:outline-none w-full"
+                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-base-content/20 focus:border-primary focus:outline-none w-full"
                 placeholder="Canvas name"
               />
             </.form>
+
+            <.form for={%{}} id="canvas-description-form" phx-change="update_description">
+              <textarea
+                name="value"
+                phx-debounce="1000"
+                class="mt-1 w-full resize-none border-0 bg-transparent p-0 text-sm text-base-content/60 placeholder-base-content/35 focus:outline-none focus:text-base-content/85 transition-colors"
+                placeholder="Add a description..."
+                rows="2"
+              ><%= @c_desc %></textarea>
+            </.form>
           </div>
-          <%= cond do %>
-            <% @save_state == :saving -> %>
-              <UIBadge.badge variant="secondary" class="ml-4 shrink-0">
-                <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
-                </div>
-                <span>Saving...</span>
-              </UIBadge.badge>
-            <% @save_state == :saved -> %>
-              <UIBadge.badge variant="default" class="ml-4 shrink-0">
-                <.icon name="hero-check-circle" class="w-4 h-4" />
-                <span>Saved</span>
-              </UIBadge.badge>
-            <% true -> %>
-              <UIBadge.badge variant="outline" class="ml-4 shrink-0">
-                <.icon name="hero-exclamation-circle" class="w-4 h-4" />
-                <span>Unsaved</span>
-              </UIBadge.badge>
-          <% end %>
-          <.link
-            navigate={~p"/canvases"}
-            class="text-sm text-base-content/60 hover:text-base-content transition-colors ml-6 shrink-0"
-          >
-            Back to Canvases
-          </.link>
+          <div class="flex shrink-0 items-center">
+            <%= cond do %>
+              <% @save_state == :saving -> %>
+                <UIBadge.badge variant="secondary" class="shrink-0">
+                  <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
+                  </div>
+                  <span>Saving...</span>
+                </UIBadge.badge>
+              <% @save_state == :saved -> %>
+                <UIBadge.badge variant="default" class="shrink-0">
+                  <.icon name="hero-check-circle" class="w-4 h-4" />
+                  <span>Saved</span>
+                </UIBadge.badge>
+              <% true -> %>
+                <UIBadge.badge variant="outline" class="shrink-0">
+                  <.icon name="hero-exclamation-circle" class="w-4 h-4" />
+                  <span>Unsaved</span>
+                </UIBadge.badge>
+            <% end %>
+            <%= if @canvas.author_id == @user_id do %>
+              <.share_button id="share-canvas-button" label="Share" class="ml-4" />
+            <% end %>
+            <.link
+              navigate={~p"/canvases"}
+              class="ml-4 shrink-0 text-sm text-base-content/60 hover:text-base-content transition-colors"
+            >
+              Back to Canvases
+            </.link>
+          </div>
         </div>
 
-        <%!-- Presence Sidebar --%>
-        <div class="flex flex-col gap-4 mb-4 rounded-xl border border-white/10 bg-base-200 p-4">
+        <%!-- Presence + sharing --%>
+        <div class="flex flex-col gap-4 mb-4 rounded-xl border border-base-content/10 bg-base-200 p-4">
           <div>
             <div class="text-xs text-base-content/50 self-center mr-2 mb-2">Active Users:</div>
             <div class="flex gap-2">
@@ -416,95 +445,83 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <% end %>
             </div>
           </div>
+        </div>
 
-          <div class="pt-4 border-t border-white/10">
-            <h4 class="text-sm font-medium text-base-content mb-3">Share Canvas</h4>
+        <.share_dialog
+          id="share-canvas-dialog"
+          open={@share_open}
+          title="Share canvas"
+          description="People with access can edit this canvas with you in real time."
+          manage?={@canvas.author_id == @user_id}
+          shared_with={@canvas.shared_with || []}
+          share_event="share_canvas"
+          remove_event="remove_access"
+          on_close="share_closed"
+        />
 
-            <%= if @canvas.author_id == @user_id do %>
-              <.form for={%{}} id="share-form" phx-submit="share_canvas" class="flex gap-2 mb-4">
-                <UIInput.input
-                  type="email"
-                  name="email"
-                  placeholder="Enter email..."
-                  class="flex-1 text-xs"
-                />
-                <UIButton.button type="submit" size="sm">
-                  Share
-                </UIButton.button>
-              </.form>
-            <% end %>
+        <div class="rounded-xl border border-base-content/10 bg-base-200 p-8 w-full">
+          <div class="mb-6 flex items-center justify-between gap-4">
+            <h2 class="text-lg font-medium text-base-content">Canvas Structure</h2>
 
-            <%= if @canvas.shared_with && Enum.any?(@canvas.shared_with) do %>
-              <div class="mb-4">
-                <p class="text-xs font-medium text-base-content/50 mb-2">Shared with:</p>
-                <div class="space-y-1">
-                  <%= for email <- @canvas.shared_with do %>
-                    <div class="text-xs text-base-content px-3 py-2 bg-primary/5 rounded border border-primary/20 flex items-center justify-between">
-                      <span>{email}</span>
-                      <%= if @canvas.author_id == @user_id do %>
-                        <button
-                          phx-click="remove_access"
-                          phx-value-email={email}
-                          class="ml-2 px-2 py-1 text-error text-xs font-bold border border-error/40 rounded hover:bg-error/10 transition"
-                        >
-                          ×
-                        </button>
+            <UITooltip.tooltip id="canvas-structure-tooltip">
+              <UITooltip.tooltip_trigger>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-base-content/10 px-2.5 py-1 text-xs font-medium text-base-content/60 transition-colors hover:border-base-content/25 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <.icon name="hero-information-circle" class="w-4 h-4" />
+                  <span>Rows &amp; columns</span>
+                </button>
+              </UITooltip.tooltip_trigger>
+
+              <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
+                <div class="space-y-2.5">
+                  <div>
+                    <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
+                      Columns
+                    </p>
+                    <div class="flex flex-wrap gap-1">
+                      <%= for column <- @cells["columns"] || [] do %>
+                        <span class="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                          {column["label"]}
+                        </span>
                       <% end %>
                     </div>
-                  <% end %>
+                  </div>
+                  <div>
+                    <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
+                      Rows
+                    </p>
+                    <div class="flex flex-wrap gap-1">
+                      <%= for row <- @cells["rows"] || [] do %>
+                        <span class="rounded bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success">
+                          {row["label"]}
+                        </span>
+                      <% end %>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            <% end %>
-          </div>
-        </div>
-
-        <%!-- Description --%>
-        <div class="mb-8">
-          <.form for={%{}} id="canvas-description-form" phx-change="update_description">
-            <textarea
-              name="value"
-              phx-debounce="1000"
-              class="w-full px-4 py-2 border border-white/10 rounded-lg bg-base-200 text-base-content/70 focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Canvas description..."
-              rows="2"
-            ><%= @c_desc %></textarea>
-          </.form>
-        </div>
-        <div class="rounded-xl border border-white/10 bg-base-200 p-8 w-full">
-          <h2 class="text-lg font-medium text-base-content mb-6">Canvas Structure</h2>
-
-          <%!-- Display columns and rows --%>
-          <div class="mb-8">
-            <h3 class="text-sm font-medium text-base-content/70 mb-3">Columns</h3>
-            <div class="flex flex-wrap gap-2">
-              <%= for column <- @cells["columns"] || [] do %>
-                <div class="px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-medium">
-                  {column["label"]}
-                </div>
-              <% end %>
-            </div>
+              </UITooltip.tooltip_content>
+            </UITooltip.tooltip>
           </div>
 
-          <div class="mb-8">
-            <h3 class="text-sm font-medium text-base-content/70 mb-3">Rows</h3>
-            <div class="flex flex-wrap gap-2">
-              <%= for row <- @cells["rows"] || [] do %>
-                <div class="px-3 py-1.5 bg-success/10 text-success rounded-lg text-sm font-medium">
-                  {row["label"]}
-                </div>
-              <% end %>
-            </div>
-          </div>
-
-          <%!-- Grid Layout --%>
+          <%!-- Grid Layout — accents come from the template and are read-only here --%>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse">
               <thead>
                 <tr>
-                  <th class="px-4 py-2 border border-white/10 bg-white/5"></th>
+                  <th class="px-4 py-2 border border-base-content/10 bg-base-content/5"></th>
                   <%= for column <- @cells["columns"] || [] do %>
-                    <th class="px-4 py-2 border border-white/10 bg-white/5 font-medium text-base-content/70 text-sm">
-                      {column["label"]}
+                    <th class="border border-base-content/10 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
+                      <div class="flex flex-col">
+                        <.accent_bar
+                          id={"accent-bar-column-#{column["id"]}"}
+                          token={column["accent"]}
+                        />
+                        <div class="px-4 py-2">
+                          {column["label"]}
+                        </div>
+                      </div>
                     </th>
                   <% end %>
                 </tr>
@@ -512,13 +529,20 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <tbody>
                 <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
                   <tr>
-                    <td class="px-4 py-2 border border-white/10 bg-white/5 font-medium text-base-content/70 text-sm">
-                      {row["label"]}
+                    <td class="relative border border-base-content/10 bg-base-content/5 p-0 align-top">
+                      <.accent_bar
+                        id={"accent-bar-row-#{row["id"]}"}
+                        token={row["accent"]}
+                        orientation={:left}
+                      />
+                      <div class="px-4 py-2 font-medium text-base-content/70 text-sm">
+                        {row["label"]}
+                      </div>
                     </td>
                     <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                       <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                      <td class="px-4 py-2 border border-white/10 align-top">
+                      <td class="px-4 py-2 border border-base-content/10 align-top">
                         <%= if cell_key do %>
                           <% cell_data =
                             get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
@@ -537,6 +561,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
                               <div class="mt-2 grid gap-2 text-sm">
                                 <%= for {field, value} <- cell_data do %>
+                                  <%!-- "semantics" is tolerated in older canvases but is
+                                  no longer authored or shown. --%>
                                   <%= if field not in ["row", "column", "label", "semantics"] do %>
                                     <div class="flex flex-col">
                                       <label class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-1">
@@ -554,7 +580,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                       >
                                         <div
                                           id={"md-render-" <> cell_key <> "-" <> field}
-                                          class="md-render prose prose-sm prose-invert break-words mb-1 bg-base-300 text-base-content p-2 rounded"
+                                          class="md-render prose prose-sm dark:prose-invert break-words mb-1 bg-base-300 text-base-content p-2 rounded"
                                           phx-update="ignore"
                                         >
                                           {value}
@@ -562,7 +588,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         <textarea
                                           name={"values[" <> field <> "]"}
                                           phx-debounce="150"
-                                          class="hidden w-full px-2 py-1 border border-white/10 rounded-md text-base-content bg-base-300 placeholder-base-content/40 focus:ring-1 focus:ring-primary resize-none"
+                                          class="hidden w-full px-2 py-1 border border-base-content/10 rounded-md text-base-content bg-base-300 placeholder-base-content/40 focus:ring-1 focus:ring-primary resize-none"
                                           placeholder="Enter value..."
                                           rows="3"
                                         ><%= value %></textarea>

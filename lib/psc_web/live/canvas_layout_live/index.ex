@@ -136,12 +136,11 @@ defmodule PscWeb.CanvasLayoutLive.Index do
   end
 
   # Default 2x2 template shape per docs/spec/creator.md: rows/columns/layout
-  # plus cells nested under "cells" with label/semantics/fields/defaults.
+  # plus cells nested under "cells" with label/fields/defaults.
   defp default_layout_map do
     cell = fn label ->
       %{
         "label" => label,
-        "semantics" => "free",
         "fields" => ["content"],
         "defaults" => %{"content" => ""}
       }
@@ -165,8 +164,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         "r1_c2" => cell.("Cell 2"),
         "r2_c1" => cell.("Cell 3"),
         "r2_c2" => cell.("Cell 4")
-      },
-      "relations" => []
+      }
     }
   end
 
@@ -176,6 +174,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
     <Layouts.app
       flash={@flash}
       current_scope={@current_scope}
+      header_title="Templates"
       container_class="w-full mx-auto max-w-screen-xl"
     >
       <div class="px-4 py-8">
@@ -189,7 +188,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           </.link>
         </div>
 
-        <div class="mb-8 p-6 rounded-xl border border-white/10 bg-base-200">
+        <div class="mb-8 p-6 rounded-xl border border-base-content/10 bg-base-200">
           <h2 class="text-lg font-medium text-base-content mb-4">Create New Template</h2>
           <.form
             for={@new_template_form}
@@ -220,7 +219,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         <div>
           <h2 class="text-lg font-medium text-base-content mb-4">Available Templates</h2>
           <%= if Enum.empty?(@templates) do %>
-            <div class="p-8 text-center rounded-xl border border-white/10 bg-base-200">
+            <div class="p-8 text-center rounded-xl border border-base-content/10 bg-base-200">
               <p class="text-base-content/60">No templates yet. Create one to get started.</p>
             </div>
           <% else %>
@@ -248,7 +247,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
 
   defp template_card(assigns) do
     ~H"""
-    <div class="rounded-xl border border-white/10 bg-base-200 p-4 flex flex-col">
+    <div class="rounded-xl border border-base-content/10 bg-base-200 p-4 flex flex-col">
       <div class="flex items-start justify-between gap-2 mb-2">
         <h3 class="font-medium text-base-content">{@template.name}</h3>
         <%= if @template.author_id == @current_user.id do %>
@@ -279,7 +278,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         </UIButton.button>
         <.link
           navigate={~p"/templates/#{@template.id}"}
-          class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-white/10 text-base-content hover:bg-white/5 transition-colors"
+          class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-base-content/10 text-base-content hover:bg-base-content/5 transition-colors"
         >
           Edit
         </.link>
@@ -326,7 +325,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       </div>
 
       <%= if @share_form_for == @template.id do %>
-        <div class="mt-4 pt-4 border-t border-white/10">
+        <div class="mt-4 pt-4 border-t border-base-content/10">
           <form phx-submit="share_template" phx-value-id={@template.id} class="flex gap-2">
             <UIInput.input
               type="email"

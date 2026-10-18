@@ -59,7 +59,6 @@ defmodule Psc.CanvasFixtures do
     cell = fn label ->
       %{
         "label" => label,
-        "semantics" => "free",
         "fields" => ["content"],
         "defaults" => %{"content" => ""}
       }
@@ -80,8 +79,7 @@ defmodule Psc.CanvasFixtures do
         "r1_c2" => cell.("Cell 2"),
         "r2_c1" => cell.("Cell 3"),
         "r2_c2" => cell.("Cell 4")
-      },
-      "relations" => []
+      }
     }
   end
 

@@ -92,9 +92,13 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
   describe "editor (designer)" do
     test "renders the new template page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/templates/new")
+      {:ok, lv, html} = live(conn, ~p"/templates/new")
 
-      assert html =~ "New template"
+      assert has_element?(lv, "#header-page-title", "Designer")
+      assert has_element?(lv, ~s|a[href="/templates"][aria-current="page"]|)
+      assert html =~ "Name"
+      # The back link shares the Name row inside the form.
+      assert has_element?(lv, ~s|#template-form a[href="/templates"]|)
       assert html =~ "Add Column"
       assert html =~ "Add Row"
     end
@@ -109,59 +113,157 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert html =~ "Row 1"
     end
 
-    test "selecting a cell opens the metadata panel with fields", %{conn: conn} do
+    test "edits cell details directly in the grid", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_row']") |> render_click()
 
+      # No selection step: the label, field defaults and the add-field form are
+      # all inside the cell itself.
+      assert has_element?(lv, "#cell-r1_c1-label")
+      assert has_element?(lv, "#cell-r1_c1-field-content")
+      assert has_element?(lv, "#cell-r1_c1 form[phx-submit='add_cell_field']")
+      assert has_element?(lv, "#cell-r1_c1-new-field")
+
+      refute has_element?(lv, "button[phx-click='select_cell']")
+      refute has_element?(lv, "#cell-r1_c1-label[placeholder='Cell label']")
+
+      # Fresh cells have no label, so the cell key is the placeholder.
+      assert has_element?(lv, "#cell-r1_c1-label[placeholder='r1_c1']")
+
+      # Editing the label happens in place. The wrapping form serializes the
+      # hidden cell_key/field inputs alongside the value.
       html =
         lv
-        |> element("button[phx-click='select_cell'][phx-value-cell_key='r1_c1']")
-        |> render_click()
+        |> element("#cell-r1_c1 form[phx-change='update_cell_meta']")
+        |> render_change(%{"value" => "Problem", "cell_key" => "r1_c1", "field" => "label"})
 
-      # fresh cells have no label yet — the panel falls back to the cell key
-      assert html =~ "Cell: r1_c1"
-      assert html =~ "Semantics"
-      assert html =~ "Fields"
-      assert html =~ "content"
+      assert html =~ ~s(value="Problem")
     end
 
-    test "adds a field to the selected cell", %{conn: conn} do
+    test "adds a field directly in the cell", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_row']") |> render_click()
 
-      lv
-      |> element("button[phx-click='select_cell'][phx-value-cell_key='r1_c1']")
-      |> render_click()
-
       html =
         lv
-        |> form("form[phx-submit='add_cell_field']", %{"field" => "notes"})
-        |> render_submit()
+        |> element("#cell-r1_c1 form[phx-submit='add_cell_field']")
+        |> render_submit(%{"field" => "notes"})
 
       assert html =~ "notes"
+      assert has_element?(lv, "#cell-r1_c1-field-notes")
     end
 
-    test "adds a relation between cells", %{conn: conn} do
+    test "tracks unsaved changes and cancels cleanly when there are none", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      # Nothing edited yet: no dirty badge and no confirmation needed.
+      refute has_element?(lv, "#unsaved-changes-hint")
+
+      assert {:error, {:live_redirect, %{to: "/templates"}}} =
+               lv |> element("#cancel-template-editing") |> render_click()
+    end
+
+    test "asks for confirmation in a modal before discarding a dirty draft", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates/new")
 
       lv |> element("button[phx-click='add_column']") |> render_click()
+
+      # Cancel opens the modal instead of navigating straight away.
+      html = lv |> element("#cancel-template-editing") |> render_click()
+      assert html =~ "Discard unsaved changes?"
+      assert has_element?(lv, "#discard-template-dialog[data-open='true']")
+
+      # "Keep editing" returns to the draft with the dialog closed.
+      lv |> element("#keep-editing-template") |> render_click()
+      refute has_element?(lv, "#discard-template-dialog[data-open='true']")
+      assert has_element?(lv, "#cancel-template-editing")
+
+      # "Discard and leave" is what actually navigates away.
+      lv |> element("#cancel-template-editing") |> render_click()
+
+      assert {:error, {:live_redirect, %{to: "/templates"}}} =
+               lv |> element("#discard-template-changes") |> render_click()
+    end
+
+    test "a closed discard dialog resets the pending confirmation", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
       lv |> element("button[phx-click='add_column']") |> render_click()
       lv |> element("button[phx-click='add_row']") |> render_click()
+      lv |> element("#cancel-template-editing") |> render_click()
+      assert has_element?(lv, "#discard-template-dialog[data-open='true']")
+
+      # Escape / outside click / × reach the server as this mapped event.
+      render_hook(lv, "leave_dialog_closed", %{})
+
+      refute has_element?(lv, "#discard-template-dialog[data-open='true']")
+      assert has_element?(lv, "#cell-r1_c1-label")
+    end
+
+    test "marks the draft dirty when the template name changes", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv
+      |> form("#template-form", %{"name" => "Draft", "description" => ""})
+      |> render_change()
+
+      assert has_element?(lv, "#unsaved-changes-hint")
+    end
+
+    test "shares a template through the modal", %{conn: conn, user: user} do
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Shareable Tpl"})
+
+      {:ok, lv, _html} = live(conn, ~p"/templates/#{template.id}")
+
+      # Combo button: share icon + current label.
+      assert has_element?(lv, "#share-template-button .hero-share")
+      assert lv |> element("#share-template-button") |> render() =~ "Share"
+
+      refute has_element?(lv, "#share-template-dialog[data-open='true']")
+      lv |> element("#share-template-button") |> render_click()
+      assert has_element?(lv, "#share-template-dialog[data-open='true']")
 
       html =
         lv
-        |> form("form[phx-submit='add_relation']", %{
-          "from" => "r1_c1",
-          "to" => "r1_c2",
-          "label" => "leads to"
-        })
+        |> form("#share-template-dialog-form", %{"email" => "friend@example.com"})
         |> render_submit()
 
-      assert html =~ "leads to"
+      assert html =~ "Template shared with friend@example.com"
+      assert has_element?(lv, ~s|#share-template-dialog [data-email="friend@example.com"]|)
+
+      # The modal stays open so several people can be invited; Done closes it.
+      lv
+      |> element(~s|#share-template-dialog [data-email="friend@example.com"] button|)
+      |> render_click()
+
+      refute has_element?(lv, ~s|#share-template-dialog [data-email="friend@example.com"]|)
+
+      lv |> element("#share-template-dialog button[phx-click='share_closed']") |> render_click()
+      refute has_element?(lv, "#share-template-dialog[data-open='true']")
+    end
+
+    test "removes rows and columns with the same compact × control", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      # Both axes expose the same × affordance in the header row.
+      assert has_element?(lv, "#remove-row-r1[title='Remove row']")
+      assert has_element?(lv, "#remove-column-c1[title='Remove column']")
+      assert lv |> element("#remove-row-r1") |> render() =~ "hero-x-mark"
+
+      html = lv |> element("#remove-row-r1") |> render_click()
+
+      refute html =~ "Row 1"
+      assert html =~ "Row 2"
+      refute has_element?(lv, "#remove-row-r1")
     end
 
     test "saves a new template and redirects to the library", %{conn: conn, user: user} do
@@ -180,15 +282,95 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert Canvas.list_templates(user) |> Enum.any?(&(&1.name == "Saved Tpl"))
     end
 
+    test "the header reads Designer while the Templates nav stays current", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      # Header title is the surface, not the record…
+      assert has_element?(lv, "#header-page-title", "Designer")
+      # …while the route highlight stays on the Templates section.
+      assert has_element?(lv, ~s|a[href="/templates"][aria-current="page"]|)
+      # No in-page title block.
+      refute has_element?(lv, "h1")
+
+      lv |> form("#template-form", %{"name" => "Rationale map"}) |> render_change()
+
+      assert has_element?(lv, "#header-page-title", "Designer")
+      refute has_element?(lv, "#header-page-title", "Rationale map")
+    end
+
     test "editing an existing template loads its structure", %{conn: conn, user: user} do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Loaded Tpl"})
 
-      {:ok, _lv, html} = live(conn, ~p"/templates/#{template.id}")
+      {:ok, lv, html} = live(conn, ~p"/templates/#{template.id}")
 
-      assert html =~ "Template designer"
+      assert has_element?(lv, "#header-page-title", "Designer")
+      # Share sits inline with the Name field.
+      assert has_element?(lv, "#template-form #share-template-button .hero-share")
       assert html =~ "Loaded Tpl"
       assert html =~ "Row 1"
       assert html =~ "Column 1"
+    end
+
+    test "sets row and column accents and saves them with the layout", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      # The swatch toggles the inline palette; choosing a color closes it and
+      # paints the header bar immediately (live preview before saving).
+      refute has_element?(lv, "#accent-picker-column-c1")
+      lv |> element("#accent-swatch-column-c1") |> render_click()
+      assert has_element?(lv, "#accent-picker-column-c1")
+
+      html = lv |> element("#accent-option-column-c1-sky") |> render_click()
+      refute has_element?(lv, "#accent-picker-column-c1")
+      assert html =~ ~s(id="accent-bar-column-c1")
+      assert html =~ "bg-sky-400"
+
+      lv |> element("#accent-swatch-row-r1") |> render_click()
+      html = lv |> element("#accent-option-row-r1-amber") |> render_click()
+      assert html =~ ~s(id="accent-bar-row-r1")
+      assert html =~ "bg-amber-400"
+
+      assert {:error, {:redirect, %{to: "/templates"}}} =
+               lv
+               |> form("#template-form", %{"name" => "Accented Tpl", "description" => "desc"})
+               |> render_submit()
+
+      template = Canvas.list_templates(user) |> Enum.find(&(&1.name == "Accented Tpl"))
+      assert hd(template.layout_map["columns"])["accent"] == "sky"
+      assert hd(template.layout_map["rows"])["accent"] == "amber"
+    end
+
+    test "clearing an accent removes the bar", %{conn: conn, user: user} do
+      layout_map =
+        CanvasFixtures.template_layout_map_fixture()
+        |> Map.update!("columns", fn columns ->
+          List.update_at(columns, 0, &Map.put(&1, "accent", "sky"))
+        end)
+
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{
+          author_id: user.id,
+          name: "Clearing Tpl",
+          layout_map: layout_map
+        })
+
+      {:ok, lv, html} = live(conn, ~p"/templates/#{template.id}")
+      assert html =~ ~s(id="accent-bar-column-c1")
+
+      lv |> element("#accent-swatch-column-c1") |> render_click()
+
+      html =
+        lv
+        |> element("button[phx-click='set_column_accent'][phx-value-accent='']")
+        |> render_click()
+
+      refute html =~ ~s(id="accent-bar-column-c1")
     end
 
     test "non-owner without access is redirected", %{conn: conn} do

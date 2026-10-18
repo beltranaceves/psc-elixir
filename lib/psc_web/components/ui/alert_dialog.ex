@@ -88,6 +88,7 @@ defmodule PscWeb.Components.UI.AlertDialog do
     ~H"""
     <div
       id={@id}
+      tabindex="-1"
       class={classes(["relative z-50 group/alert-dialog", @class])}
       data-component="dialog"
       data-options={@options}

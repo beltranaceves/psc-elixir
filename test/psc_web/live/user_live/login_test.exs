@@ -6,11 +6,16 @@ defmodule PscWeb.UserLive.LoginTest do
 
   describe "login page" do
     test "renders login page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/users/log-in")
+      {:ok, lv, html} = live(conn, ~p"/users/log-in")
 
       assert html =~ "Log in"
       assert html =~ "Register"
       assert html =~ ~s(id="login_form_password")
+
+      # Documents/Canvases/Templates are private: never advertised to guests.
+      refute has_element?(lv, ~s|nav a[href="/documents"]|)
+      refute has_element?(lv, ~s|nav a[href="/canvases"]|)
+      refute has_element?(lv, ~s|nav a[href="/templates"]|)
     end
   end
 

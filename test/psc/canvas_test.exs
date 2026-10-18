@@ -127,29 +127,6 @@ defmodule Psc.CanvasTest do
 
       assert "field keys must be unique within a cell" in errors_on(changeset).layout_map
     end
-
-    test "rejects relations referencing unknown cells" do
-      user = Psc.AccountsFixtures.user_fixture()
-
-      lm =
-        CanvasFixtures.template_layout_map_fixture()
-        |> Map.put("relations", [%{"from" => "r1_c1", "to" => "ghost_cell", "label" => ""}])
-
-      assert {:error, changeset} =
-               Canvas.create_template(user.id, %{"name" => "Bad", "layout_map" => lm})
-
-      assert "relations must reference existing cells" in errors_on(changeset).layout_map
-    end
-
-    test "accepts a valid template with relations" do
-      user = Psc.AccountsFixtures.user_fixture()
-
-      lm =
-        CanvasFixtures.template_layout_map_fixture()
-        |> Map.put("relations", [%{"from" => "r1_c1", "to" => "r1_c2", "label" => "leads to"}])
-
-      assert {:ok, _} = Canvas.create_template(user.id, %{"name" => "Good", "layout_map" => lm})
-    end
   end
 
   describe "instantiate_template/2" do
@@ -159,7 +136,6 @@ defmodule Psc.CanvasTest do
       cell = fn label ->
         %{
           "label" => label,
-          "semantics" => "problem",
           "fields" => ["title", "body"],
           "defaults" => %{"title" => "T", "body" => "B"}
         }
@@ -172,8 +148,7 @@ defmodule Psc.CanvasTest do
           %{"id" => "c2", "label" => "Col 2"}
         ],
         "layout" => [["r1_c1", "r1_c2"]],
-        "cells" => %{"r1_c1" => cell.("Alpha"), "r1_c2" => cell.("Beta")},
-        "relations" => [%{"from" => "r1_c1", "to" => "r1_c2", "label" => "→"}]
+        "cells" => %{"r1_c1" => cell.("Alpha"), "r1_c2" => cell.("Beta")}
       }
 
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, layout_map: lm})
@@ -185,11 +160,11 @@ defmodule Psc.CanvasTest do
       assert cells["rows"] == lm["rows"]
       assert cells["columns"] == lm["columns"]
       assert cells["layout"] == lm["layout"]
-      assert cells["relations"] == lm["relations"]
+      refute Map.has_key?(cells, "relations")
 
       alpha = cells["r1_c1"]
       assert alpha["label"] == "Alpha"
-      assert alpha["semantics"] == "problem"
+      refute Map.has_key?(alpha, "semantics")
       assert alpha["row"] == "r1"
       assert alpha["column"] == "c1"
       assert alpha["title"] == "T"
@@ -206,8 +181,7 @@ defmodule Psc.CanvasTest do
         "rows" => [%{"id" => "r1", "label" => "R"}],
         "columns" => [%{"id" => "c1", "label" => "C"}],
         "layout" => [["r1_c1"]],
-        "cells" => %{"r1_c1" => %{"label" => "Solo", "semantics" => "free"}},
-        "relations" => []
+        "cells" => %{"r1_c1" => %{"label" => "Solo"}}
       }
 
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, layout_map: lm})

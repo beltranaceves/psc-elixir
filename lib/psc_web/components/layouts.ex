@@ -35,74 +35,96 @@ defmodule PscWeb.Layouts do
     default: "mx-auto max-w-2xl space-y-4",
     doc: "the CSS class used for the main container; override to change width"
 
+  attr :header_title, :string,
+    default: nil,
+    doc: "route context shown in the app header (e.g. the current section name)"
+
+  attr :header_section, :string,
+    default: nil,
+    doc:
+      "nav item to highlight when it differs from the header title (e.g. \"Designer\" inside the Templates section)"
+
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="h-14 shrink-0 border-b border-white/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-6">
-      <.link navigate={~p"/"} class="flex items-center gap-2 text-base-content">
+    <header class="h-14 shrink-0 border-b border-base-content/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-6">
+      <.link navigate={~p"/"} class="flex shrink-0 items-center gap-2 text-base-content">
         <span class="flex size-7 items-center justify-center rounded-md bg-primary text-primary-content text-sm font-bold">
           P
         </span>
         <span class="text-sm font-semibold tracking-tight">PSC</span>
       </.link>
 
-      <nav class="flex items-center gap-1">
-        <.link
-          navigate={~p"/documents"}
-          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
-        >
-          Documents
-        </.link>
-        <.link
-          navigate={~p"/canvases"}
-          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
-        >
-          Canvases
-        </.link>
-        <.link
-          navigate={~p"/templates"}
-          class="px-3 py-1.5 rounded-lg text-sm text-base-content/70 hover:text-base-content hover:bg-white/5 transition-colors"
-        >
-          Templates
-        </.link>
-      </nav>
+      <span
+        :if={@header_title}
+        id="header-page-title"
+        class="hidden min-w-0 truncate text-sm font-medium text-base-content/70 md:inline"
+      >
+        {@header_title}
+      </span>
 
       <div class="ml-auto flex items-center gap-4">
-        <.theme_toggle />
-        <%= if @current_scope && @current_scope.user do %>
-          <div class="flex items-center gap-3 text-sm">
-            <span class="text-base-content/60">{@current_scope.user.email}</span>
-            <.link
-              href={~p"/users/settings"}
-              class="text-base-content/70 hover:text-base-content transition-colors"
-            >
-              Settings
-            </.link>
-            <.link
-              href={~p"/users/log-out"}
-              method="delete"
-              class="text-base-content/70 hover:text-base-content transition-colors"
-            >
-              Log out
-            </.link>
-          </div>
-        <% else %>
-          <div class="flex items-center gap-3 text-sm">
-            <.link
-              href={~p"/users/register"}
-              class="text-base-content/70 hover:text-base-content transition-colors"
-            >
-              Register
-            </.link>
-            <.link
-              href={~p"/users/log-in"}
-              class="px-3 py-1.5 rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
-            >
-              Log in
-            </.link>
-          </div>
-        <% end %>
+        <%!-- Private sections: only advertised to signed-in users. --%>
+        <nav :if={@current_scope && @current_scope.user} class="flex items-center gap-1">
+          <.link
+            navigate={~p"/canvases"}
+            aria-current={nav_current(@header_title, @header_section, "Canvases")}
+            class={[
+              "px-3 py-1.5 rounded-lg text-sm transition-colors",
+              nav_item_class(@header_title, @header_section, "Canvases")
+            ]}
+          >
+            Canvases
+          </.link>
+          <.link
+            navigate={~p"/templates"}
+            aria-current={nav_current(@header_title, @header_section, "Templates")}
+            class={[
+              "px-3 py-1.5 rounded-lg text-sm transition-colors",
+              nav_item_class(@header_title, @header_section, "Templates")
+            ]}
+          >
+            Templates
+          </.link>
+        </nav>
+
+        <div class="flex items-center gap-4">
+          <.theme_toggle />
+          <%= if @current_scope && @current_scope.user do %>
+            <div class="flex items-center gap-3 text-sm">
+              <span class="text-base-content/60">{@current_scope.user.email}</span>
+              <.link
+                href={~p"/users/settings"}
+                class="text-base-content/70 hover:text-base-content transition-colors"
+              >
+                Settings
+              </.link>
+              <.link
+                href={~p"/users/log-out"}
+                method="delete"
+                class="text-base-content/70 hover:text-base-content transition-colors"
+              >
+                Log out
+              </.link>
+            </div>
+          <% else %>
+            <div class="flex items-center gap-3 text-sm">
+              <.link
+                href={~p"/users/register"}
+                class="text-base-content/70 hover:text-base-content transition-colors"
+              >
+                Register
+              </.link>
+              <.link
+                href={~p"/users/log-in"}
+                class="px-3 py-1.5 rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
+              >
+                Log in
+              </.link>
+            </div>
+          <% end %>
+        </div>
       </div>
     </header>
 
@@ -194,5 +216,21 @@ defmodule PscWeb.Layouts do
       </button>
     </div>
     """
+  end
+
+  # The header title doubles as the active-section marker for the nav, unless a
+  # page sets a more specific header_section (e.g. "Designer" in Templates).
+  defp nav_section(header_title, header_section), do: header_section || header_title
+
+  defp nav_item_class(header_title, header_section, section) do
+    if nav_section(header_title, header_section) == section do
+      "bg-base-content/10 font-medium text-base-content"
+    else
+      "text-base-content/70 hover:text-base-content hover:bg-base-content/5"
+    end
+  end
+
+  defp nav_current(header_title, header_section, section) do
+    if nav_section(header_title, header_section) == section, do: "page", else: nil
   end
 end

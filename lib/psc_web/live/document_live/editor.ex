@@ -5,14 +5,14 @@ defmodule PscWeb.DocumentLive.Editor do
   # because CoreComponents is imported globally via html_helpers and defines
   # the same names — unqualified imports would conflict.
   alias PscWeb.Components.UI.Badge, as: UIBadge
-  alias PscWeb.Components.UI.Button, as: UIButton
-  alias PscWeb.Components.UI.Input, as: UIInput
 
   alias Psc.Documents
   alias Psc.Documents.CRDT
   alias Psc.Documents.ConsistencyManager
   alias PscWeb.Markdown
   alias PscWeb.Presence
+
+  import PscWeb.Components.ShareDialog
 
   # Check every 5 seconds
   @consistency_check_interval 5000
@@ -44,6 +44,7 @@ defmodule PscWeb.DocumentLive.Editor do
         |> assign(:username, socket.assigns.current_scope.user.email)
         |> assign(:cursor_pos, 0)
         |> assign(:presence, %{})
+        |> assign(:share_open, false)
         |> assign(:content, content)
         |> assign(:last_saved_content, content)
         # :saved, :unsaved, :saving
@@ -153,6 +154,16 @@ defmodule PscWeb.DocumentLive.Editor do
   @impl true
   def handle_event("render_document", %{"content" => content}, socket) do
     {:noreply, push_document_render(socket, content)}
+  end
+
+  @impl true
+  def handle_event("open_share", _params, socket) do
+    {:noreply, assign(socket, :share_open, true)}
+  end
+
+  @impl true
+  def handle_event("share_closed", _params, socket) do
+    {:noreply, assign(socket, :share_open, false)}
   end
 
   @impl true
@@ -342,16 +353,16 @@ defmodule PscWeb.DocumentLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Documents">
       <div class="flex h-screen flex-col bg-base-100">
         <%!-- Header --%>
-        <div class="border-b border-white/10 bg-base-200/60 px-6 py-4">
+        <div class="border-b border-base-content/10 bg-base-200/60 px-6 py-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
               <input
                 type="text"
                 value={@document.title}
-                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-white/20 focus:outline-none focus:border-primary px-2"
+                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-base-content/20 focus:outline-none focus:border-primary px-2"
                 placeholder="Untitled Document"
               />
               <%!-- Save Status Indicator --%>
@@ -374,6 +385,9 @@ defmodule PscWeb.DocumentLive.Editor do
                   </UIBadge.badge>
               <% end %>
             </div>
+            <%= if @document.user_id == @user_id do %>
+              <.share_button id="share-document-button" label="Share" class="mr-2" />
+            <% end %>
             <.link
               navigate={~p"/documents"}
               class="inline-flex items-center gap-2 text-sm font-medium text-base-content/60 hover:text-base-content transition-colors"
@@ -391,7 +405,7 @@ defmodule PscWeb.DocumentLive.Editor do
               phx-update="ignore"
               class="flex min-h-0 flex-1 flex-col"
             >
-              <div class="flex items-center justify-between border-b border-white/10 bg-base-200/40 px-6 py-3">
+              <div class="flex items-center justify-between border-b border-base-content/10 bg-base-200/40 px-6 py-3">
                 <span class="text-sm font-medium text-base-content" data-editor-mode>
                   Markdown preview
                 </span>
@@ -422,7 +436,7 @@ defmodule PscWeb.DocumentLive.Editor do
                   aria-label="Edit document content"
                   class="absolute inset-0 cursor-text overflow-y-auto bg-base-100 p-6 transition-colors hover:bg-base-200/30"
                 >
-                  <article class="markdown-preview prose prose-invert max-w-none break-words">
+                  <article class="markdown-preview prose dark:prose-invert max-w-none break-words">
                     {Phoenix.HTML.raw(
                       Markdown.render(@content, empty_message: "Start writing in the editor.")
                     )}
@@ -433,7 +447,7 @@ defmodule PscWeb.DocumentLive.Editor do
           </div>
 
           <%!-- Presence Sidebar --%>
-          <div class="w-64 border-l border-white/10 bg-base-200 p-4 overflow-y-auto">
+          <div class="w-64 border-l border-base-content/10 bg-base-200 p-4 overflow-y-auto">
             <h3 class="text-sm font-medium text-base-content mb-4">Active Users</h3>
             <div class="space-y-2">
               <%= for {user_id, %{metas: metas}} <- @presence do %>
@@ -447,65 +461,26 @@ defmodule PscWeb.DocumentLive.Editor do
               <% end %>
             </div>
 
-            <div class="mt-8 pt-4 border-t border-white/10">
-              <h4 class="text-sm font-medium text-base-content mb-3">Share Document</h4>
-
-              <%!-- Share with email form (only for owner) --%>
-              <%= if @document.user_id == @user_id do %>
-                <.form for={%{}} id="share-form" phx-submit="share_document" class="flex gap-2 mb-4">
-                  <UIInput.input
-                    type="email"
-                    name="email"
-                    placeholder="Enter email..."
-                    class="flex-1 text-xs"
-                  />
-                  <UIButton.button type="submit" size="sm">
-                    Share
-                  </UIButton.button>
-                </.form>
-              <% end %>
-
-              <%!-- List of shared users --%>
-              <%= if @document.shared_with && Enum.any?(@document.shared_with) do %>
-                <div class="mb-4">
-                  <p class="text-xs font-medium text-base-content/50 mb-2">Shared with:</p>
-                  <div class="space-y-1">
-                    <%= for email <- @document.shared_with do %>
-                      <div class="text-xs text-base-content px-3 py-2 bg-primary/5 rounded border border-primary/20 flex items-center justify-between">
-                        <span>{email}</span>
-                        <%= if @document.user_id == @user_id do %>
-                          <button
-                            phx-click="remove_access"
-                            phx-value-email={email}
-                            class="ml-2 px-2 py-1 text-error text-xs font-bold border border-error/40 rounded hover:bg-error/10 transition"
-                          >
-                            ×
-                          </button>
-                        <% end %>
-                      </div>
-                    <% end %>
-                  </div>
-                </div>
-              <% end %>
-
-              <p class="text-xs text-base-content/50 mb-3">Copy link to share with anyone:</p>
-              <div class="flex gap-2">
-                <input
-                  type="text"
-                  readonly
-                  value={document_url(assigns)}
-                  class="flex-1 text-xs px-3 py-2 bg-base-300 border border-white/10 rounded-lg text-base-content/70 font-mono"
-                />
-                <button
-                  onclick={"navigator.clipboard.writeText('#{document_url(assigns)}')"}
-                  class="px-3 py-2 bg-primary text-primary-content text-xs font-medium rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  Copy
-                </button>
-              </div>
+            <div class="mt-8 pt-4 border-t border-base-content/10">
+              <p class="text-xs text-base-content/50">
+                Use the Share button in the header to invite collaborators.
+              </p>
             </div>
           </div>
         </div>
+
+        <.share_dialog
+          id="share-document-dialog"
+          open={@share_open}
+          title="Share document"
+          description="People with access can edit this document with you in real time."
+          manage?={@document.user_id == @user_id}
+          shared_with={@document.shared_with || []}
+          share_event="share_document"
+          remove_event="remove_access"
+          on_close="share_closed"
+          link={document_url(assigns)}
+        />
       </div>
     </Layouts.app>
     """

@@ -109,8 +109,8 @@ Notes on the two canvas representations:
 - `unstr_canvases` is the configurable canvas: rows, columns, the 2D `layout`, and
   all cell data live inside the single `cells` map, validated against that layout.
 - `canvas_layouts.layout_map` is the template definition (`rows`, `columns`,
-  `layout`, `cells`, `relations`) validated for grid completeness, unique field
-  keys per cell, and relations referencing existing cells.
+  `layout`, `cells`) validated for grid completeness and unique field keys per
+  cell.
 - `snapshot_seq` on `documents`/`unstr_canvases` marks how far the saved
   `content`/`cells` has been folded; the `*_events` tables only ever hold rows
   above it, because folds delete what they covered and `Psc.EventsSweeper`

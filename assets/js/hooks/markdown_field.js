@@ -17,7 +17,7 @@ export default {
       if (String(payload.cell_key) !== String(this.cellKey) || String(payload.field) !== String(this.field)) return
       const html = payload.html || ''
       if (!html || html.trim() === '') {
-        this.display.innerHTML = '<div class="p-2 rounded text-gray-400 dark:text-gray-400">Click to edit</div>'
+        this.display.innerHTML = '<div class="p-2 rounded text-base-content/50">Click to edit</div>'
         this.display.classList.add('empty')
       } else {
         this.display.innerHTML = html

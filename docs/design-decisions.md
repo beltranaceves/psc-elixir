@@ -20,6 +20,14 @@ it costs, and the evidence it was verified against.
 | [ADR-008](#adr-008--documentscontent-is-the-single-folded-representation) | `documents.content` is the single folded representation | Accepted | 2026-10-18 |
 | [ADR-009](#adr-009--creating-a-canvas-from-a-template-goes-through-the-context) | Creating a canvas from a template goes through the context | Accepted | 2026-10-18 |
 | [ADR-010](#adr-010--vocabulary-canvas-template-canvas-editor-template-designer) | Vocabulary: canvas, template, canvas editor, template designer | Accepted | 2026-10-18 |
+| [ADR-011](#adr-011--rowcolumn-accents-are-tokens-inside-the-structure-maps) | Row/column accents are tokens inside the structure maps | Accepted | 2026-10-18 |
+| [ADR-012](#adr-012--remove-the-unused-cell-semantics-field) | Remove the unused cell `semantics` field | Accepted | 2026-10-18 |
+| [ADR-013](#adr-013--cell-details-are-edited-inline-in-the-template-grid) | Cell details are edited inline in the template grid | Accepted | 2026-10-18 |
+| [ADR-014](#adr-014--templates-save-explicitly-with-a-cancel-escape-hatch) | Templates save explicitly, with a Cancel escape hatch | Accepted | 2026-10-18 |
+| [ADR-015](#adr-015--light-mode-contrast-comes-from-theme-tokens-not-white-alpha) | Light-mode contrast comes from theme tokens, not white alpha | Accepted | 2026-10-18 |
+| [ADR-016](#adr-016--one-share-modal-component-for-templates-canvases-and-documents) | One Share modal component for templates, canvases and documents | Accepted | 2026-10-18 |
+| [ADR-017](#adr-017--remove-the-unused-relations-metadata) | Remove the unused `relations` metadata | Accepted | 2026-10-18 |
+| [ADR-018](#adr-018--documents-is-parked-as-a-standalone-feature) | Documents is parked as a standalone feature | Accepted | 2026-10-18 |
 
 ---
 
@@ -300,7 +308,7 @@ is re-added. The migration ran at boot on the first deploy after this change
 
 ## ADR-009 — Creating a canvas from a template goes through the context
 
-**Context.** Templates store cell data nested (`layout_map["cells"]["r1_c1"] = %{label, semantics, fields, defaults}`), while a canvas stores it flat (`cells["r1_c1"] = %{row, column, content, …}`). `Canvas.instantiate_template/2` performs that transformation, but the Canvas list page's create form didn't call it — it copied the template's `layout_map` straight into the canvas:
+**Context.** Templates store cell data nested (`layout_map["cells"]["r1_c1"] = %{label, fields, defaults}`), while a canvas stores it flat (`cells["r1_c1"] = %{row, column, content, …}`). `Canvas.instantiate_template/2` performs that transformation, but the Canvas list page's create form didn't call it — it copied the template's `layout_map` straight into the canvas:
 
 ```elixir
 case Canvas.get_canvas_layout(layout_id) do
@@ -349,13 +357,315 @@ end
 | Problem–Solution Canvas (fixed 12 cells) | `canvases` | `Psc.Canvas.Canvas` | `/psc-canvas` | legacy canvas |
 
 - `/canvas-designer` → `/canvases`; `/canvas-layouts` → `/templates`.
-- UI text follows the nouns (nav reads Documents · Canvases · Templates; the create form's "Layout" selector is now "Template"; the template designer's heading is "Template designer").
+- UI text follows the nouns (nav reads Canvases · Templates — Documents is parked, see ADR-018; the create form's "Layout" selector is now "Template").
 - Docs follow too: `docs/spec/creator.md` → `template-designer.md`, `docs/spec/editor.md` → `canvas-editor.md`, and `unstr_canvas_collaboration_flow.md` → `canvas_collaboration_flow.md`. Each spec opens with a table bridging the domain words to the identifiers.
 - **Module, table and function names are unchanged.** Renaming `unstr_canvases`/`canvas_layouts` would mean a table migration and a wide rename for no user-visible gain; instead the mapping is documented once ([data_model.md](data_model.md)) and repeated at the top of each spec.
 
 **Alternatives considered.** A full rename of tables and modules to match the vocabulary — deferred as churn with migration risk. Keeping the old routes as redirects — skipped because the app is pre-release and no external links depend on them.
 
 **Consequences.** The legacy fixed-PSC canvas moved from `/canvases` to `/psc-canvas`; it is unreachable from the navigation and its fate (retire, or fold its data into a built-in template) is an open question, recorded below rather than decided here.
+
+---
+
+## ADR-011 — Row/column accents are tokens inside the structure maps
+
+**Context.** Both surfaces need to let authors colour-code rows and columns — a thin
+colour line on the top edge of a column header and the left edge of a row header — so a
+dense grid can be scanned by band rather than read label by label. That requires
+persisting a colour for structure metadata that is *not* cell content.
+
+**Decision.** Store an optional `"accent"` key on each row/column entry, holding a token
+from a fixed palette (`sky`, `violet`, `emerald`, `amber`, `rose`, `teal`, `indigo`,
+`slate`); `nil` means no accent.
+
+- Accents are authored **only in the template designer** and recorded inside the
+  template's JSON (`canvas_layouts.layout_map.rows/columns`) — the map embedded in the
+  Ecto entity. No new column and **no migration**.
+- `instantiate_template/3` already copies `rows`/`columns` verbatim into
+  `unstr_canvases.cells`, so the canvas editor reads the accents straight from its own
+  JSON structure. The canvas editor renders them **read-only**: there is no picker, and
+  no accent CRDT operation exists.
+- **Tokens, not hex.** `Psc.Canvas.Accent` owns the palette and validity;
+  `PscWeb.Components.Accent` maps each token to *static* Tailwind classes and renders the
+  bar. Tailwind never sees a runtime-composed class, and both themes stay legible.
+- **Copy-on-instantiate**, exactly like row/column labels: recolouring a template later
+  does not retro-update canvases that were already created from it.
+- **Defensive validation** in `Psc.Canvas.Layout.changeset/2` rejects unknown tokens.
+
+**Alternatives considered.** Raw hex per header (arbitrary, unbounded contrast problems,
+and requires inline styles); a separate accents table (new schema and joins for
+presentation metadata); canvas-side recolouring via CRDT ops (rejected: styling is a
+template concern, and it duplicated the palette in a second authoring surface); tinted
+header backgrounds (fights Markdown text contrast); colour dots before labels (too weak to
+scan, kept only as the picker swatch).
+
+**Consequences.** Styling lives with the structure it describes. The canvas editor is a
+pure consumer: it renders whatever the template's JSON carried at instantiation, so
+canvases created before an accent existed stay unchanged until they are recreated — the
+same rule already applied to row/column labels. Colour is never the only carrier of
+meaning: labels remain, bars are `aria-hidden`, and each swatch is a labelled button.
+Clearing an accent writes `nil`, and existing templates/canvases without the key render
+exactly as before.
+
+---
+
+## ADR-012 — Remove the unused cell `semantics` field
+
+**Context.** Templates carried a per-cell `semantics` string (`free` | `problem` |
+`solution` | `evidence` | `note`) chosen from a dropdown, copied into each canvas at
+instantiation and then explicitly excluded from canvas editing. A full search of `lib/`,
+`assets/`, tests and specs found no consumer: no icon, style, filter, relation rule,
+analytics query, export or validation read it. The field was authored, stored and
+copied — and never used. Its documented purpose ("iconography and future insights") was
+never implemented, so the dropdown asked users to classify cells with no observable
+effect.
+
+**Decision.** Remove the field from the model and from both surfaces:
+
+- The template designer no longer offers the dropdown and no longer writes the key:
+  `empty_cell_meta/0` and the index page's default layout map dropped it, and the
+  `@semantics_options` assign is gone.
+- `Canvas.instantiate_template/3` no longer copies `semantics` into canvas cells.
+- The canvas editor **keeps** filtering a `semantics` key when reading cells, so canvases
+  persisted before this change cannot surface it as an editable Markdown field.
+
+**Alternatives considered.** Keep it dormant for a future iconography feature (dead
+metadata is what prompted the review; a real feature can add a properly named, validated
+field); rename it to `role`/`cell_type` and implement icons now (real scope, deferred as
+its own feature); migrate stored JSON to strip the key (nothing reads it and the editor
+already ignores it, so an irreversible data rewrite buys nothing).
+
+**Consequences.** No migration. Old templates and canvases keep an inert key — it
+survives in stored JSON because template/canvas edits are field-level updates — but it is
+never displayed, never copied into new canvases, and never writable. Cell details are now
+only label, fields and defaults (edited inline in the grid — see ADR-013). If cell roles
+become a real feature, they return as a first-class, validated property with an actual
+renderer and a user-facing name.
+
+---
+
+## ADR-013 — Cell details are edited inline in the template grid
+
+**Context.** Cell metadata (label, fields, per-field defaults, add/remove field) was
+edited in a separate panel: clicking a cell set `@selected_cell` and a sticky side
+column rendered the inputs. The grid therefore had to be paired with an always-present
+1/3-width panel that was empty (or a hint) most of the time, and every edit required a
+select-then-edit round trip. On narrower screens the panel stacked below the grid,
+separating the control from the cell it described.
+
+**Decision.** Edit cell details directly in the grid. Each cell renders its own label
+input, one row per field (key, default input, remove button) and an inline "add field"
+form. `select_cell` / `@selected_cell` and the side panel are gone; the designer is now a
+single full-width column (template form → grid).
+
+**Alternatives considered.** A modal/drawer opened from the cell (still a select-then-edit
+hop, and hides the grid while editing); expanding the clicked cell in place while keeping
+the grid width (complex table reflow); keeping the panel but auto-selecting the first
+cell (better, but still duplicates the interaction). Direct inline editing is the
+simplest model that keeps control and content in the same visual place.
+
+**Consequences.** The grid gets the full width, which matters now that cells contain
+inputs rather than badges. Every cell repeats its own form markup, so the table is denser
+and fields must stay compact (micro-labels + small inputs). Because each cell has its own
+`phx-submit="add_cell_field"` form, the grid cannot be wrapped in another `<form>` — the
+template name/description form stays a separate block above it.
+
+LiveView 1.x **throws** when `phx-change` is bound to an input that is not inside a form
+(`form events require the input to be inside a form`), and the failure is silent in the
+UI: the event never reaches the server, so the next re-render restores the old value.
+Every inline input is therefore wrapped in its own tiny form carrying hidden
+`cell_key`/`field` (or `index`) inputs instead of `phx-value-*` attributes. This also
+fixed the pre-existing column and row label inputs, which had the same defect and had
+never actually persisted edits in a browser. Editing remains in-memory until "Save
+Template", unchanged from before.
+
+---
+
+## ADR-014 — Templates save explicitly, with a Cancel escape hatch
+
+**Context.** Canvases and documents autosave (idle + periodic folds into a snapshot), so
+the platform was inconsistent: the template designer edits in memory and persists only on
+**Save Template**. Nothing on screen said so — no dirty indicator and no way to abandon a
+draft other than navigating away — which made the save model genuinely ambiguous to users.
+
+**Decision.** Keep explicit saving for templates (a template is a schema other canvases
+are instantiated from, so half-saved structure is worse than a lost draft), but make the
+model visible and give it a deliberate exit:
+
+- Any edit — grid structure, cell label/field/default, field removal, accent,
+  name or description — sets a `@dirty?` flag (structure edits via `update_layout/2`,
+  text fields via `phx-change="mark_dirty"` on the save form).
+- While dirty, the form shows an **“Unsaved changes”** hint beside the actions.
+- **Cancel** (`#cancel-template-editing`) opens a `UIDialog` confirmation
+  (`#discard-template-dialog`) when the draft is dirty — **Keep editing** closes it,
+  **Discard and leave** abandons the draft and returns to the template library. Escape,
+  an outside click and the dialog’s × all just close it, via the dialog’s mapped
+  `on-close` event resetting `@confirm_leave?`. Cancelling with nothing dirty skips the
+  modal entirely.
+- **Save Template** remains the only persistence path (`Canvas.create_template/2` /
+  `Canvas.update_template/2` → `Layout.changeset/2`).
+
+**Alternatives considered.** Autosave templates like canvases (structure changes are
+schema edits with validation — a debounced autosave would surface failures mid-edit and
+let incompatible structures land without intent); save-on-navigate (surprising and
+impossible to cancel); Cancel-as-“revert and stay” (ambiguous for a brand-new template
+where there is nothing to revert to, so Cancel consistently means “leave without saving”);
+a native `confirm()` (no styling, blocks the event loop, and cannot be driven by LiveView
+state — replaced by the modal).
+
+**Consequences.** Templates and canvases now differ on purpose, and the difference is
+visible in the UI rather than implied. Because nothing is written until submit, the dirty
+flag is best-effort: it starts `false` and only ever turns `true` during a session, so
+editing back to the original values still shows the indicator — acceptable for a
+boolean, and cheaper than deep-comparing the whole `layout_map` (including template name
+and description held in a separate form) on every keystroke.
+
+Fixing the modal surfaced a defect in the shared dialog component: `activateOpenState/0`
+calls `this.el.focus()` on the dialog root, but a non-focusable `<div>` ignores it, so
+focus stayed on the trigger and **Escape never closed any dialog in the app**. The dialog
+and alert-dialog roots now carry `tabindex="-1"`, which makes the existing focus call
+effective and restore Escape-to-close (verified in the browser: focus lands on
+`#discard-template-dialog`, Escape closes it, and the draft survives).
+
+---
+
+## ADR-015 — Light-mode contrast comes from theme tokens, not white alpha
+
+**Context.** The product was designed dark-first, and subtle surfaces were expressed as
+white overlays: `border-white/10` on 84 elements, `bg-white/5` and `hover:bg-white/5` on
+cards and rows, plus `ring-white/20`. On the dark theme those read correctly; on the light
+theme (near-white `base-100`) a 10 % white border is literally invisible, so cards, table
+cells and inputs lost their edges and the UI looked flat and low-contrast. Markdown was
+rendered with `prose-invert`, which forced light text on what is, in light mode, a light
+surface.
+
+**Decision.** Express subtle emphasis with **theme tokens derived from `base-content`**,
+which flip with the theme: `border-base-content/10`, `bg-base-content/5`,
+`hover:border-base-content/25`, `ring-base-content/20`, and let Markdown use
+`prose dark:prose-invert`. Supporting changes:
+
+- **A real `dark:` variant** bound to daisyUI’s theme rather than the OS default:
+  `@custom-variant dark` matches `[data-theme="dark"]`, and also
+  `prefers-color-scheme: dark` when no `data-theme` is set (the “system” setting removes
+  the attribute).
+- **Light theme tuning**: `base-200` 96 %→95 % and `base-300` 92 %→89.5 % so cards and
+  insets separate from the 98 % page; SaladUI `--border`/`--input` 12 %→20 %; the primary
+  orange darkened from `oklch(70%)` to `oklch(62%)` so white text on it is legible.
+- **A regression guard**: `PscWeb.ThemeContrastTest` scans `lib/psc_web/live/**/*.ex` and
+  fails on any `bg|text|border|ring|divide-(white|black)/*` utility.
+
+**Alternatives considered.** Duplicating every surface with `dark:` variants (doubles the
+class soup and still forgets cases); a light-only stylesheet override (fragile, invisible
+to readers of the markup); leaving the light theme rough (it is user-selectable, so it is a
+supported surface); using raw hex colors (no theme awareness at all).
+
+**Consequences.** One vocabulary for depth across both themes: `base-content/N` reads as
+“10 % of the foreground”, which is exactly the intent. The dialog overlay keeps
+`bg-black/80` deliberately — a modal scrim should stay dark in both themes. Colour-coded
+chips (`amber-600 dark:amber-300`) now need explicit pairs, which the `dark:` variant makes
+possible for the first time. Verified with light-mode screenshots of the template designer,
+canvas editor and documents index, and a dark-mode regression screenshot.
+
+---
+
+## ADR-016 — One Share modal component for templates, canvases and documents
+
+**Context.** Sharing existed three times with three different shapes: a collapsible inline
+panel in the template designer, a block inside the canvas editor's presence sidebar, and a
+block with a copy-link row in the document editor's sidebar. Each duplicated the invite
+form, the shared-with list and the remove control, and none of them could be opened from
+the header where users look for actions. The remove affordance had also drifted (text
+link, plain ×, bordered icon).
+
+**Decision.** Extract one component, `PscWeb.Components.ShareDialog`, with two parts:
+
+- `share_button/1` — a **combo button**: the `hero-share` icon beside the current label
+  ("Share"), with the event name supplied by the caller.
+- `share_dialog/1` — a `UIDialog` modal holding the invite form, the "People with access"
+  list (each row with the shared remove-icon button), an optional copy-link row, and a
+  Done action. It takes `manage?`, `shared_with`, `share_event`, `remove_event`,
+  `on_close` and `link`, so each context keeps its own server events
+  (`share_template`/`unshare_template`, `share_canvas`/`remove_access`,
+  `share_document`/`remove_access`).
+
+Each LiveView owns a boolean `@share_open` (`open_share` / `share_closed`), mirroring the
+Cancel-dialog pattern from ADR-014. The inline share blocks are gone; the canvas sidebar
+keeps presence only, and the document sidebar now just points at the header button.
+
+**Alternatives considered.** A shared function that returns markup (harder to parameterise
+cleanly in HEEx); keeping per-surface markup and only restyling it (the drift returns); a
+native `confirm()`/`prompt()` (no, per ADR-014); a full-page share route (leaves context
+and costs a navigation).
+
+**Consequences.** One `id` convention drives the tests: `#share-<x>-button`,
+`#share-<x>-dialog`, `#share-<x>-dialog-form`, `#share-<x>-dialog-link`. The dialog stays
+open after an invite so several people can be added, and closes through Done, Escape,
+outside click or its ×. Because the modal owns the link row, the document's copy-link
+finally lives next to the people list instead of under a heading in the sidebar.
+
+---
+
+## ADR-017 — Remove the unused `relations` metadata
+
+**Context.** Templates carried a `relations` list (`%{"from" => cell_key, "to" => cell_key,
+"label" => string}`) authored in a designer card with two cell dropdowns and an optional
+label. `instantiate_template/3` copied it into every canvas, but nothing ever rendered it —
+no arrows, no list — and both specs listed arrow drawing as out of scope. It was write-only
+metadata. Reviewing it surfaced two defects: (1) deleting a row/column left **dangling
+relations that still saved**, because `remove_row/remove_column` never prune `cells`,
+`normalize_layout_map/1` only adds keys, and `broken_relations?/2` therefore still found
+the removed cell; (2) duplicates were allowed and self-loops were blocked only in the UI
+handler, not by the changeset.
+
+**Decision.** Remove relations entirely:
+
+- **Designer:** the Relations card, the `add_relation` / `remove_relation` handlers, and
+  the `relations` key in new layout maps are gone. The designer is now form → grid.
+- **Validation:** `broken_relations?/2` and its error are gone from `Layout.changeset/2`.
+- **Instantiation:** `instantiate_template/3` no longer copies `relations` into the canvas.
+- **Legacy data:** existing templates and canvases keep an inert `relations` key; nothing
+  reads it, and new writes never create it.
+
+**Alternatives considered.** Keep the card but label it “metadata only” (asks users to
+author data with no effect); finish arrow rendering now (a real feature needing hit
+testing, overlap handling and accessibility — not a half-hidden list); keep only the
+validation (dead rules with no UI). The dangling-relation bug argued for removing the
+source rather than patching validation.
+
+**Consequences.** Fewer concepts in the template JSON, and removing an axis can no longer
+strand edges because there are none. If relations return, they should arrive as a
+first-class feature — typed edges, rendered arrows with a table/legend view, duplicate and
+self-loop rules — rather than as invisible metadata.
+
+---
+
+## ADR-018 — Documents is parked as a standalone feature
+
+**Context.** The app shipped a standalone `/documents` section (index + editor with
+collaborative Markdown, inline preview and sharing) alongside Canvases and Templates. It
+was exposed as the first item in the primary navigation, implying it was a core product
+surface. Product direction has changed: a document should eventually live **inside** a
+canvas cell/region rather than as a separate destination, so advertising it as a
+first-class route misrepresents the platform and splits the mental model.
+
+**Decision.** Remove Documents from the UI for now:
+
+- The primary nav is **Canvases · Templates** (still rendered only for signed-in users).
+- The `/documents` and `/documents/:id` routes and their LiveViews remain in the codebase
+  for the planned integration; they are simply not linked from anywhere in the UI.
+- The Markdown renderer, inline preview and sharing component they use are shared
+  (`PscWeb.Markdown`, `PscWeb.Components.ShareDialog`), so that work carries over.
+
+**Alternatives considered.** Delete the routes and LiveViews (throws away the editor,
+inline preview and CRDT document work that the canvas integration will reuse); keep the
+nav item but flag it as experimental (still advertises a standalone feature that is not
+part of the product); redirect `/documents` to `/canvases` (surprising for anyone with a
+bookmark and hides the parked state).
+
+**Consequences.** The platform now presents two nouns — Canvases and Templates — matching
+the product story. `/documents` remains reachable by direct URL until the integration
+lands; if that is unwanted, the routes can be removed (or redirected) with a one-line
+change. `docs/spec/` still describes the document editor, now explicitly as parked work.
 
 ---
 

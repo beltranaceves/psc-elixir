@@ -12,6 +12,7 @@ defmodule PscWeb.CanvasLiveTest do
       {:ok, _lv, html} = live(conn, ~p"/psc-canvas")
 
       assert html =~ "Canvases"
+      refute html =~ "Back to Documents"
     end
 
     test "lists the current user's canvases", %{conn: conn, user: user} do
@@ -32,12 +33,22 @@ defmodule PscWeb.CanvasLiveTest do
       assert html =~ "Strategy 2026"
     end
 
-    test "exposes the share form to the owner", %{conn: conn, user: user} do
+    test "exposes the share modal to the owner", %{conn: conn, user: user} do
       canvas = CanvasFixtures.canvas_fixture(%{user: user})
 
       {:ok, lv, _html} = live(conn, ~p"/psc-canvas/#{canvas.id}")
 
-      assert has_element?(lv, "#share-form")
+      assert has_element?(lv, "#share-canvas-button .hero-share")
+
+      lv |> element("#share-canvas-button") |> render_click()
+      assert has_element?(lv, "#share-canvas-dialog[data-open='true']")
+
+      html =
+        lv
+        |> form("#share-canvas-dialog-form", %{"email" => "guest@example.com"})
+        |> render_submit()
+
+      assert html =~ "Canvas shared with guest@example.com"
     end
   end
 end

@@ -63,21 +63,16 @@ defmodule PscWeb.CanvasLive.Index do
     <Layouts.app
       flash={@flash}
       current_scope={@current_scope}
+      header_title="Canvases"
       container_class="w-full mx-auto max-w-screen-xl"
     >
       <div class="max-w-6xl mx-auto px-4 py-8">
-        <div class="flex items-center justify-between mb-8">
+        <div class="mb-8">
           <h1 class="text-2xl font-semibold text-base-content">Canvases</h1>
-          <.link
-            navigate={~p"/documents"}
-            class="text-sm text-base-content/60 hover:text-base-content transition-colors"
-          >
-            Back to Documents
-          </.link>
         </div>
 
         <%!-- Create New Canvas Form --%>
-        <div class="mb-8 rounded-xl border border-white/10 bg-base-200 p-6">
+        <div class="mb-8 rounded-xl border border-base-content/10 bg-base-200 p-6">
           <h2 class="text-lg font-medium text-base-content mb-4">Create New Canvas</h2>
           <.form
             for={@new_canvas_form}
@@ -108,13 +103,13 @@ defmodule PscWeb.CanvasLive.Index do
         <div class="mb-12">
           <h2 class="text-lg font-medium text-base-content mb-4">My Canvases</h2>
           <%= if Enum.empty?(@my_canvases) do %>
-            <div class="rounded-xl border border-white/10 bg-base-200 p-8 text-center">
+            <div class="rounded-xl border border-base-content/10 bg-base-200 p-8 text-center">
               <p class="text-base-content/60">No canvases yet. Create one to get started!</p>
             </div>
           <% else %>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for canvas <- @my_canvases do %>
-                <div class="rounded-xl border border-white/10 bg-base-200 p-6 hover:border-white/25 transition-colors">
+                <div class="rounded-xl border border-base-content/10 bg-base-200 p-6 hover:border-base-content/25 transition-colors">
                   <h3 class="font-medium text-base-content">{canvas.name}</h3>
                   <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4 flex gap-2">

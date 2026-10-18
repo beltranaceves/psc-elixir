@@ -5,13 +5,15 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # would collide with unqualified imports.
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Input, as: UIInput
-  alias PscWeb.Components.UI.Badge, as: UIBadge
   alias PscWeb.Components.UI.Textarea, as: UITextarea
   alias PscWeb.Components.UI.Label, as: UILabel
+  alias PscWeb.Components.UI.Dialog, as: UIDialog
+
+  import PscWeb.Components.Accent
+  import PscWeb.Components.ShareDialog
 
   alias Psc.Canvas
-
-  @semantics_options ["free", "problem", "solution", "evidence", "note"]
+  alias Psc.Canvas.Accent
 
   @impl true
   def mount(params, _session, socket) do
@@ -25,9 +27,10 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
          |> assign(:template_form, to_form(%{}))
          |> assign(:editing_layout, nil)
          |> assign(:owner?, true)
-         |> assign(:share_form_open, false)
-         |> assign(:semantics_options, @semantics_options)
-         |> assign(:selected_cell, nil)}
+         |> assign(:share_open, false)
+         |> assign(:accent_picker, nil)
+         |> assign(:confirm_leave?, false)
+         |> assign(:dirty?, false)}
 
       id ->
         case Canvas.get_template_with_author(id) do
@@ -44,9 +47,10 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                )
                |> assign(:editing_layout, template)
                |> assign(:owner?, owner?)
-               |> assign(:share_form_open, false)
-               |> assign(:semantics_options, @semantics_options)
-               |> assign(:selected_cell, nil)}
+               |> assign(:share_open, false)
+               |> assign(:accent_picker, nil)
+               |> assign(:confirm_leave?, false)
+               |> assign(:dirty?, false)}
             else
               {:ok,
                socket
@@ -90,14 +94,37 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     {:noreply, update_layout(socket, &update_row_label(&1, String.to_integer(index), label))}
   end
 
+  # ─── Accent colors (owner only) ───
+
+  @impl true
+  def handle_event("toggle_accent_picker", %{"group" => group, "index" => index}, socket)
+      when group in ["column", "row"] do
+    key = {String.to_atom(group), String.to_integer(index)}
+    picker = if socket.assigns.accent_picker == key, do: nil, else: key
+    {:noreply, assign(socket, :accent_picker, picker)}
+  end
+
+  def handle_event("set_column_accent", %{"index" => index, "accent" => accent}, socket) do
+    idx = String.to_integer(index)
+
+    {:noreply,
+     socket
+     |> update_layout(&put_column_accent(&1, idx, normalize_accent(accent)))
+     |> assign(:accent_picker, nil)}
+  end
+
+  def handle_event("set_row_accent", %{"index" => index, "accent" => accent}, socket) do
+    idx = String.to_integer(index)
+
+    {:noreply,
+     socket
+     |> update_layout(&put_row_accent(&1, idx, normalize_accent(accent)))
+     |> assign(:accent_picker, nil)}
+  end
+
   # ─── Cell metadata events (owner only) ───
 
   @impl true
-  def handle_event("select_cell", %{"cell_key" => cell_key}, socket) do
-    selected = if socket.assigns.selected_cell == cell_key, do: nil, else: cell_key
-    {:noreply, assign(socket, :selected_cell, selected)}
-  end
-
   def handle_event(
         "update_cell_meta",
         %{"cell_key" => cell_key, "field" => field, "value" => value},
@@ -166,36 +193,6 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
      end)}
   end
 
-  # ─── Relations events (owner only) ───
-
-  @impl true
-  def handle_event(
-        "add_relation",
-        %{"from" => from, "to" => to, "label" => label},
-        socket
-      ) do
-    if from == "" or to == "" or from == to do
-      {:noreply, put_flash(socket, :error, "Select a source and a different target cell")}
-    else
-      {:noreply,
-       update_layout(socket, fn lm ->
-         relations = lm["relations"] || []
-         rel = %{"from" => from, "to" => to, "label" => String.trim(label)}
-         Map.put(lm, "relations", relations ++ [rel])
-       end)}
-    end
-  end
-
-  @impl true
-  def handle_event("remove_relation", %{"index" => index}, socket) do
-    idx = String.to_integer(index)
-
-    {:noreply,
-     update_layout(socket, fn lm ->
-       Map.put(lm, "relations", List.delete_at(lm["relations"] || [], idx))
-     end)}
-  end
-
   # ─── Save / share events ───
 
   @impl true
@@ -227,8 +224,48 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   @impl true
-  def handle_event("toggle_share_form", _params, socket) do
-    {:noreply, update(socket, :share_form_open, &(!&1))}
+  def handle_event("open_share", _params, socket) do
+    {:noreply, assign(socket, :share_open, true)}
+  end
+
+  @impl true
+  def handle_event("share_closed", _params, socket) do
+    {:noreply, assign(socket, :share_open, false)}
+  end
+
+  # The template name/description live in the save form and are not persisted
+  # until submit, so any keystroke marks the draft as dirty.
+  @impl true
+  def handle_event("mark_dirty", _params, socket) do
+    {:noreply, assign(socket, :dirty?, true)}
+  end
+
+  # Templates are saved explicitly (no autosave), so Cancel discards the
+  # in-memory draft. A dirty draft is confirmed through a modal first.
+  @impl true
+  def handle_event("request_cancel", _params, socket) do
+    if socket.assigns.dirty? do
+      {:noreply, assign(socket, :confirm_leave?, true)}
+    else
+      {:noreply, push_navigate(socket, to: ~p"/templates")}
+    end
+  end
+
+  @impl true
+  def handle_event("dismiss_leave_dialog", _params, socket) do
+    {:noreply, assign(socket, :confirm_leave?, false)}
+  end
+
+  # The dialog pushes "close" on Escape, outside click, the × button or after a
+  # transition, so the server state has to follow it back to closed.
+  @impl true
+  def handle_event("leave_dialog_closed", _params, socket) do
+    {:noreply, assign(socket, :confirm_leave?, false)}
+  end
+
+  @impl true
+  def handle_event("confirm_leave", _params, socket) do
+    {:noreply, push_navigate(socket, to: ~p"/templates")}
   end
 
   @impl true
@@ -262,17 +299,18 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # ─── Layout map helpers ───
 
   defp update_layout(socket, fun) do
-    assign(socket, :layout_map, fun.(socket.assigns.layout_map))
+    socket
+    |> assign(:layout_map, fun.(socket.assigns.layout_map))
+    |> assign(:dirty?, true)
   end
 
   defp empty_layout_map do
-    %{"rows" => [], "columns" => [], "layout" => [], "cells" => %{}, "relations" => []}
+    %{"rows" => [], "columns" => [], "layout" => [], "cells" => %{}}
   end
 
   defp empty_cell_meta do
     %{
       "label" => "",
-      "semantics" => "free",
       "fields" => ["content"],
       "defaults" => %{"content" => ""}
     }
@@ -289,7 +327,6 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       |> Map.put_new("columns", [])
       |> Map.put_new("layout", [])
       |> Map.put_new("cells", %{})
-      |> Map.put_new("relations", [])
 
     rows = lm["rows"]
     columns = lm["columns"]
@@ -352,17 +389,22 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     Map.put(lm, "rows", rows)
   end
 
-  defp all_cell_keys(lm) do
-    (lm["layout"] || []) |> List.flatten() |> Enum.reject(&is_nil/1)
+  defp put_column_accent(lm, idx, accent) do
+    columns = List.update_at(lm["columns"], idx, &Map.put(&1, "accent", accent))
+    Map.put(lm, "columns", columns)
   end
 
-  defp cell_label(lm, key) do
-    get_in(lm, ["cells", key, "label"])
-    |> case do
-      nil -> key
-      "" -> key
-      label -> label
-    end
+  defp put_row_accent(lm, idx, accent) do
+    rows = List.update_at(lm["rows"], idx, &Map.put(&1, "accent", accent))
+    Map.put(lm, "rows", rows)
+  end
+
+  # The UI sends "" for "no accent"; anything unrecognised is treated as none,
+  # which the layout changeset also rejects if it ever reaches the database.
+  defp normalize_accent(""), do: nil
+
+  defp normalize_accent(accent) do
+    if Accent.valid?(accent), do: accent, else: nil
   end
 
   @impl true
@@ -371,377 +413,433 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     <Layouts.app
       flash={@flash}
       current_scope={@current_scope}
+      header_title="Designer"
+      header_section="Templates"
       container_class="w-full mx-auto max-w-screen-xl"
     >
-      <div class="px-4 py-8">
-        <div class="flex items-center justify-between mb-6">
-          <h1 class="text-2xl font-semibold text-base-content">
-            {if @editing_layout, do: "Template designer", else: "New template"}
-          </h1>
-          <div class="flex items-center gap-2">
-            <%= if @owner? do %>
-              <UIButton.button phx-click="toggle_share_form" variant="ghost" size="sm">
-                Share
-              </UIButton.button>
-            <% end %>
-            <.link
-              navigate={~p"/templates"}
-              class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-white/10 text-base-content hover:bg-white/5 transition-colors"
-            >
-              Back to Templates
-            </.link>
-          </div>
-        </div>
-
+      <div class="px-4 py-6">
         <%= if @editing_layout && !@owner? do %>
-          <div class="mb-6 p-3 rounded-lg border border-white/10 bg-base-200 text-sm text-base-content/60">
+          <div class="mb-6 p-3 rounded-lg border border-base-content/10 bg-base-200 text-sm text-base-content/60">
             You have read-only access to this template. Ask the owner to make changes.
           </div>
         <% end %>
 
-        <%= if @share_form_open && @owner? do %>
-          <div class="mb-6 p-4 rounded-xl border border-white/10 bg-base-200">
-            <h2 class="text-sm font-medium text-base-content mb-3">Share Template</h2>
-            <form phx-submit="share_template" class="flex gap-2 max-w-md">
-              <UIInput.input
-                type="email"
-                name="email"
-                placeholder="user@example.com"
-                required
-                class="flex-1"
-              />
-              <UIButton.button type="submit" size="sm">Share</UIButton.button>
-            </form>
-            <%= if length(@editing_layout.shared_with || []) > 0 do %>
-              <ul class="mt-3 space-y-1">
-                <%= for email <- @editing_layout.shared_with do %>
-                  <li class="flex items-center justify-between text-xs text-base-content/60 max-w-md">
-                    <span>{email}</span>
-                    <button
-                      type="button"
-                      phx-click="unshare_template"
-                      phx-value-email={email}
-                      class="text-error hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                <% end %>
-              </ul>
-            <% end %>
-          </div>
-        <% end %>
+        <.share_dialog
+          :if={@editing_layout}
+          id="share-template-dialog"
+          open={@share_open}
+          title="Share template"
+          description="People with access can open this template and create canvases from it."
+          manage?={@owner?}
+          shared_with={@editing_layout.shared_with || []}
+          share_event="share_template"
+          remove_event="unshare_template"
+          on_close="share_closed"
+        />
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="lg:col-span-2 space-y-6">
-            <.form
-              for={@template_form}
-              id="template-form"
-              phx-submit="save_template"
-              class="p-6 rounded-xl border border-white/10 bg-base-200 space-y-4"
-            >
-              <div>
-                <UILabel.label for="template-name">Template Name</UILabel.label>
-                <UIInput.input
-                  field={@template_form[:name]}
-                  type="text"
-                  required
-                  disabled={!@owner?}
-                />
+        <div class="space-y-6">
+          <.form
+            for={@template_form}
+            id="template-form"
+            phx-change="mark_dirty"
+            phx-submit="save_template"
+            class="p-6 rounded-xl border border-base-content/10 bg-base-200 space-y-4"
+          >
+            <div>
+              <UILabel.label for={@template_form[:name].id}>Name</UILabel.label>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div class="min-w-0 sm:flex-1">
+                  <UIInput.input
+                    field={@template_form[:name]}
+                    type="text"
+                    required
+                    disabled={!@owner?}
+                  />
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  <%= if @owner? and @editing_layout do %>
+                    <.share_button id="share-template-button" label="Share" size="default" />
+                  <% end %>
+                  <.link
+                    navigate={~p"/templates"}
+                    class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-base-content/10 px-3 text-sm text-base-content transition-colors hover:bg-base-content/5"
+                  >
+                    <.icon name="hero-arrow-left" class="size-4" /> Templates
+                  </.link>
+                </div>
               </div>
-              <div>
-                <UILabel.label for="template-description">Description</UILabel.label>
-                <UITextarea.textarea
-                  field={@template_form[:description]}
-                  rows="2"
-                  disabled={!@owner?}
-                />
+            </div>
+            <div>
+              <UILabel.label for="template-description">Description</UILabel.label>
+              <UITextarea.textarea
+                field={@template_form[:description]}
+                rows="2"
+                disabled={!@owner?}
+              />
+            </div>
+            <%= if @owner? do %>
+              <div class="flex items-center justify-end gap-3">
+                <span
+                  :if={@dirty?}
+                  id="unsaved-changes-hint"
+                  class="mr-auto text-xs font-medium text-amber-600 dark:text-amber-300"
+                >
+                  Unsaved changes
+                </span>
+                <UIButton.button
+                  type="button"
+                  variant="outline"
+                  id="cancel-template-editing"
+                  phx-click="request_cancel"
+                >
+                  Cancel
+                </UIButton.button>
+                <UIButton.button type="submit">Save Template</UIButton.button>
               </div>
+            <% end %>
+          </.form>
+
+          <div class="p-6 rounded-xl border border-base-content/10 bg-base-200">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-sm font-medium text-base-content">Grid</h2>
               <%= if @owner? do %>
-                <div class="flex justify-end">
-                  <UIButton.button type="submit">Save Template</UIButton.button>
+                <div class="flex gap-2">
+                  <UIButton.button variant="outline" size="sm" phx-click="add_column">
+                    Add Column
+                  </UIButton.button>
+                  <UIButton.button variant="outline" size="sm" phx-click="add_row">
+                    Add Row
+                  </UIButton.button>
                 </div>
               <% end %>
-            </.form>
+            </div>
 
-            <div class="p-6 rounded-xl border border-white/10 bg-base-200">
-              <div class="flex items-center justify-between mb-4">
-                <h2 class="text-sm font-medium text-base-content">Grid</h2>
-                <%= if @owner? do %>
-                  <div class="flex gap-2">
-                    <UIButton.button variant="outline" size="sm" phx-click="add_column">
-                      Add Column
-                    </UIButton.button>
-                    <UIButton.button variant="outline" size="sm" phx-click="add_row">
-                      Add Row
-                    </UIButton.button>
-                  </div>
-                <% end %>
-              </div>
+            <%= if Enum.empty?(@layout_map["rows"]) or Enum.empty?(@layout_map["columns"]) do %>
+              <p class="text-sm text-base-content/50">
+                Add at least one row and one column to start building your template.
+              </p>
+            <% else %>
+              <div class="overflow-auto">
+                <table class="w-full border-collapse table-fixed text-sm">
+                  <thead>
+                    <tr>
+                      <th class="w-40 p-2 border border-base-content/10"></th>
+                      <%= for {col, ci} <- Enum.with_index(@layout_map["columns"]) do %>
+                        <th class="border border-base-content/10 bg-base-content/5 p-0 text-base-content/70 align-bottom">
+                          <div class="flex flex-col">
+                            <.accent_bar
+                              id={"accent-bar-column-#{col["id"]}"}
+                              token={col["accent"]}
+                            />
+                            <div class="p-2">
+                              <div class="flex items-center gap-1">
+                                <form
+                                  id={"column-#{col["id"]}-label-form"}
+                                  phx-change="update_column_label"
+                                  class="min-w-0 flex-1"
+                                >
+                                  <input type="hidden" name="index" value={ci} />
+                                  <input
+                                    type="text"
+                                    id={"column-#{col["id"]}-label"}
+                                    name="label"
+                                    value={col["label"]}
+                                    phx-debounce="300"
+                                    disabled={!@owner?}
+                                    class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                  />
+                                </form>
+                                <%= if @owner? do %>
+                                  <button
+                                    type="button"
+                                    id={"accent-swatch-column-#{col["id"]}"}
+                                    phx-click="toggle_accent_picker"
+                                    phx-value-group="column"
+                                    phx-value-index={ci}
+                                    class={[
+                                      "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
+                                      swatch_class(col["accent"])
+                                    ]}
+                                    title="Accent color"
+                                    aria-label={"Accent color for column #{col["label"]}"}
+                                  ></button>
+                                  <button
+                                    type="button"
+                                    id={"remove-column-#{col["id"]}"}
+                                    phx-click="remove_column"
+                                    phx-value-index={ci}
+                                    class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
+                                    title="Remove column"
+                                    aria-label={"Remove column #{col["label"]}"}
+                                  >
+                                    <.icon name="hero-x-mark" class="size-3" />
+                                  </button>
+                                <% end %>
+                              </div>
 
-              <%= if Enum.empty?(@layout_map["rows"]) or Enum.empty?(@layout_map["columns"]) do %>
-                <p class="text-sm text-base-content/50">
-                  Add at least one row and one column to start building your template.
-                </p>
-              <% else %>
-                <div class="overflow-auto">
-                  <table class="w-full border-collapse table-fixed text-sm">
-                    <thead>
+                              <div
+                                :if={@owner? and @accent_picker == {:column, ci}}
+                                id={"accent-picker-column-#{col["id"]}"}
+                                class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
+                              >
+                                <button
+                                  :for={token <- Accent.tokens()}
+                                  type="button"
+                                  id={"accent-option-column-#{col["id"]}-#{token}"}
+                                  phx-click="set_column_accent"
+                                  phx-value-index={ci}
+                                  phx-value-accent={token}
+                                  class={[
+                                    "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
+                                    swatch_class(token),
+                                    col["accent"] == token &&
+                                      "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
+                                  ]}
+                                  title={token}
+                                  aria-label={"Set column accent #{token}"}
+                                ></button>
+                                <button
+                                  type="button"
+                                  phx-click="set_column_accent"
+                                  phx-value-index={ci}
+                                  phx-value-accent=""
+                                  class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
+                                >
+                                  None
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </th>
+                      <% end %>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for {row_meta, ri} <- Enum.with_index(@layout_map["rows"]) do %>
                       <tr>
-                        <th class="w-40 p-2 border border-white/10"></th>
-                        <%= for {col, ci} <- Enum.with_index(@layout_map["columns"]) do %>
-                          <th class="p-2 border border-white/10 bg-white/5 text-base-content/70">
+                        <td class="relative border border-base-content/10 bg-base-content/5 p-0 align-top">
+                          <.accent_bar
+                            id={"accent-bar-row-#{row_meta["id"]}"}
+                            token={row_meta["accent"]}
+                            orientation={:left}
+                          />
+                          <div class="p-2">
                             <div class="flex items-center gap-1">
-                              <input
-                                type="text"
-                                value={col["label"]}
-                                phx-change="update_column_label"
-                                phx-debounce="300"
-                                phx-value-index={ci}
-                                name="label"
-                                disabled={!@owner?}
-                                class="w-full px-2 py-1 rounded bg-transparent border border-transparent hover:border-white/10 focus:border-primary text-inherit"
-                              />
+                              <form
+                                id={"row-#{row_meta["id"]}-label-form"}
+                                phx-change="update_row_label"
+                                class="min-w-0 flex-1"
+                              >
+                                <input type="hidden" name="index" value={ri} />
+                                <input
+                                  type="text"
+                                  id={"row-#{row_meta["id"]}-label"}
+                                  name="label"
+                                  value={row_meta["label"]}
+                                  phx-debounce="300"
+                                  disabled={!@owner?}
+                                  class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                />
+                              </form>
                               <%= if @owner? do %>
                                 <button
                                   type="button"
-                                  phx-click="remove_column"
-                                  phx-value-index={ci}
-                                  class="text-error shrink-0"
-                                  title="Remove column"
+                                  id={"accent-swatch-row-#{row_meta["id"]}"}
+                                  phx-click="toggle_accent_picker"
+                                  phx-value-group="row"
+                                  phx-value-index={ri}
+                                  class={[
+                                    "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
+                                    swatch_class(row_meta["accent"])
+                                  ]}
+                                  title="Accent color"
+                                  aria-label={"Accent color for row #{row_meta["label"]}"}
+                                ></button>
+                                <button
+                                  type="button"
+                                  id={"remove-row-#{row_meta["id"]}"}
+                                  phx-click="remove_row"
+                                  phx-value-index={ri}
+                                  class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
+                                  title="Remove row"
+                                  aria-label={"Remove row #{row_meta["label"]}"}
                                 >
-                                  &times;
+                                  <.icon name="hero-x-mark" class="size-3" />
                                 </button>
                               <% end %>
                             </div>
-                          </th>
+
+                            <div
+                              :if={@owner? and @accent_picker == {:row, ri}}
+                              id={"accent-picker-row-#{row_meta["id"]}"}
+                              class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
+                            >
+                              <button
+                                :for={token <- Accent.tokens()}
+                                type="button"
+                                id={"accent-option-row-#{row_meta["id"]}-#{token}"}
+                                phx-click="set_row_accent"
+                                phx-value-index={ri}
+                                phx-value-accent={token}
+                                class={[
+                                  "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
+                                  swatch_class(token),
+                                  row_meta["accent"] == token &&
+                                    "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
+                                ]}
+                                title={token}
+                                aria-label={"Set row accent #{token}"}
+                              ></button>
+                              <button
+                                type="button"
+                                phx-click="set_row_accent"
+                                phx-value-index={ri}
+                                phx-value-accent=""
+                                class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
+                              >
+                                None
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                        <%= for cell_key <- Enum.at(@layout_map["layout"], ri, []) do %>
+                          <td class="p-2 border border-base-content/10 align-top">
+                            <div id={"cell-#{cell_key}"} class="rounded-lg bg-base-300/50 p-2">
+                              <form
+                                id={"cell-#{cell_key}-label-form"}
+                                phx-change="update_cell_meta"
+                              >
+                                <input type="hidden" name="cell_key" value={cell_key} />
+                                <input type="hidden" name="field" value="label" />
+                                <input
+                                  type="text"
+                                  id={"cell-#{cell_key}-label"}
+                                  value={get_in(@layout_map, ["cells", cell_key, "label"])}
+                                  phx-debounce="300"
+                                  name="value"
+                                  placeholder={cell_key}
+                                  disabled={!@owner?}
+                                  class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                />
+                              </form>
+
+                              <ul class="mt-2 space-y-1">
+                                <%= for field <- get_in(@layout_map, ["cells", cell_key, "fields"]) || [] do %>
+                                  <li class="flex items-center gap-1">
+                                    <span
+                                      class="w-20 shrink-0 truncate text-[0.6rem] font-medium uppercase tracking-wide text-base-content/50"
+                                      title={field}
+                                    >
+                                      {field}
+                                    </span>
+                                    <form
+                                      id={"cell-#{cell_key}-field-#{field}-form"}
+                                      phx-change="update_cell_field_default"
+                                      class="min-w-0 flex-1"
+                                    >
+                                      <input type="hidden" name="cell_key" value={cell_key} />
+                                      <input type="hidden" name="field" value={field} />
+                                      <input
+                                        type="text"
+                                        id={"cell-#{cell_key}-field-#{field}"}
+                                        value={
+                                          get_in(@layout_map, [
+                                            "cells",
+                                            cell_key,
+                                            "defaults",
+                                            field
+                                          ])
+                                        }
+                                        phx-debounce="300"
+                                        name="value"
+                                        placeholder="Default"
+                                        disabled={!@owner?}
+                                        class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
+                                      />
+                                    </form>
+                                    <button
+                                      :if={@owner?}
+                                      type="button"
+                                      phx-click="remove_cell_field"
+                                      phx-value-cell_key={cell_key}
+                                      phx-value-field={field}
+                                      class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
+                                      title={"Remove field #{field}"}
+                                      aria-label={"Remove field #{field}"}
+                                    >
+                                      <.icon name="hero-x-mark" class="size-2.5" />
+                                    </button>
+                                  </li>
+                                <% end %>
+                              </ul>
+
+                              <form
+                                :if={@owner?}
+                                id={"cell-#{cell_key}-add-field-form"}
+                                phx-submit="add_cell_field"
+                                class="mt-2 flex gap-1"
+                              >
+                                <input type="hidden" name="cell_key" value={cell_key} />
+                                <input
+                                  type="text"
+                                  id={"cell-#{cell_key}-new-field"}
+                                  name="field"
+                                  placeholder="New field"
+                                  class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
+                                />
+                                <button
+                                  type="submit"
+                                  class="shrink-0 rounded border border-base-content/10 px-1.5 py-0.5 text-xs text-base-content/70 hover:bg-base-content/5 hover:text-base-content transition-colors"
+                                >
+                                  Add
+                                </button>
+                              </form>
+                            </div>
+                          </td>
                         <% end %>
                       </tr>
-                    </thead>
-                    <tbody>
-                      <%= for {row_meta, ri} <- Enum.with_index(@layout_map["rows"]) do %>
-                        <tr>
-                          <td class="p-2 border border-white/10 bg-white/5 align-top">
-                            <input
-                              type="text"
-                              value={row_meta["label"]}
-                              phx-change="update_row_label"
-                              phx-debounce="300"
-                              phx-value-index={ri}
-                              name="label"
-                              disabled={!@owner?}
-                              class="w-full px-2 py-1 rounded bg-transparent border border-transparent hover:border-white/10 focus:border-primary text-inherit"
-                            />
-                            <%= if @owner? do %>
-                              <button
-                                type="button"
-                                phx-click="remove_row"
-                                phx-value-index={ri}
-                                class="mt-2 text-xs text-error"
-                              >
-                                Remove Row
-                              </button>
-                            <% end %>
-                          </td>
-                          <%= for cell_key <- Enum.at(@layout_map["layout"], ri, []) do %>
-                            <td class="p-2 border border-white/10 align-top">
-                              <button
-                                type="button"
-                                phx-click="select_cell"
-                                phx-value-cell_key={cell_key}
-                                class={[
-                                  "w-full text-left rounded-lg p-2 transition-colors",
-                                  @selected_cell == cell_key && "bg-primary/10 ring-1 ring-primary",
-                                  @selected_cell != cell_key && "hover:bg-white/5"
-                                ]}
-                              >
-                                <div class="font-medium text-base-content">
-                                  {cell_label(@layout_map, cell_key)}
-                                </div>
-                                <div class="flex flex-wrap gap-1 mt-1">
-                                  <%= for field <- get_in(@layout_map, ["cells", cell_key, "fields"]) || [] do %>
-                                    <UIBadge.badge variant="secondary" class="text-xs">
-                                      {field}
-                                    </UIBadge.badge>
-                                  <% end %>
-                                </div>
-                              </button>
-                            </td>
-                          <% end %>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
-                </div>
-              <% end %>
-            </div>
-
-            <div class="p-6 rounded-xl border border-white/10 bg-base-200">
-              <h2 class="text-sm font-medium text-base-content mb-4">Relations</h2>
-              <%= if Enum.empty?(@layout_map["relations"]) do %>
-                <p class="text-sm text-base-content/50 mb-4">No relations defined yet.</p>
-              <% else %>
-                <ul class="space-y-2 mb-4">
-                  <%= for {rel, idx} <- Enum.with_index(@layout_map["relations"]) do %>
-                    <li class="flex items-center justify-between text-sm text-base-content">
-                      <span>
-                        {cell_label(@layout_map, rel["from"])}
-                        <span class="text-base-content/40">&rarr;</span>
-                        {cell_label(@layout_map, rel["to"])}
-                        <%= if rel["label"] not in [nil, ""] do %>
-                          <UIBadge.badge variant="outline" class="ml-2 text-xs">
-                            {rel["label"]}
-                          </UIBadge.badge>
-                        <% end %>
-                      </span>
-                      <%= if @owner? do %>
-                        <button
-                          type="button"
-                          phx-click="remove_relation"
-                          phx-value-index={idx}
-                          class="text-error text-xs"
-                        >
-                          Remove
-                        </button>
-                      <% end %>
-                    </li>
-                  <% end %>
-                </ul>
-              <% end %>
-              <%= if @owner? do %>
-                <form phx-submit="add_relation" class="flex flex-wrap items-center gap-2">
-                  <select
-                    name="from"
-                    class="px-2 py-1.5 rounded-lg bg-base-300 border border-white/10 text-sm text-base-content"
-                  >
-                    <option value="">From cell...</option>
-                    <%= for key <- all_cell_keys(@layout_map) do %>
-                      <option value={key}>{cell_label(@layout_map, key)}</option>
                     <% end %>
-                  </select>
-                  <span class="text-base-content/40">&rarr;</span>
-                  <select
-                    name="to"
-                    class="px-2 py-1.5 rounded-lg bg-base-300 border border-white/10 text-sm text-base-content"
-                  >
-                    <option value="">To cell...</option>
-                    <%= for key <- all_cell_keys(@layout_map) do %>
-                      <option value={key}>{cell_label(@layout_map, key)}</option>
-                    <% end %>
-                  </select>
-                  <input
-                    type="text"
-                    name="label"
-                    placeholder="Label (optional)"
-                    class="px-2 py-1.5 rounded-lg bg-base-300 border border-white/10 text-sm text-base-content"
-                  />
-                  <UIButton.button type="submit" variant="outline" size="sm">
-                    Add Relation
-                  </UIButton.button>
-                </form>
-              <% end %>
-            </div>
-          </div>
-
-          <div>
-            <%= if @selected_cell do %>
-              <div class="p-6 rounded-xl border border-white/10 bg-base-200 sticky top-6">
-                <h2 class="text-sm font-medium text-base-content mb-4">
-                  Cell: {cell_label(@layout_map, @selected_cell)}
-                </h2>
-                <div class="space-y-4">
-                  <div>
-                    <UILabel.label>Label</UILabel.label>
-                    <UIInput.input
-                      type="text"
-                      value={get_in(@layout_map, ["cells", @selected_cell, "label"])}
-                      phx-change="update_cell_meta"
-                      phx-debounce="300"
-                      phx-value-cell_key={@selected_cell}
-                      phx-value-field="label"
-                      name="value"
-                      disabled={!@owner?}
-                    />
-                  </div>
-                  <div>
-                    <UILabel.label>Semantics</UILabel.label>
-                    <select
-                      phx-change="update_cell_meta"
-                      phx-value-cell_key={@selected_cell}
-                      phx-value-field="semantics"
-                      name="value"
-                      disabled={!@owner?}
-                      class="w-full px-3 py-2 rounded-lg bg-base-300 border border-white/10 text-sm text-base-content"
-                    >
-                      <%= for opt <- @semantics_options do %>
-                        <option
-                          value={opt}
-                          selected={
-                            get_in(@layout_map, ["cells", @selected_cell, "semantics"]) == opt
-                          }
-                        >
-                          {String.capitalize(opt)}
-                        </option>
-                      <% end %>
-                    </select>
-                  </div>
-
-                  <div>
-                    <UILabel.label>Fields</UILabel.label>
-                    <ul class="mt-2 space-y-2">
-                      <%= for field <- get_in(@layout_map, ["cells", @selected_cell, "fields"]) || [] do %>
-                        <li class="flex items-center gap-2">
-                          <span class="text-sm text-base-content w-1/3">{field}</span>
-                          <UIInput.input
-                            type="text"
-                            value={get_in(@layout_map, ["cells", @selected_cell, "defaults", field])}
-                            phx-change="update_cell_field_default"
-                            phx-debounce="300"
-                            phx-value-cell_key={@selected_cell}
-                            phx-value-field={field}
-                            name="value"
-                            placeholder="Default value"
-                            disabled={!@owner?}
-                            class="flex-1"
-                          />
-                          <%= if @owner? do %>
-                            <button
-                              type="button"
-                              phx-click="remove_cell_field"
-                              phx-value-cell_key={@selected_cell}
-                              phx-value-field={field}
-                              class="text-error shrink-0"
-                            >
-                              &times;
-                            </button>
-                          <% end %>
-                        </li>
-                      <% end %>
-                    </ul>
-                    <%= if @owner? do %>
-                      <form phx-submit="add_cell_field" class="mt-3 flex gap-2">
-                        <input type="hidden" name="cell_key" value={@selected_cell} />
-                        <input
-                          type="text"
-                          name="field"
-                          placeholder="New field name"
-                          class="flex-1 px-2 py-1.5 rounded-lg bg-base-300 border border-white/10 text-sm text-base-content"
-                        />
-                        <UIButton.button type="submit" variant="outline" size="sm">
-                          Add
-                        </UIButton.button>
-                      </form>
-                    <% end %>
-                  </div>
-                </div>
-              </div>
-            <% else %>
-              <div class="p-6 rounded-xl border border-white/10 bg-base-200 text-sm text-base-content/50">
-                Select a cell in the grid to edit its label, semantics, and fields.
+                  </tbody>
+                </table>
               </div>
             <% end %>
           </div>
         </div>
+
+        <UIDialog.dialog
+          :if={@owner?}
+          id="discard-template-dialog"
+          open={@confirm_leave?}
+          on-close="leave_dialog_closed"
+        >
+          <UIDialog.dialog_content class="sm:max-w-md">
+            <UIDialog.dialog_header>
+              <UIDialog.dialog_title>Discard unsaved changes?</UIDialog.dialog_title>
+              <UIDialog.dialog_description>
+                This template has edits that have not been saved. Leaving now discards the
+                grid, cell and accent changes made in this session.
+              </UIDialog.dialog_description>
+            </UIDialog.dialog_header>
+            <UIDialog.dialog_footer>
+              <UIButton.button
+                type="button"
+                variant="outline"
+                id="keep-editing-template"
+                phx-click="dismiss_leave_dialog"
+              >
+                Keep editing
+              </UIButton.button>
+              <UIButton.button
+                type="button"
+                variant="destructive"
+                id="discard-template-changes"
+                phx-click="confirm_leave"
+              >
+                Discard and leave
+              </UIButton.button>
+            </UIDialog.dialog_footer>
+          </UIDialog.dialog_content>
+        </UIDialog.dialog>
       </div>
     </Layouts.app>
     """

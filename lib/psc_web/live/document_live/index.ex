@@ -80,7 +80,7 @@ defmodule PscWeb.DocumentLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Documents">
       <div class="mx-auto max-w-2xl px-6 py-12">
         <div class="mb-8 flex items-center justify-between">
           <h1 class="text-2xl font-semibold text-base-content">My Documents</h1>
@@ -122,7 +122,7 @@ defmodule PscWeb.DocumentLive.Index do
                   placeholder="Give your document a name..."
                   value={@new_title}
                   required
-                  class="h-12 rounded-xl border-white/10 bg-base-300/70 pl-11 pr-4 shadow-inner transition focus:border-primary focus:bg-base-300 focus:ring-4 focus:ring-primary/10"
+                  class="h-12 rounded-xl border-base-content/10 bg-base-300/70 pl-11 pr-4 shadow-inner transition focus:border-primary focus:bg-base-300 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
               <div class="flex gap-2 sm:shrink-0">
@@ -138,7 +138,7 @@ defmodule PscWeb.DocumentLive.Index do
         <% end %>
 
         <%= if Enum.empty?(@documents) do %>
-          <div class="rounded-xl border border-dashed border-white/10 bg-base-200 p-12 text-center">
+          <div class="rounded-xl border border-dashed border-base-content/10 bg-base-200 p-12 text-center">
             <.icon name="hero-document-text" class="mx-auto w-12 h-12 text-base-content/30 mb-4" />
             <p class="text-base-content/60">No documents yet. Create one to get started!</p>
           </div>
@@ -147,7 +147,7 @@ defmodule PscWeb.DocumentLive.Index do
             <%= for doc <- @documents do %>
               <.link
                 navigate={~p"/documents/#{doc.id}"}
-                class="block rounded-xl border border-white/10 bg-base-200 p-4 hover:border-white/25 transition-colors"
+                class="block rounded-xl border border-base-content/10 bg-base-200 p-4 hover:border-base-content/25 transition-colors"
               >
                 <div class="flex items-center justify-between">
                   <div>

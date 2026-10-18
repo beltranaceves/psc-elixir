@@ -5,12 +5,12 @@ defmodule PscWeb.CanvasLive.Editor do
   # because CoreComponents is imported globally via html_helpers and defines
   # the same names — unqualified imports would conflict.
   alias PscWeb.Components.UI.Badge, as: UIBadge
-  alias PscWeb.Components.UI.Button, as: UIButton
-  alias PscWeb.Components.UI.Input, as: UIInput
 
   require Logger
   alias Psc.Canvas
   alias PscWeb.Presence
+
+  import PscWeb.Components.ShareDialog
 
   @idle_save_interval 1500
   @periodic_save_interval 10000
@@ -40,6 +40,7 @@ defmodule PscWeb.CanvasLive.Editor do
         |> assign(:idle_timer_ref, nil)
         |> assign(:original_canvas, canvas)
         |> assign(:presence, %{})
+        |> assign(:share_open, false)
         |> subscribe_to_canvas(canvas_id)
 
       if connected?(socket) do
@@ -162,6 +163,16 @@ defmodule PscWeb.CanvasLive.Editor do
     else
       {:noreply, socket}
     end
+  end
+
+  @impl true
+  def handle_event("open_share", _params, socket) do
+    {:noreply, assign(socket, :share_open, true)}
+  end
+
+  @impl true
+  def handle_event("share_closed", _params, socket) do
+    {:noreply, assign(socket, :share_open, false)}
   end
 
   @impl true
@@ -331,7 +342,7 @@ defmodule PscWeb.CanvasLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Canvases">
       <div class="py-8">
         <div class="mx-auto max-w-5xl px-4">
           <%!-- Header --%>
@@ -359,6 +370,9 @@ defmodule PscWeb.CanvasLive.Editor do
                     <span>Unsaved</span>
                   </UIBadge.badge>
               <% end %>
+              <%= if @canvas.author_id == @user_id do %>
+                <.share_button id="share-canvas-button" label="Share" />
+              <% end %>
             </div>
             <.link
               navigate={~p"/psc-canvas"}
@@ -377,21 +391,21 @@ defmodule PscWeb.CanvasLive.Editor do
                   <tbody>
                     <%!-- Row 1: Rationale --%>
                     <tr>
-                      <th class="border border-white/10 bg-primary/10 p-3 text-left text-sm font-medium text-base-content">
+                      <th class="border border-base-content/10 bg-primary/10 p-3 text-left text-sm font-medium text-base-content">
                         Rationale
                       </th>
                       <%!-- Perceive: Problem --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Problem</h3>
                         <textarea
                           name="problem_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the problem..."
                         ><%= Map.get(@canvas.problem || %{}, :content, "") %></textarea>
                       </td>
                       <%!-- Form: Leverage --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Leverage</h3>
                         <div class="space-y-2 text-sm">
                           <input
@@ -400,7 +414,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Technology..."
                             value={Map.get(@canvas.leverage || %{}, :technology, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -408,7 +422,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Components..."
                             value={Map.get(@canvas.leverage || %{}, :components, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -416,7 +430,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Information..."
                             value={Map.get(@canvas.leverage || %{}, :information, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -424,27 +438,27 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Human Resources..."
                             value={Map.get(@canvas.leverage || %{}, :human_resources, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                         </div>
                       </td>
                       <%!-- Consolidate: Solution Cluster --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Solution</h3>
                         <textarea
                           name="solution_cluster_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the solution..."
                         ><%= Map.get(@canvas.solution_cluster || %{}, :content, "") %></textarea>
                       </td>
                       <%!-- Learn: Horizon --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Horizon</h3>
                         <textarea
                           name="horizon_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the horizon..."
                         ><%= Map.get(@canvas.horizon || %{}, :content, "") %></textarea>
                       </td>
@@ -452,11 +466,11 @@ defmodule PscWeb.CanvasLive.Editor do
 
                     <%!-- Row 2: Strategy --%>
                     <tr>
-                      <th class="border border-white/10 bg-secondary/10 p-3 text-left text-sm font-medium text-base-content">
+                      <th class="border border-base-content/10 bg-secondary/10 p-3 text-left text-sm font-medium text-base-content">
                         Strategy
                       </th>
                       <%!-- Perceive: Outer Environment --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Outer Environment</h3>
                         <div class="space-y-2 text-sm">
                           <input
@@ -465,7 +479,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="External Services..."
                             value={Map.get(@canvas.outer_environment || %{}, :external_services, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -475,7 +489,7 @@ defmodule PscWeb.CanvasLive.Editor do
                               Map.get(@canvas.outer_environment || %{}, :external_implements, "")
                             }
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -485,7 +499,7 @@ defmodule PscWeb.CanvasLive.Editor do
                               Map.get(@canvas.outer_environment || %{}, :external_repositories, "")
                             }
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -493,22 +507,22 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="External People..."
                             value={Map.get(@canvas.outer_environment || %{}, :external_people, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                         </div>
                       </td>
                       <%!-- Form: Inner Environment --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Inner Environment</h3>
                         <textarea
                           name="inner_environment_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the inner environment..."
                         ><%= Map.get(@canvas.inner_environment || %{}, :content, "") %></textarea>
                       </td>
                       <%!-- Consolidate: Evolvability Cluster --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Evolvability</h3>
                         <div class="space-y-2 text-sm">
                           <input
@@ -517,7 +531,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Evolvability..."
                             value={Map.get(@canvas.evolvability_cluster || %{}, :evolvability, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -525,7 +539,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Diffusibility..."
                             value={Map.get(@canvas.evolvability_cluster || %{}, :diffusibility, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -533,17 +547,17 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Adoptability..."
                             value={Map.get(@canvas.evolvability_cluster || %{}, :adoptability, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                         </div>
                       </td>
                       <%!-- Learn: Potential --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Potential</h3>
                         <textarea
                           name="potential_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the potential..."
                         ><%= Map.get(@canvas.potential || %{}, :content, "") %></textarea>
                       </td>
@@ -551,31 +565,31 @@ defmodule PscWeb.CanvasLive.Editor do
 
                     <%!-- Row 3: Tactics --%>
                     <tr>
-                      <th class="border border-white/10 bg-success/10 p-3 text-left text-sm font-medium text-base-content">
+                      <th class="border border-base-content/10 bg-success/10 p-3 text-left text-sm font-medium text-base-content">
                         Tactics
                       </th>
                       <%!-- Perceive: Manifestations --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Manifestations</h3>
                         <textarea
                           name="manifestations_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the manifestations..."
                         ><%= Map.get(@canvas.manifestations || %{}, :content, "") %></textarea>
                       </td>
                       <%!-- Form: Capabilities --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Capabilities</h3>
                         <textarea
                           name="capabilities_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the capabilities..."
                         ><%= Map.get(@canvas.capabilities || %{}, :content, "") %></textarea>
                       </td>
                       <%!-- Consolidate: Merit Cluster --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Merit</h3>
                         <div class="space-y-2 text-sm">
                           <input
@@ -584,7 +598,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Merit..."
                             value={Map.get(@canvas.merit_cluster || %{}, :merit, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -592,7 +606,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Value..."
                             value={Map.get(@canvas.merit_cluster || %{}, :value, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -600,7 +614,7 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Reservation..."
                             value={Map.get(@canvas.merit_cluster || %{}, :reservation, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                           <input
                             type="text"
@@ -608,17 +622,17 @@ defmodule PscWeb.CanvasLive.Editor do
                             placeholder="Rebuttal..."
                             value={Map.get(@canvas.merit_cluster || %{}, :rebuttal, "")}
                             phx-change="update_cell"
-                            class="w-full border border-white/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
+                            class="w-full border border-base-content/10 rounded px-2 py-1 text-base-content bg-base-300 placeholder-base-content/40"
                           />
                         </div>
                       </td>
                       <%!-- Learn: Mission --%>
-                      <td class="border border-white/10 bg-base-200 p-3">
+                      <td class="border border-base-content/10 bg-base-200 p-3">
                         <h3 class="text-sm font-medium text-base-content mb-2">Mission</h3>
                         <textarea
                           name="mission_content"
                           phx-change="update_cell"
-                          class="w-full h-32 border border-white/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
+                          class="w-full h-32 border border-base-content/10 rounded px-2 py-1 text-sm resize-none text-base-content bg-base-300 placeholder-base-content/40"
                           placeholder="Describe the mission..."
                         ><%= Map.get(@canvas.mission || %{}, :content, "") %></textarea>
                       </td>
@@ -630,7 +644,7 @@ defmodule PscWeb.CanvasLive.Editor do
 
             <%!-- Sidebar --%>
             <div class="w-64 flex-shrink-0">
-              <div class="rounded-xl border border-white/10 bg-base-200 p-4">
+              <div class="rounded-xl border border-base-content/10 bg-base-200 p-4">
                 <h3 class="text-sm font-medium text-base-content mb-3">Active Users</h3>
                 <div class="space-y-2 mb-6">
                   <%= for {_user_id, %{metas: metas}} <- @presence do %>
@@ -642,42 +656,25 @@ defmodule PscWeb.CanvasLive.Editor do
                 </div>
 
                 <h4 class="text-sm font-medium text-base-content mb-3">Share Canvas</h4>
-                <%= if @canvas.author_id == @user_id do %>
-                  <.form for={%{}} id="share-form" phx-submit="share_canvas" class="flex gap-2 mb-4">
-                    <UIInput.input
-                      type="email"
-                      name="email"
-                      placeholder="Email..."
-                      class="flex-1 text-xs"
-                    />
-                    <UIButton.button type="submit" size="sm">
-                      +
-                    </UIButton.button>
-                  </.form>
-                <% end %>
-
-                <%= if @canvas.shared_with && Enum.any?(@canvas.shared_with) do %>
-                  <div class="space-y-1">
-                    <%= for email <- @canvas.shared_with do %>
-                      <div class="text-xs text-base-content px-2 py-1 bg-primary/5 rounded border border-primary/20 flex items-center justify-between">
-                        <span>{email}</span>
-                        <%= if @canvas.author_id == @user_id do %>
-                          <button
-                            phx-click="remove_access"
-                            phx-value-email={email}
-                            class="text-error hover:opacity-80 font-bold"
-                          >
-                            ×
-                          </button>
-                        <% end %>
-                      </div>
-                    <% end %>
-                  </div>
-                <% end %>
+                <p class="text-xs text-base-content/60">
+                  Use the Share button in the header to invite collaborators.
+                </p>
               </div>
             </div>
           </div>
         </div>
+
+        <.share_dialog
+          id="share-canvas-dialog"
+          open={@share_open}
+          title="Share canvas"
+          description="People with access can open and edit this canvas."
+          manage?={@canvas.author_id == @user_id}
+          shared_with={@canvas.shared_with || []}
+          share_event="share_canvas"
+          remove_event="remove_access"
+          on_close="share_closed"
+        />
       </div>
     </Layouts.app>
     """

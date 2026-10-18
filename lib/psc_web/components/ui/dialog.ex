@@ -93,6 +93,7 @@ defmodule PscWeb.Components.UI.Dialog do
     ~H"""
     <div
       id={@id}
+      tabindex="-1"
       class="relative z-50 group/dialog"
       data-component="dialog"
       data-options={@options}

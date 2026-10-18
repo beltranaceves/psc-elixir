@@ -2,6 +2,8 @@ defmodule Psc.Canvas.Layout do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Psc.Canvas.Accent
+
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "canvas_layouts" do
     field :name, :string
@@ -26,7 +28,6 @@ defmodule Psc.Canvas.Layout do
   # - at least 1 row and 1 column
   # - every grid position has a cell key
   # - unique field keys within a cell
-  # - relations reference existing cell keys
   defp validate_layout_map(changeset) do
     case get_field(changeset, :layout_map) do
       lm when is_map(lm) and map_size(lm) > 0 -> do_validate_layout_map(changeset, lm)
@@ -53,8 +54,8 @@ defmodule Psc.Canvas.Layout do
       duplicate_fields?(template_cells) ->
         add_error(changeset, :layout_map, "field keys must be unique within a cell")
 
-      broken_relations?(lm["relations"] || [], template_cells) ->
-        add_error(changeset, :layout_map, "relations must reference existing cells")
+      invalid_accents?(rows, columns) ->
+        add_error(changeset, :layout_map, "accents must be known color tokens")
 
       true ->
         changeset
@@ -73,9 +74,10 @@ defmodule Psc.Canvas.Layout do
     end)
   end
 
-  defp broken_relations?(relations, template_cells) do
-    Enum.any?(relations, fn rel ->
-      rel["from"] not in Map.keys(template_cells) or rel["to"] not in Map.keys(template_cells)
+  defp invalid_accents?(rows, columns) do
+    Enum.any?(rows ++ columns, fn
+      %{"accent" => accent} -> not Accent.valid?(accent)
+      _meta -> false
     end)
   end
 end

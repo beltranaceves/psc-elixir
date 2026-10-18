@@ -14,7 +14,7 @@ defmodule PscWeb.UserLive.Settings do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
+    <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Settings">
       <div class="mx-auto max-w-sm space-y-4">
         <div class="text-center">
           <.header>
@@ -48,7 +48,7 @@ defmodule PscWeb.UserLive.Settings do
           </UIButton.button>
         </.form>
 
-        <div class="h-px bg-white/10" />
+        <div class="h-px bg-base-content/10" />
 
         <.form
           for={@password_form}

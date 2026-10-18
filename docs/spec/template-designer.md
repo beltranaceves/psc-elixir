@@ -2,7 +2,7 @@
 
 ## Overview
 
-The template designer lets users define **reusable templates** and share them across users. A template captures the full structure of a canvas: grid dimensions, per-cell metadata (label, semantics, content fields), and relations between cells. Templates are the instantiation source for canvases — when a user creates a canvas from a template, the template's structure is copied into the canvas's `cells` map.
+The template designer lets users define **reusable templates** and share them across users. A template captures the full structure of a canvas: grid dimensions and per-cell metadata (label, content fields). Templates are the instantiation source for canvases — when a user creates a canvas from a template, the template's structure is copied into the canvas's `cells` map.
 
 > **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.CanvasLayoutLive` (this template designer) and `PscWeb.UnstrCanvasLive` (the canvas editor), and the routes are `/templates` and `/canvases`.
 
@@ -61,7 +61,6 @@ The Ecto entity is intentionally **flexible** (`:map` columns). The template sto
 | Designer grid cells | `<.card>` with custom header | Label in header, fields in body |
 | Cell field inputs | `<.textarea>` | Auto-resizing, no visible border until focused |
 | Structure-editing controls | `<.button variant="outline" size="sm">` | Add row/column, remove × |
-| Relations list | `<.badge>` + text | From → To with label |
 | Sidebar (presence + sharing) | `<.sidebar>` or custom panel | Fixed right side |
 | Presence indicator | Colored dot + name tooltip | Custom CSS, `<.tooltip>` for hover |
 | Share form | `<.input>` + `<.button>` | Inline, compact |
@@ -95,23 +94,21 @@ The `layout_map` field stores the full template definition as a nested map:
 ```elixir
 %{
   "rows" => [
-    %{"id" => "r1", "label" => "Rationale"},
+    %{"id" => "r1", "label" => "Rationale", "accent" => "emerald"},
     %{"id" => "r2", "label" => "Strategy"}
   ],
   "columns" => [
-    %{"id" => "c1", "label" => "Perceive"},
+    %{"id" => "c1", "label" => "Perceive", "accent" => "sky"},
     %{"id" => "c2", "label" => "Form"}
   ],
   "cells" => %{
     "r1_c1" => %{
       "label" => "Problem",
-      "semantics" => "problem",       # atom-ish string: "problem" | "solution" | "evidence" | "note" | "free"
       "fields" => ["content"],        # ordered list of field keys for this cell
       "defaults" => %{"content" => ""}
     },
     "r1_c2" => %{
       "label" => "Leverage",
-      "semantics" => "solution",
       "fields" => ["technology", "components", "information"],
       "defaults" => %{
         "technology" => "",
@@ -120,9 +117,6 @@ The `layout_map` field stores the full template definition as a nested map:
       }
     }
   },
-  "relations" => [
-    %{"from" => "r1_c1", "to" => "r1_c2", "label" => "leads to"}
-  ]
 }
 ```
 
@@ -133,17 +127,16 @@ The `layout_map` field stores the full template definition as a nested map:
 | `rows` | yes | Ordered list of row definitions. Each has `id` (string, unique) and `label` (display name). |
 | `columns` | yes | Ordered list of column definitions. Same shape as rows. |
 | `cells` | yes | Map of `"rowid_colid"` → cell metadata. Every grid position **must** have an entry. |
-| `relations` | no | Directed edges between cells. `from`/`to` are cell keys; `label` is optional display text. |
 
-### Cell semantics values
-
-The `semantics` field is a simple classification used by the editor for iconography and future insights. Suggested values (extensible, not enforced):
-
-- `"problem"` — a problem statement or challenge
-- `"solution"` — a proposed solution or approach
-- `"evidence"` — supporting data, references, or justification
-- `"note"` — freeform annotation
-- `"free"` — no specific semantics; pure user content
+Each row/column definition may also carry an optional `accent` token from the fixed
+palette in `Psc.Canvas.Accent` (`sky`, `violet`, `emerald`, `amber`, `rose`, `teal`,
+`indigo`, `slate`); absent or `nil` means no accent. This is the **only** place accents
+are authored: the designer draws a 4 px bar on the top edge of a column header and the
+left edge of a row header, and the swatch next to each label opens an inline palette.
+Accents are stored in `layout_map` (the JSON map on the Ecto entity, no migration),
+validated by `Layout.changeset/2`, and copied into canvases by
+`Canvas.instantiate_template/3`, where the canvas editor renders them read-only. See
+ADR-011.
 
 ### Instantiation
 
@@ -156,10 +149,10 @@ When a canvas is created from a template, the template's `layout_map` is deep-co
 | `lib/psc/canvas/layout.ex` | **modify** | Add `shared_with` and `author_id` fields to schema; add `shared_with` to changeset |
 | `lib/psc/canvas.ex` | **modify** | Add template-specific context functions (see API below) |
 | `lib/psc_web/live/canvas_layout_live/index.ex` | **modify** | Add template library UI (list own + shared, instantiate button) |
-| `lib/psc_web/live/canvas_layout_live/editor.ex` | **modify** | Extend designer for cell metadata editing + relations |
+| `lib/psc_web/live/canvas_layout_live/editor.ex` | **modify** | Extend designer for cell metadata editing |
 | `priv/repo/migrations/xxx_add_sharing_to_canvas_layouts.exs` | **create** | Migration: add `shared_with`, `author_id` to `canvas_layouts` |
 | `test/psc/canvas_test.exs` | **create** | Unit tests for template CRUD + sharing + instantiation |
-| `test/psc_web/live/canvas_layout_live_test.exs` | **modify** | Add tests for cell metadata editing, relations, instantiation |
+| `test/psc_web/live/canvas_layout_live_test.exs` | **modify** | Add tests for cell metadata editing and instantiation |
 
 ## API (Context functions)
 
@@ -231,22 +224,25 @@ Each template card shows: name, description, grid dimensions (e.g., "3 × 4"), c
 
 ### Template designer (`/canvas-layouts/new` and `/canvas-layouts/:id`)
 
+Two levels of context, deliberately separate. The **app header** shows “Designer” next to
+the PSC mark while the **Templates** nav item stays current (highlighted,
+`aria-current="page"`). The page has **no title block**: the first card is the form, whose
+**Name** row holds the input plus the **Share** combo button and the **← Templates** back
+link on the same line (they stack under the input on narrow screens), followed by
+**Description** and the Cancel / Save Template actions.
+
 The existing `CanvasLayoutLive.Editor` already supports add/remove rows and columns. The designer is extended with:
 
-1. **Cell selection** — clicking a grid cell opens a side panel with:
-   - **Label** text input (display name for the cell)
-   - **Semantics** dropdown (problem / solution / evidence / note / free)
-   - **Fields** — dynamic list of text inputs; add/remove field buttons. Each field key becomes an input in the editor.
-   - **Defaults** — for each field, an optional default value
+1. **Inline cell editing** — every grid cell is directly editable, with no selection step and no side panel:
+   - **Label** text input at the top of the cell (blank falls back to showing the cell key as placeholder)
+   - **Fields** — one row per field: the field key, an editable default value, and a remove button
+   - **Add field** — an inline form at the bottom of each cell
 
-2. **Relations** — a "Add relation" flow:
-   - Select source cell, target cell, optional label
-   - Relations listed below the designer with delete buttons
-   - (Visual arrow rendering on the canvas is **out of scope** for MVP — relations are metadata only)
+2. **Save** — validates that every grid position has a cell entry, then persists via `update_template`.
 
-3. **Save** — validates that every grid position has a cell entry, then persists via `update_template`.
+   **Templates are not autosaved.** All edits (grid structure, cell labels/fields, accents, name, description) live in the LiveView's in-memory `layout_map` until **Save Template** is submitted; leaving the page discards them. The designer therefore shows an **“Unsaved changes”** indicator once anything is edited, and a **Cancel** button that opens a `UIDialog` confirmation (“Discard unsaved changes?” → **Keep editing** / **Discard and leave**) before leaving the library. Cancel with nothing dirty navigates straight back without a prompt. (Canvases and documents behave differently — they autosave.)
 
-4. **Share** — email input + share button (same pattern as canvas sharing).
+4. **Share** — a **Share** combo button in the header (share icon + label) opens a modal containing the email invite form, the list of people with access (each with a remove ×), and a Done action. The dialog is the shared `PscWeb.Components.ShareDialog` used by the canvas and document editors too.
 
 ### Validation rules
 
@@ -254,26 +250,23 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
 - Cell keys must match `"{row_id}_{column_id}"` for every position in the grid.
 - Field keys must be unique within a cell.
 - Field keys must be valid lowercase strings (alphanumeric + underscore).
-- `relations.from` and `relations.to` must reference existing cell keys.
 
 ## Acceptance Criteria
 
 - [ ] Create a template with a custom grid size (e.g., 3 rows × 5 columns)
-- [ ] Edit a cell's label, semantics, and fields in the designer
+- [ ] Edit a cell's label and fields in the designer
 - [ ] Add and remove fields within a cell
-- [ ] Define a relation between two cells
 - [ ] Share a template with another user by email
 - [ ] Shared template appears in the other user's "Shared with me" list
 - [ ] Instantiate a canvas from a template — the new canvas has the template's grid and cell structure
 - [ ] Editing a template after instantiation does **not** affect existing canvases
 - [ ] Delete a template (only by author)
-- [ ] Validation prevents empty grids, duplicate field keys, and broken relation references
+- [ ] Validation prevents empty grids and duplicate field keys
 
 ## Out of Scope
 
 - Template versioning or history
 - Template categories, tags, or search
-- Visual relation arrows / graph overlay on the canvas
 - Template import/export (JSON)
 - Copying an existing canvas as a template (reverse instantiation)
 - Concurrent multi-user editing of templates (CRDT on templates)
@@ -281,5 +274,5 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
 ## Verification Methods
 
 - **Unit tests** (`test/psc/canvas_test.exs`): template CRUD, sharing, instantiation produces correct `cells` map
-- **LiveView tests** (`canvas_layout_live_test.exs`): designer renders grid, cell metadata editing persists, relations save
+- **LiveView tests** (`canvas_layout_live_test.exs`): designer renders grid, cell metadata editing persists
 - **Browser test**: full flow — create template, share, log in as other user, see it in library, instantiate

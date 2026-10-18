@@ -11,7 +11,7 @@ reusable structure it is created from.
 ```mermaid
 flowchart TD
     subgraph PUB["pipeline :browser (no auth) — live_session :current_user"]
-        R1["GET /"] --> P1["PageController.home"]
+        R1["GET /<br/>(→ /canvases when signed in, else /users/log-in)"] --> P1["PageController.home"]
         R2["/users/register"] --> V1["UserLive.Registration"]
         R3["/users/log-in"] --> V2["UserLive.Login"]
         R4["/users/log-in/:token"] --> V3["UserLive.Confirmation"]
@@ -19,7 +19,7 @@ flowchart TD
     end
 
     subgraph PRIV["require_authenticated_user — live_session :require_authenticated_user"]
-        R6["/documents · /documents/:id"] --> V4["DocumentLive.Index · Editor"]
+        R6["/documents · /documents/:id<br/>(parked — not linked from the nav)"] --> V4["DocumentLive.Index · Editor"]
         R7["/canvases · /canvases/:id"] --> V5["UnstrCanvasLive.Index · Editor<br/>(canvas editor)"]
         R8["/templates · /templates/new · /templates/:id"] --> V6["CanvasLayoutLive.Index · Editor<br/>(template designer)"]
         R9["/psc-canvas · /psc-canvas/:id"] --> V7["CanvasLive.Index · Editor<br/>(fixed 12-cell PSC)"]

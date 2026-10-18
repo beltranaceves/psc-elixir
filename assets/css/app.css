@@ -67,10 +67,10 @@
   prefersdark: false;
   color-scheme: "light";
   --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
+  --color-base-200: oklch(95% 0.001 286.375);
+  --color-base-300: oklch(89.5% 0.004 286.32);
   --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
+  --color-primary: oklch(62% 0.19 45);
   --color-primary-content: oklch(98% 0.016 73.684);
   --color-secondary: oklch(55% 0.027 264.364);
   --color-secondary-content: oklch(98% 0.002 247.839);
@@ -101,8 +101,18 @@
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
-/* Dark mode follows the data-theme attribute set by the root layout */
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+/* Dark mode follows the data-theme attribute set by the root layout, and the OS
+   preference when the user keeps the "system" setting (which removes it). */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+}
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
@@ -154,7 +164,7 @@
     --card-foreground: oklch(21% 0.006 285.885);
     --popover: oklch(98% 0 0);
     --popover-foreground: oklch(21% 0.006 285.885);
-    --primary: oklch(70% 0.213 47.604);
+    --primary: oklch(62% 0.19 45);
     --primary-foreground: oklch(98% 0.016 73.684);
     --secondary: oklch(96% 0.001 286.375);
     --secondary-foreground: oklch(21% 0.006 285.885);
@@ -164,17 +174,17 @@
     --accent-foreground: oklch(21% 0.006 285.885);
     --destructive: oklch(63% 0.2 22);
     --destructive-foreground: oklch(98% 0.01 22);
-    --border: color-mix(in oklch, oklch(21% 0.006 285.885) 12%, transparent);
-    --input: color-mix(in oklch, oklch(21% 0.006 285.885) 12%, transparent);
-    --ring: oklch(70% 0.213 47.604);
+    --border: color-mix(in oklch, oklch(21% 0.006 285.885) 20%, transparent);
+    --input: color-mix(in oklch, oklch(21% 0.006 285.885) 20%, transparent);
+    --ring: oklch(62% 0.19 45);
     --sidebar-background: oklch(96% 0.001 286.375);
     --sidebar-foreground: oklch(21% 0.006 285.885);
-    --sidebar-primary: oklch(70% 0.213 47.604);
+    --sidebar-primary: oklch(62% 0.19 45);
     --sidebar-primary-foreground: oklch(98% 0.016 73.684);
     --sidebar-accent: oklch(92% 0.004 286.32);
     --sidebar-accent-foreground: oklch(21% 0.006 285.885);
-    --sidebar-border: color-mix(in oklch, oklch(21% 0.006 285.885) 12%, transparent);
-    --sidebar-ring: oklch(70% 0.213 47.604);
+    --sidebar-border: color-mix(in oklch, oklch(21% 0.006 285.885) 20%, transparent);
+    --sidebar-ring: oklch(62% 0.19 45);
   }
 
   *, ::after, ::before, ::backdrop, ::file-selector-button {

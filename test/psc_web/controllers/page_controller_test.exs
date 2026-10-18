@@ -6,10 +6,10 @@ defmodule PscWeb.PageControllerTest do
     assert redirected_to(conn) == ~p"/users/log-in"
   end
 
-  test "GET / redirects logged-in users to their documents", %{conn: conn} do
+  test "GET / redirects logged-in users to their canvases", %{conn: conn} do
     user = Psc.AccountsFixtures.user_fixture()
     conn = conn |> log_in_user(user) |> get(~p"/")
 
-    assert redirected_to(conn) == ~p"/documents"
+    assert redirected_to(conn) == ~p"/canvases"
   end
 end

@@ -129,7 +129,7 @@ defmodule PscWeb.Components.UI.Alert do
   ## Examples
 
       <.alert_description>Your account has been updated successfully.</.alert_description>
-      <.alert_description class="text-gray-600">
+      <.alert_description class="text-base-content/70">
         Please review the changes before continuing.
       </.alert_description>
   """

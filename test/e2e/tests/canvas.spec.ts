@@ -125,10 +125,18 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
     // --- User A: create + share -----------------------------------------
     const canvasUrl = await createCanvasAndOpen(page, canvasName);
 
-    await page.locator('#share-form input[name="email"]').fill(USER_B);
-    await page.locator('#share-form').getByRole('button', { name: 'Share' }).click();
+    await page.locator('#share-canvas-button').click();
+    const shareDialog = page.locator('#share-canvas-dialog');
+    await expect(shareDialog.locator('#share-canvas-dialog-form')).toBeVisible();
+    await shareDialog.locator('#share-canvas-dialog-form input[name="email"]').fill(USER_B);
+    await shareDialog
+      .locator('#share-canvas-dialog-form')
+      .getByRole('button', { name: 'Share' })
+      .click();
     await expect(page.locator('#flash-group')).toContainText(`Canvas shared with ${USER_B}`);
     await dismissFlash(page);
+    await shareDialog.getByRole('button', { name: 'Done' }).click();
+    await expect(shareDialog.locator('[data-part="content-panel"]')).toBeHidden();
 
     // --- User B: fresh context, log in through the real UI --------------
     // Explicit empty storageState: in this Playwright version the project's
@@ -195,5 +203,223 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
     await expect(pageB.locator('#md-render-capabilities-content')).toContainText(textFromB);
 
     await contextB.close();
+  });
+});
+
+test.describe('canvas editor layout', () => {
+  test('keeps the description under the title and reveals rows/columns on hover', async ({
+    page,
+  }) => {
+    await createCanvasAndOpen(page, uniqueName('Layout Canvas'));
+
+    // Title and description share the header block, description underneath.
+    const header = page.locator('#canvas-header');
+    await expect(header.locator('#canvas-name-form input')).toBeVisible();
+    await expect(header.locator('#canvas-description-form textarea')).toBeVisible();
+
+    // The rows/columns summary is a hover tooltip, not always-on page content.
+    const summary = page.locator('#canvas-structure-tooltip [data-part="content"]');
+    await expect(summary).toBeHidden();
+
+    await page.getByRole('button', { name: 'Rows & columns' }).hover();
+    await expect(summary).toBeVisible();
+    await expect(summary).toContainText('Columns');
+    await expect(summary).toContainText('Rows');
+    await expect(summary.locator('span').first()).toBeVisible();
+
+    // The editable grid itself stays visible.
+    await expect(page.locator('#md-problem-content')).toBeVisible();
+
+    // The workspace hugs the viewport (~85%) instead of a fixed 1280px cap.
+    const box = await page.locator('#canvas-workspace').boundingBox();
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    const ratio = box!.width / viewport!.width;
+    expect(ratio).toBeGreaterThan(0.8);
+    expect(ratio).toBeLessThan(0.9);
+  });
+});
+
+test.describe('template designer cell editing', () => {
+  test('edits a cell label and fields directly in the grid and persists them', async ({
+    page,
+  }) => {
+    const templateName = uniqueName('Inline Cells');
+
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await page.getByRole('button', { name: 'Add Row' }).click();
+
+    // The cell itself carries the controls — no selection step, no side panel.
+    const cell = page.locator('#cell-r1_c1');
+    await expect(cell).toBeVisible();
+    await expect(page.getByText('Select a cell in the grid')).toHaveCount(0);
+
+    await cell.locator('#cell-r1_c1-label').fill('Problem');
+    await cell.locator('#cell-r1_c1-field-content').fill('Write the problem');
+    await cell.locator('#cell-r1_c1-new-field').fill('evidence');
+    await cell.getByRole('button', { name: 'Add' }).click();
+    await expect(cell.locator('#cell-r1_c1-field-evidence')).toBeVisible();
+
+    // Header labels are inline forms too.
+    await page.locator('#column-c1-label').fill('Perceive');
+    await page.locator('#row-r1-label').fill('Rationale');
+
+    await page.locator('#template-form input[name="name"]').fill(templateName);
+    await page.getByRole('button', { name: 'Save Template' }).click();
+    await page.waitForURL(/\/templates$/);
+
+    // Reopen from the library and confirm the inline edits were persisted.
+    const card = page
+      .getByRole('heading', { name: templateName })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    await card.getByRole('link', { name: 'Edit' }).click();
+    await page.waitForURL(/\/templates\/[0-9a-f-]{36}/);
+
+    await expect(page.locator('#cell-r1_c1-label')).toHaveValue('Problem');
+    await expect(page.locator('#cell-r1_c1-field-content')).toHaveValue('Write the problem');
+    await expect(page.locator('#cell-r1_c1-field-evidence')).toBeVisible();
+    await expect(page.locator('#column-c1-label')).toHaveValue('Perceive');
+    await expect(page.locator('#row-r1-label')).toHaveValue('Rationale');
+  });
+});
+
+test.describe('template designer saving', () => {
+  test('warns about unsaved changes and cancels back to the library', async ({ page }) => {
+    const discarded = uniqueName('Discarded template');
+
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+
+    // Templates are saved explicitly — nothing is dirty on a fresh page.
+    await expect(page.locator('#unsaved-changes-hint')).toHaveCount(0);
+
+    await page.locator('#template-form input[name="name"]').fill(discarded);
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await expect(page.locator('#unsaved-changes-hint')).toBeVisible();
+
+    // Cancelling opens a confirmation modal — not a native dialog.
+    await page.locator('#cancel-template-editing').click();
+    const modal = page.locator('#discard-template-dialog [data-part="content-panel"]');
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText('Discard unsaved changes?');
+
+    // Escape closes the modal and keeps the draft on screen.
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Grid' })).toBeVisible();
+    await expect(page.locator('#unsaved-changes-hint')).toBeVisible();
+
+    // Discarding leaves the designer without persisting anything.
+    await page.locator('#cancel-template-editing').click();
+    await expect(modal).toBeVisible();
+    await page.locator('#discard-template-changes').click();
+    await page.waitForURL(/\/templates$/);
+
+    await expect(page.getByRole('heading', { name: discarded })).toHaveCount(0);
+  });
+});
+
+test.describe('canvas accents', () => {
+  test('renders template accents read-only in the canvas editor', async ({ page }) => {
+    const templateName = uniqueName('Read-only Accents');
+
+    // Author accents once, in the template designer.
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await page.getByRole('button', { name: 'Add Row' }).click();
+
+    await page.locator('#accent-swatch-column-c1').click();
+    await page.locator('#accent-option-column-c1-sky').click();
+    await page.locator('#accent-swatch-row-r1').click();
+    await page.locator('#accent-option-row-r1-amber').click();
+
+    await page.locator('#template-form input[name="name"]').fill(templateName);
+    await page.getByRole('button', { name: 'Save Template' }).click();
+    await page.waitForURL(/\/templates$/);
+
+    // A canvas built from it shows the bars and offers no color controls.
+    await page.goto('/canvases');
+    await page.locator('.phx-connected').first().waitFor();
+    const canvasName = uniqueName('Read-only canvas');
+    await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
+    await page.getByLabel('Template').selectOption({ label: templateName });
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
+    await dismissFlash(page);
+
+    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
+    await canvasCard.getByRole('link', { name: 'Edit' }).click();
+    await page.waitForURL(/\/canvases\/[0-9a-f-]{36}/);
+
+    await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-sky-400/);
+    await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-amber-400/);
+    await expect(page.locator('[id^="accent-swatch-"]')).toHaveCount(0);
+    await expect(page.locator('[id^="accent-picker-"]')).toHaveCount(0);
+  });
+});
+
+test.describe('template designer accents', () => {
+  test('styles headers in the designer and carries the accents into a new canvas', async ({
+    page,
+  }) => {
+    const templateName = uniqueName('Accented Template');
+
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await page.getByRole('button', { name: 'Add Row' }).click();
+
+    // Live preview: choosing a color paints the header bar before saving.
+    await page.locator('#accent-swatch-column-c1').click();
+    await expect(page.locator('#accent-picker-column-c1')).toBeVisible();
+    await page.locator('#accent-option-column-c1-violet').click();
+    await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
+
+    await page.locator('#accent-swatch-row-r1').click();
+    await page.locator('#accent-option-row-r1-teal').click();
+    await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
+
+    // The row bar spans the whole row height, not just the label line.
+    const designerBar = await page.locator('#accent-bar-row-r1').boundingBox();
+    const designerRow = await page.locator('tbody tr').first().boundingBox();
+    expect(designerBar!.height).toBeGreaterThan(designerRow!.height - 6);
+
+    await page.locator('#template-form input[name="name"]').fill(templateName);
+    await page.getByRole('button', { name: 'Save Template' }).click();
+    await page.waitForURL(/\/templates$/);
+
+    // The designer persists accents with the layout.
+    const card = page
+      .getByRole('heading', { name: templateName })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    await card.getByRole('link', { name: 'Edit' }).click();
+    await page.waitForURL(/\/templates\/[0-9a-f-]{36}/);
+    await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
+    await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
+
+    // A canvas instantiated from that template inherits the accents.
+    await page.goto('/canvases');
+    await page.locator('.phx-connected').first().waitFor();
+    const canvasName = uniqueName('Inherited Accents');
+    await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
+    await page.getByLabel('Template').selectOption({ label: templateName });
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
+    await dismissFlash(page);
+
+    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
+    await canvasCard.getByRole('link', { name: 'Edit' }).click();
+    await page.waitForURL(/\/canvases\/[0-9a-f-]{36}/);
+    await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
+    await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
+
+    // The read-only bar also spans the whole row height.
+    const canvasBar = await page.locator('#accent-bar-row-r1').boundingBox();
+    const canvasRow = await page.locator('tbody tr').first().boundingBox();
+    expect(canvasBar!.height).toBeGreaterThan(canvasRow!.height - 6);
   });
 });

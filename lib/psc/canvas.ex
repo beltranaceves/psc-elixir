@@ -306,7 +306,7 @@ defmodule Psc.Canvas do
   Instantiate a canvas from a template.
 
   Transforms the template's layout_map (cells nested under "cells" with
-  label/semantics/fields/defaults metadata) into the canvas cells shape
+  label/fields/defaults metadata) into the canvas cells shape
   (flat cell keys with row/column metadata and field values), per the
   editor spec.
 
@@ -323,7 +323,6 @@ defmodule Psc.Canvas do
     cells =
       %{"rows" => rows, "columns" => columns, "layout" => layout}
       |> put_instantiated_cells(template_cells, layout, rows, columns)
-      |> Map.put("relations", lm["relations"] || [])
 
     attrs =
       %{
@@ -357,8 +356,7 @@ defmodule Psc.Canvas do
             |> Map.merge(%{
               "row" => row_id,
               "column" => column_id,
-              "label" => meta["label"] || key,
-              "semantics" => meta["semantics"] || "free"
+              "label" => meta["label"] || key
             })
 
           Map.put(a, key, data)

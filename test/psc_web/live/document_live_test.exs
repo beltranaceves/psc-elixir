@@ -10,9 +10,11 @@ defmodule PscWeb.DocumentLiveTest do
 
   describe "index" do
     test "renders the documents page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/documents")
+      {:ok, lv, html} = live(conn, ~p"/documents")
 
       assert html =~ "My Documents"
+      # Documents is parked: the page is reachable but not linked from the nav.
+      refute has_element?(lv, ~s|nav a[href="/documents"]|)
     end
 
     test "shows the new-document form when requested", %{conn: conn} do
@@ -137,6 +139,26 @@ defmodule PscWeb.DocumentLiveTest do
 
       assert Documents.pending_event_count(document.id) == 0
       assert Documents.get_document_content(document.id) == String.duplicate("a", 500)
+    end
+
+    test "shares a document through the modal", %{conn: conn, user: user} do
+      document = DocumentsFixtures.document_fixture(%{user: user})
+      {:ok, lv, _html} = live(conn, ~p"/documents/#{document.id}")
+
+      assert has_element?(lv, "#share-document-button .hero-share")
+      lv |> element("#share-document-button") |> render_click()
+      assert has_element?(lv, "#share-document-dialog[data-open='true']")
+
+      html =
+        lv
+        |> form("#share-document-dialog-form", %{"email" => "pal@example.com"})
+        |> render_submit()
+
+      assert html =~ "Document shared with pal@example.com"
+      assert has_element?(lv, ~s|#share-document-dialog [data-email="pal@example.com"]|)
+
+      # The modal also carries the shareable link.
+      assert has_element?(lv, "#share-document-dialog-link[value='/documents/#{document.id}']")
     end
   end
 end
