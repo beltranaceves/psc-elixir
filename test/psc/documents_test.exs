@@ -20,7 +20,6 @@ defmodule Psc.DocumentsTest do
       {:ok, document} = Documents.create_document(user.id, %{title: "My doc"})
 
       assert document.snapshot_seq == 0
-      assert document.snapshot_content == ""
       assert document.shared_with == []
     end
 
@@ -232,6 +231,51 @@ defmodule Psc.DocumentsTest do
       assert saved.snapshot_seq == 1
     end
 
+    test "save_content_to_db/2 keeps the snapshot sequence when no events are pending" do
+      document = DocumentsFixtures.document_fixture()
+      user = AccountsFixtures.user_fixture()
+
+      {:ok, 1} =
+        Documents.apply_operation(
+          document.id,
+          user.id,
+          %{"type" => "insert", "pos" => 0, "char" => "H"}
+        )
+
+      assert {:ok, %{snapshot_seq: 1}} = Documents.save_content_to_db(document.id, "H")
+
+      # Every connected client also runs idle/periodic saves. A save that finds
+      # no pending events (the events were just pruned) must not walk the marker
+      # back to 0.
+      assert {:ok, %{snapshot_seq: 1}} = Documents.save_content_to_db(document.id, "H")
+      assert {:ok, %{snapshot_seq: 1}} = Documents.save_content_to_db(document.id, "H")
+    end
+
+    test "saves without pending events keep later seq numbering above the snapshot" do
+      document = DocumentsFixtures.document_fixture()
+      user = AccountsFixtures.user_fixture()
+
+      {:ok, 1} =
+        Documents.apply_operation(
+          document.id,
+          user.id,
+          %{"type" => "insert", "pos" => 0, "char" => "H"}
+        )
+
+      {:ok, _} = Documents.save_content_to_db(document.id, "H")
+      {:ok, _} = Documents.save_content_to_db(document.id, "H")
+
+      # The next event continues above snapshot_seq instead of reusing seq 1
+      assert {:ok, 2} =
+               Documents.apply_operation(
+                 document.id,
+                 user.id,
+                 %{"type" => "insert", "pos" => 1, "char" => "i"}
+               )
+
+      assert Documents.get_document_content(document.id) == "Hi"
+    end
+
     test "saved content is not double-applied when events are replayed" do
       document = DocumentsFixtures.document_fixture()
       user = AccountsFixtures.user_fixture()
@@ -290,6 +334,81 @@ defmodule Psc.DocumentsTest do
   end
 
   describe "event pruning" do
+    test "a paste is stored as a single event row" do
+      user = AccountsFixtures.user_fixture()
+      {:ok, document} = Documents.create_document(user.id, %{title: "Paste doc"})
+
+      pasted = String.duplicate("x", 10_000)
+
+      operations = Documents.text_to_operations("", pasted)
+      assert [%{"type" => "insert", "pos" => 0, "text" => ^pasted}] = operations
+
+      Enum.each(operations, fn op ->
+        Documents.apply_operation(document.id, user.id, op)
+      end)
+
+      assert Documents.pending_event_count(document.id) == 1
+      assert Documents.get_document_content(document.id) == pasted
+    end
+
+    test "pending_event_count/1 drops to zero once content is saved" do
+      user = AccountsFixtures.user_fixture()
+      {:ok, document} = Documents.create_document(user.id, %{title: "Pending doc"})
+
+      {:ok, _} =
+        Documents.apply_operation(document.id, user.id, %{
+          "type" => "insert",
+          "pos" => 0,
+          "text" => "hello"
+        })
+
+      assert Documents.pending_event_count(document.id) == 1
+
+      {:ok, _} = Documents.save_content_to_db(document.id, "hello")
+
+      assert Documents.pending_event_count(document.id) == 0
+    end
+
+    test "sweep_folded_events/0 deletes events already covered by the marker" do
+      user = AccountsFixtures.user_fixture()
+      {:ok, document} = Documents.create_document(user.id, %{title: "Sweep doc"})
+
+      {:ok, 1} =
+        Documents.apply_operation(document.id, user.id, %{
+          "type" => "insert",
+          "pos" => 0,
+          "text" => "ab"
+        })
+
+      # Fold first so `content` really covers seq 1, then re-insert the row —
+      # recreating the rows that escaped pruning (written before pruning
+      # shipped, or left by a session that was abandoned mid-save).
+      {:ok, _} = Documents.save_content_to_db(document.id, "ab")
+      insert_legacy_event(document, user, 1, %{"type" => "insert", "pos" => 0, "text" => "ab"})
+
+      assert Documents.sweep_folded_events() == 1
+
+      # The folded content is unaffected by the sweep
+      assert Documents.get_document_content(document.id) == "ab"
+      assert Documents.pending_event_count(document.id) == 0
+    end
+
+    test "sweep_folded_events/0 leaves unfolded events alone" do
+      user = AccountsFixtures.user_fixture()
+      {:ok, document} = Documents.create_document(user.id, %{title: "Keep doc"})
+
+      {:ok, _} =
+        Documents.apply_operation(document.id, user.id, %{
+          "type" => "insert",
+          "pos" => 0,
+          "text" => "live"
+        })
+
+      assert Documents.sweep_folded_events() == 0
+      assert Documents.pending_event_count(document.id) == 1
+      assert Documents.get_document_content(document.id) == "live"
+    end
+
     test "save_content_to_db prunes folded-in events while content stays loadable" do
       user = AccountsFixtures.user_fixture()
       {:ok, document} = Documents.create_document(user.id, %{title: "Prune doc"})
@@ -332,5 +451,18 @@ defmodule Psc.DocumentsTest do
 
       assert Documents.get_document_content(document.id) == "Hi!"
     end
+  end
+
+  # Re-insert an event row that escaped pruning (rows written before pruning
+  # shipped, or left behind by a session abandoned mid-save).
+  defp insert_legacy_event(document, user, seq, operation) do
+    %Psc.Documents.DocumentEvent{}
+    |> Psc.Documents.DocumentEvent.changeset(%{
+      document_id: document.id,
+      user_id: user.id,
+      seq: seq,
+      operation: operation
+    })
+    |> Repo.insert!()
   end
 end

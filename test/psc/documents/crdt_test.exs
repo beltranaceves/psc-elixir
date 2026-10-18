@@ -56,6 +56,36 @@ defmodule Psc.Documents.CRDTTest do
     end
   end
 
+  describe "apply_operation/2 with coalesced (multi-character) operations" do
+    test "inserts a run of text" do
+      assert CRDT.apply_operation(%{"type" => "insert", "pos" => 2, "text" => "XYZ"}, "abc") ==
+               "abXYZc"
+    end
+
+    test "inserts a run at the end" do
+      assert CRDT.apply_operation(%{"type" => "insert", "pos" => 3, "text" => "XYZ"}, "abc") ==
+               "abcXYZ"
+    end
+
+    test "deletes several characters" do
+      assert CRDT.apply_operation(%{"type" => "delete", "pos" => 1, "count" => 2}, "abcde") ==
+               "ade"
+    end
+
+    test "clamps a delete run that reaches past the end of the text" do
+      assert CRDT.apply_operation(%{"type" => "delete", "pos" => 2, "count" => 99}, "abcde") ==
+               "ab"
+    end
+
+    test "treats a missing count as a single-character delete (legacy rows)" do
+      assert CRDT.apply_operation(%{"type" => "delete", "pos" => 1}, "abc") == "ac"
+    end
+
+    test "treats a missing text as an empty insert" do
+      assert CRDT.apply_operation(%{"type" => "insert", "pos" => 1}, "abc") == "abc"
+    end
+  end
+
   describe "apply_operation/2 with an unknown operation" do
     test "returns the text unchanged" do
       assert CRDT.apply_operation(%{"type" => "replace", "pos" => 0}, "abc") == "abc"
@@ -81,35 +111,44 @@ defmodule Psc.Documents.CRDTTest do
 
     test "produces an insert operation for an appended character" do
       assert CRDT.text_to_deltas("abc", "abcX") == [
-               %{"type" => "insert", "pos" => 3, "char" => "X"}
+               %{"type" => "insert", "pos" => 3, "text" => "X"}
              ]
     end
 
     test "produces an insert operation for a character inserted in the middle" do
       assert CRDT.text_to_deltas("abc", "abXc") == [
-               %{"type" => "insert", "pos" => 2, "char" => "X"}
+               %{"type" => "insert", "pos" => 2, "text" => "X"}
              ]
     end
 
-    test "produces one insert operation per inserted character" do
-      deltas = CRDT.text_to_deltas("ab", "abXY")
-
-      assert deltas == [
-               %{"type" => "insert", "pos" => 2, "char" => "X"},
-               %{"type" => "insert", "pos" => 3, "char" => "Y"}
+    test "coalesces a run of inserted characters into one operation" do
+      assert CRDT.text_to_deltas("ab", "abXY") == [
+               %{"type" => "insert", "pos" => 2, "text" => "XY"}
              ]
+    end
+
+    test "coalesces a large paste into a single operation" do
+      pasted = String.duplicate("x", 10_000)
+      deltas = CRDT.text_to_deltas("ab", "ab" <> pasted)
+
+      assert [%{"type" => "insert", "pos" => 2, "text" => ^pasted}] = deltas
     end
 
     test "produces a delete operation for a removed character" do
       assert CRDT.text_to_deltas("abc", "ac") == [
-               %{"type" => "delete", "pos" => 1}
+               %{"type" => "delete", "pos" => 1, "count" => 1}
              ]
     end
 
-    test "produces one delete operation per removed character" do
+    test "coalesces a run of deleted characters into one operation" do
       assert CRDT.text_to_deltas("abcd", "ab") == [
-               %{"type" => "delete", "pos" => 2},
-               %{"type" => "delete", "pos" => 2}
+               %{"type" => "delete", "pos" => 2, "count" => 2}
+             ]
+    end
+
+    test "coalesces a long deletion into a single operation" do
+      assert CRDT.text_to_deltas("ab" <> String.duplicate("x", 5_000), "ab") == [
+               %{"type" => "delete", "pos" => 2, "count" => 5_000}
              ]
     end
 

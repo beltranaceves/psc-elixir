@@ -63,4 +63,66 @@ defmodule PscWeb.DocumentLiveTest do
       assert Documents.list_user_documents(user.id) == []
     end
   end
+
+  describe "editor" do
+    test "debounces content changes on the server round trip", %{conn: conn, user: user} do
+      document = DocumentsFixtures.document_fixture(%{user: user})
+      {:ok, lv, _html} = live(conn, ~p"/documents/#{document.id}")
+
+      assert has_element?(lv, "#editor-form[phx-debounce='300']")
+    end
+
+    test "a paste becomes a single event row", %{conn: conn, user: user} do
+      document = DocumentsFixtures.document_fixture(%{user: user})
+      {:ok, lv, _html} = live(conn, ~p"/documents/#{document.id}")
+
+      pasted = String.duplicate("pasted text ", 1_000)
+
+      lv
+      |> element("#editor-form")
+      |> render_change(%{"content" => pasted})
+
+      assert Documents.pending_event_count(document.id) == 1
+      assert Documents.get_document_content(document.id) == pasted
+    end
+
+    test "typing one character at a time still coalesces per change", %{conn: conn, user: user} do
+      document = DocumentsFixtures.document_fixture(%{user: user})
+      {:ok, lv, _html} = live(conn, ~p"/documents/#{document.id}")
+
+      for i <- 1..3 do
+        lv
+        |> element("#editor-form")
+        |> render_change(%{"content" => String.duplicate("a", i)})
+      end
+
+      assert Documents.pending_event_count(document.id) == 3
+    end
+
+    test "folds pending events into content once the threshold is reached", %{
+      conn: conn,
+      user: user
+    } do
+      document = DocumentsFixtures.document_fixture(%{user: user})
+      {:ok, lv, _html} = live(conn, ~p"/documents/#{document.id}")
+
+      # One operation per change, below the 500 threshold: events accumulate
+      for i <- 1..499 do
+        lv
+        |> element("#editor-form")
+        |> render_change(%{"content" => String.duplicate("a", i)})
+      end
+
+      assert Documents.pending_event_count(document.id) == 499
+      assert Documents.get_document_content(document.id) == String.duplicate("a", 499)
+
+      # Crossing the threshold folds immediately instead of waiting for idle
+      lv
+      |> element("#editor-form")
+      |> render_change(%{"content" => String.duplicate("a", 500)})
+
+      assert Documents.pending_event_count(document.id) == 0
+      assert Documents.get_document_content(document.id) == String.duplicate("a", 500)
+    end
+  end
 end

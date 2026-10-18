@@ -150,27 +150,39 @@ defmodule Psc.Documents do
   This ensures proper loading: we load content + replay events after snapshot_seq.
   """
   def save_content_to_db(document_id, content) do
-    # Get the current max sequence number so we know content is built through this point
+    document = get_document(document_id)
+
+    # The seq the content is built through. Floored at the stored snapshot_seq:
+    # events at or below it are already pruned, so a save with no pending events
+    # (idle/periodic timers of any connected client) sees max(seq) = nil and
+    # would otherwise write 0 back over the marker that next_sequence/1 and
+    # SnapshotManager measure against.
     max_seq =
-      Repo.one(
-        from(e in DocumentEvent,
-          where: e.document_id == ^document_id,
-          select: max(e.seq)
-        )
-      ) || 0
+      max(
+        Repo.one(
+          from(e in DocumentEvent,
+            where: e.document_id == ^document_id,
+            select: max(e.seq)
+          )
+        ) || 0,
+        document.snapshot_seq || 0
+      )
 
     result =
-      document_id
-      |> get_document()
+      document
       |> Document.changeset(%{content: content, snapshot_seq: max_seq})
       |> Repo.update()
 
     # Prune events already folded into the content snapshot (loading
     # replays only seq > snapshot_seq). Keeps the event table small —
-    # free-tier Postgres is limited to 10k rows per table.
-    Repo.delete_all(
-      from(e in DocumentEvent, where: e.document_id == ^document_id and e.seq <= ^max_seq)
-    )
+    # free-tier Postgres is limited to 10k rows per table. Only prune once the
+    # marker is durably stored, so a failed update can never drop events that
+    # are not yet represented in the saved content.
+    with {:ok, _document} <- result do
+      Repo.delete_all(
+        from(e in DocumentEvent, where: e.document_id == ^document_id and e.seq <= ^max_seq)
+      )
+    end
 
     result
   end
@@ -192,25 +204,46 @@ defmodule Psc.Documents do
   end
 
   @doc """
-  Create a snapshot of the document's current state.
-  Call periodically to reduce the number of events to replay.
-  """
-  def create_snapshot(document_id) do
-    SnapshotManager.create_snapshot(document_id)
-  end
-
-  @doc """
-  Check if document should be snapshotted based on event count.
-  """
-  def should_snapshot?(document_id) do
-    SnapshotManager.should_create_snapshot?(document_id)
-  end
-
-  @doc """
   Get snapshot statistics for a document.
   """
   def get_snapshot_stats(document_id) do
     SnapshotManager.get_stats(document_id)
+  end
+
+  @doc """
+  Number of pending (not yet folded into `content`) operations for a document.
+  """
+  def pending_event_count(document_id) do
+    snapshot_seq =
+      Repo.one(from(d in Document, where: d.id == ^document_id, select: d.snapshot_seq)) || 0
+
+    Repo.one(
+      from(e in DocumentEvent,
+        where: e.document_id == ^document_id and e.seq > ^snapshot_seq,
+        select: count(e.id)
+      )
+    ) || 0
+  end
+
+  @doc """
+  Delete events that are already folded into the saved content.
+
+  Pruning normally happens on every save, but it only ever touches documents
+  that are edited again — a document abandoned before its first idle save keeps
+  its tail of events forever. This sweeps every row at or below its owner's
+  `snapshot_seq`. Returns the number of deleted rows.
+  """
+  def sweep_folded_events do
+    {deleted, _} =
+      Repo.delete_all(
+        from(e in DocumentEvent,
+          join: d in Document,
+          on: d.id == e.document_id,
+          where: e.seq <= d.snapshot_seq
+        )
+      )
+
+    deleted
   end
 
   @doc """

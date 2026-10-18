@@ -26,6 +26,9 @@ config :psc, PscWeb.Endpoint,
 # In test we don't send emails
 config :psc, Psc.Mailer, adapter: Swoosh.Adapters.Test
 
+# No background event sweeping during tests — tests exercise sweep/0 directly
+config :psc, Psc.EventsSweeper, enabled: false
+
 # Disable swoosh api client as it is only required for production adapters
 config :swoosh, :api_client, false
 

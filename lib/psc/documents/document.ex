@@ -7,7 +7,6 @@ defmodule Psc.Documents.Document do
     field :content, :string
     field :crdt_state, :string
     field :shared_with, {:array, :string}, default: []
-    field :snapshot_content, :string, default: ""
     field :snapshot_seq, :integer, default: 0
 
     belongs_to :user, Psc.Accounts.User
@@ -25,7 +24,6 @@ defmodule Psc.Documents.Document do
       :crdt_state,
       :user_id,
       :shared_with,
-      :snapshot_content,
       :snapshot_seq
     ])
     |> validate_required([:title, :user_id])

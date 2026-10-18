@@ -15,8 +15,10 @@ defmodule PscWeb.DocumentLive.Editor do
 
   # Check every 5 seconds
   @consistency_check_interval 5000
-  # Check if snapshot needed every 10 seconds
-  @snapshot_check_interval 10000
+  # Fold pending operations into `content` immediately above this many, rather
+  # than waiting for the idle timer — bounds how many un-pruned event rows a
+  # single document can accumulate during a continuous typing burst.
+  @max_pending_events 500
   # Save after 1.5 seconds of inactivity
   @idle_save_interval 1500
   # Save every 10 seconds as fallback
@@ -46,12 +48,12 @@ defmodule PscWeb.DocumentLive.Editor do
         # :saved, :unsaved, :saving
         |> assign(:save_state, :saved)
         |> assign(:idle_timer_ref, nil)
+        |> assign(:pending_events, 0)
         |> subscribe_to_document(document_id)
 
-      # Schedule periodic consistency checks and snapshot checks
+      # Schedule periodic consistency and save checks
       if connected?(socket) do
         Process.send_after(self(), :check_consistency, @consistency_check_interval)
-        Process.send_after(self(), :check_snapshot, @snapshot_check_interval)
         Process.send_after(self(), :periodic_save, @periodic_save_interval)
       end
 
@@ -104,6 +106,8 @@ defmodule PscWeb.DocumentLive.Editor do
       cursor_pos: String.length(new_content)
     })
 
+    pending_events = socket.assigns.pending_events + length(operations)
+
     # Cancel any pending idle save timer
     socket =
       if socket.assigns.idle_timer_ref do
@@ -113,14 +117,21 @@ defmodule PscWeb.DocumentLive.Editor do
         socket
       end
 
-    # Schedule new idle save timer
-    idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
+    socket =
+      if pending_events >= @max_pending_events do
+        # Fold now: bounds the un-pruned event rows instead of waiting for idle
+        fold_pending(socket, new_content)
+      else
+        # Schedule new idle save timer
+        idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
 
-    {:noreply,
-     socket
-     |> assign(:content, new_content)
-     |> assign(:save_state, :unsaved)
-     |> assign(:idle_timer_ref, idle_timer_ref)}
+        socket
+        |> assign(:save_state, :unsaved)
+        |> assign(:idle_timer_ref, idle_timer_ref)
+        |> assign(:pending_events, pending_events)
+      end
+
+    {:noreply, assign(socket, :content, new_content)}
   end
 
   @impl true
@@ -171,6 +182,22 @@ defmodule PscWeb.DocumentLive.Editor do
     end
   end
 
+  # Fold the in-socket content into the document and prune the events it covers.
+  defp fold_pending(socket, content) do
+    case Documents.save_content_to_db(socket.assigns.document_id, content) do
+      {:ok, _document} ->
+        assign(socket,
+          pending_events: 0,
+          last_saved_content: content,
+          save_state: :saved
+        )
+
+      {:error, _changeset} ->
+        # Leave the counter alone so the next edit retries the fold
+        assign(socket, :save_state, :unsaved)
+    end
+  end
+
   @impl true
   def handle_info(:idle_save, socket) do
     # Save content after idle period
@@ -188,6 +215,7 @@ defmodule PscWeb.DocumentLive.Editor do
            socket
            |> assign(:last_saved_content, socket.assigns.content)
            |> assign(:save_state, :saved)
+           |> assign(:pending_events, 0)
            |> assign(:idle_timer_ref, nil)}
 
         {:error, _} ->
@@ -216,6 +244,7 @@ defmodule PscWeb.DocumentLive.Editor do
             socket
             |> assign(:last_saved_content, socket.assigns.content)
             |> assign(:save_state, :saved)
+            |> assign(:pending_events, 0)
 
           {:error, _} ->
             socket
@@ -285,29 +314,6 @@ defmodule PscWeb.DocumentLive.Editor do
     end
   end
 
-  @impl true
-  def handle_info(:check_snapshot, socket) do
-    # Check if a snapshot should be created (after many operations)
-    if Documents.should_snapshot?(socket.assigns.document_id) do
-      case Documents.create_snapshot(socket.assigns.document_id) do
-        {:ok, _document} ->
-          # Snapshot created successfully
-          :telemetry.execute(
-            [:psc, :document, :snapshot_created],
-            %{document_id: socket.assigns.document_id}
-          )
-
-        {:error, _changeset} ->
-          # Snapshot creation failed - not critical, will retry next interval
-          :ok
-      end
-    end
-
-    # Schedule next snapshot check
-    Process.send_after(self(), :check_snapshot, @snapshot_check_interval)
-    {:noreply, socket}
-  end
-
   defp handle_presence_change(socket, document_id) do
     presence_list = Presence.list("presence:#{document_id}")
     assign(socket, presence: presence_list)
@@ -360,7 +366,13 @@ defmodule PscWeb.DocumentLive.Editor do
         <div class="flex flex-1 overflow-hidden bg-base-100">
           <%!-- Editor --%>
           <div class="flex-1 flex flex-col">
-            <.form for={%{}} id="editor-form" phx-change="update_content" class="flex-1 flex flex-col">
+            <.form
+              for={%{}}
+              id="editor-form"
+              phx-change="update_content"
+              phx-debounce="300"
+              class="flex-1 flex flex-col"
+            >
               <textarea
                 name="content"
                 id="editor"

@@ -31,27 +31,33 @@ defmodule Psc.Documents.CRDT do
   @doc """
   Apply a single operation to text.
   Operations are in delta format:
-  - %{"type" => "insert", "pos" => pos, "char" => char}
-  - %{"type" => "delete", "pos" => pos}
+  - %{"type" => "insert", "pos" => pos, "text" => text}  (current form, one op per run)
+  - %{"type" => "insert", "pos" => pos, "char" => char}  (legacy, one op per character)
+  - %{"type" => "delete", "pos" => pos, "count" => n}    (current form, one op per run)
+  - %{"type" => "delete", "pos" => pos}                  (legacy, one character)
   """
   def apply_operation(event, text) when is_struct(event) do
     apply_operation(event.operation, text)
   end
 
-  def apply_operation(%{"type" => "insert", "pos" => pos, "char" => char}, text) do
+  def apply_operation(%{"type" => "insert", "pos" => pos} = op, text) do
     # Clamp position to valid range
-    pos = min(pos, String.length(text))
-    pos = max(0, pos)
+    pos = pos |> min(String.length(text)) |> max(0)
 
+    inserted = op["text"] || op["char"] || ""
     before = String.slice(text, 0, pos)
     after_part = String.slice(text, pos..-1//1)
-    before <> char <> after_part
+    before <> inserted <> after_part
   end
 
-  def apply_operation(%{"type" => "delete", "pos" => pos}, text) do
-    if pos >= 0 and pos < String.length(text) do
+  def apply_operation(%{"type" => "delete", "pos" => pos} = op, text) do
+    count = op["count"] || 1
+    length = String.length(text)
+
+    if pos >= 0 and pos < length do
+      deleted = min(count, length - pos)
       before = String.slice(text, 0, pos)
-      after_part = String.slice(text, (pos + 1)..-1//1)
+      after_part = String.slice(text, (pos + deleted)..-1//1)
       before <> after_part
     else
       text
@@ -88,19 +94,19 @@ defmodule Psc.Documents.CRDT do
     new_len = String.length(new_text)
 
     # Find where the texts diverge
-    pos = find_first_diff_position(old_text, new_text, 0)
+    pos = find_first_diff_position(old_text, new_text, 0, old_len, new_len)
 
     # Get the inserted text
     inserted_length = new_len - old_len
     inserted_text = String.slice(new_text, pos, inserted_length)
 
-    # Create one insert operation per character
-    inserted_text
-    |> String.graphemes()
-    |> Enum.with_index()
-    |> Enum.map(fn {char, idx} ->
-      %{"type" => "insert", "pos" => pos + idx, "char" => char}
-    end)
+    # A contiguous run is one operation (and one event row) — pasting a
+    # document used to emit one row per character.
+    if inserted_text == "" do
+      []
+    else
+      [%{"type" => "insert", "pos" => pos, "text" => inserted_text}]
+    end
   end
 
   defp find_deletion_point(old_text, new_text) do
@@ -110,22 +116,23 @@ defmodule Psc.Documents.CRDT do
     # How many characters were deleted
     deleted_count = String.length(old_text) - String.length(new_text)
 
-    # Create one delete operation per deleted character
-    Enum.map(1..deleted_count, fn _ ->
-      %{"type" => "delete", "pos" => pos}
-    end)
+    if deleted_count <= 0 do
+      []
+    else
+      [%{"type" => "delete", "pos" => pos, "count" => deleted_count}]
+    end
   end
 
-  defp find_first_diff_position(str1, str2, pos) do
-    len1 = String.length(str1)
-    len2 = String.length(str2)
+  defp find_first_diff_position(str1, str2, pos, len1 \\ nil, len2 \\ nil) do
+    len1 = len1 || String.length(str1)
+    len2 = len2 || String.length(str2)
 
     cond do
       pos >= len1 or pos >= len2 ->
         pos
 
       String.at(str1, pos) == String.at(str2, pos) ->
-        find_first_diff_position(str1, str2, pos + 1)
+        find_first_diff_position(str1, str2, pos + 1, len1, len2)
 
       true ->
         pos

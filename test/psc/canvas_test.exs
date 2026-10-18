@@ -283,5 +283,77 @@ defmodule Psc.CanvasTest do
       assert {:ok, _} = Canvas.save_unstr_canvas_content_to_db(id, cells)
       assert Canvas.get_unstr_canvas_content(id)["problem"]["content"] == "world"
     end
+
+    test "save without pending events keeps the snapshot sequence" do
+      user = Psc.AccountsFixtures.user_fixture()
+      {:ok, canvas} = Canvas.create_unstr_canvas(user.id, %{"name" => "Marker test"})
+      id = canvas.id
+
+      {:ok, 1} =
+        Canvas.apply_unstr_canvas_operation(id, user.id, %{
+          "type" => "update_name",
+          "value" => "Renamed"
+        })
+
+      cells = Canvas.get_unstr_canvas_content(id)
+      assert {:ok, %{snapshot_seq: 1}} = Canvas.save_unstr_canvas_content_to_db(id, cells)
+
+      # Every connected client also runs idle/periodic saves. A save that finds
+      # no pending events (the events were just pruned) must not walk the marker
+      # back to 0.
+      assert {:ok, %{snapshot_seq: 1}} = Canvas.save_unstr_canvas_content_to_db(id, cells)
+      assert {:ok, %{snapshot_seq: 1}} = Canvas.save_unstr_canvas_content_to_db(id, cells)
+
+      # The next event continues above snapshot_seq instead of reusing seq 1
+      assert {:ok, 2} =
+               Canvas.apply_unstr_canvas_operation(id, user.id, %{
+                 "type" => "update_name",
+                 "value" => "Again"
+               })
+    end
+
+    test "sweep_folded_events/0 deletes events already covered by the marker" do
+      user = Psc.AccountsFixtures.user_fixture()
+      {:ok, canvas} = Canvas.create_unstr_canvas(user.id, %{"name" => "Sweep canvas"})
+      id = canvas.id
+
+      {:ok, 1} =
+        Canvas.apply_unstr_canvas_operation(id, user.id, %{
+          "type" => "update_name",
+          "value" => "Renamed"
+        })
+
+      # Fold first so `cells` really covers seq 1, then re-insert the row —
+      # recreating rows that escaped pruning.
+      cells = Canvas.get_unstr_canvas_content(id)
+      {:ok, _} = Canvas.save_unstr_canvas_content_to_db(id, cells)
+
+      %Canvas.UnstrCanvasEvent{}
+      |> Canvas.UnstrCanvasEvent.changeset(%{
+        unstr_canvas_id: id,
+        user_id: user.id,
+        seq: 1,
+        operation: %{"type" => "update_name", "value" => "Renamed"}
+      })
+      |> Repo.insert!()
+
+      assert Canvas.sweep_folded_events() == 1
+      assert Canvas.get_unstr_canvas_content(id)["$name"] == "Renamed"
+    end
+
+    test "sweep_folded_events/0 leaves unfolded events alone" do
+      user = Psc.AccountsFixtures.user_fixture()
+      {:ok, canvas} = Canvas.create_unstr_canvas(user.id, %{"name" => "Keep canvas"})
+      id = canvas.id
+
+      {:ok, _} =
+        Canvas.apply_unstr_canvas_operation(id, user.id, %{
+          "type" => "update_name",
+          "value" => "Live"
+        })
+
+      assert Canvas.sweep_folded_events() == 0
+      assert Canvas.get_unstr_canvas_content(id)["$name"] == "Live"
+    end
   end
 end

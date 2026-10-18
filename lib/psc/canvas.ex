@@ -560,30 +560,62 @@ defmodule Psc.Canvas do
   end
 
   def save_unstr_canvas_content_to_db(canvas_id, cells) do
+    canvas = get_unstr_canvas(canvas_id)
+
+    # Floored at the stored snapshot_seq for the same reason as
+    # next_unstr_canvas_sequence/1: events at or below it are already pruned,
+    # so a save with no pending events sees max(seq) = nil and would otherwise
+    # write 0 back over the marker.
     max_seq =
-      Repo.one(
-        from(e in Psc.Canvas.UnstrCanvasEvent,
-          where: e.unstr_canvas_id == ^canvas_id,
-          select: max(e.seq)
-        )
-      ) || 0
+      max(
+        Repo.one(
+          from(e in Psc.Canvas.UnstrCanvasEvent,
+            where: e.unstr_canvas_id == ^canvas_id,
+            select: max(e.seq)
+          )
+        ) || 0,
+        canvas.snapshot_seq || 0
+      )
 
     result =
-      canvas_id
-      |> get_unstr_canvas()
+      canvas
       |> UnstrCanvas.changeset(%{cells: cells, snapshot_seq: max_seq})
       |> Repo.update()
 
     # Prune events already folded into the snapshot. The snapshot fully
     # captures state through max_seq and loading replays only seq >
     # snapshot_seq, so pruned rows are dead weight. This keeps the event
-    # table small (free-tier Postgres is limited to 10k rows per table).
-    Repo.delete_all(
-      from(e in Psc.Canvas.UnstrCanvasEvent,
-        where: e.unstr_canvas_id == ^canvas_id and e.seq <= ^max_seq
+    # table small (free-tier Postgres is limited to 10k rows per table). Only
+    # prune once the marker is durably stored, so a failed update can never
+    # drop events that are not yet represented in the saved snapshot.
+    with {:ok, _canvas} <- result do
+      Repo.delete_all(
+        from(e in Psc.Canvas.UnstrCanvasEvent,
+          where: e.unstr_canvas_id == ^canvas_id and e.seq <= ^max_seq
+        )
       )
-    )
+    end
 
     result
+  end
+
+  @doc """
+  Delete canvas events already folded into the saved `cells`.
+
+  The counterpart to `Documents.sweep_folded_events/0` for canvases: pruning
+  only happens on save, so canvases abandoned before their first save keep
+  their event tail forever. Returns the number of deleted rows.
+  """
+  def sweep_folded_events do
+    {deleted, _} =
+      Repo.delete_all(
+        from(e in Psc.Canvas.UnstrCanvasEvent,
+          join: c in UnstrCanvas,
+          on: c.id == e.unstr_canvas_id,
+          where: e.seq <= c.snapshot_seq
+        )
+      )
+
+    deleted
   end
 end

@@ -14,6 +14,7 @@ defmodule Psc.Application do
       {DNSCluster, query: Application.get_env(:psc, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Psc.PubSub},
       PscWeb.Presence,
+      Psc.EventsSweeper,
       # Start a worker by calling: Psc.Worker.start_link(arg)
       # {Psc.Worker, arg},
       # Start to serve requests, typically the last entry
