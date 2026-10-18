@@ -84,6 +84,7 @@ flowchart LR
 
 ## Related diagrams
 
+- [design-decisions.md](design-decisions.md) — why these structures are the way they are (ADR log)
 - [supervision_tree.md](supervision_tree.md) — OTP process tree under `Psc.Application`
 - [documents_collaboration_flow.md](documents_collaboration_flow.md) — event-sourced text documents
 - [unstr_canvas_collaboration_flow.md](unstr_canvas_collaboration_flow.md) — per-cell canvas editing
