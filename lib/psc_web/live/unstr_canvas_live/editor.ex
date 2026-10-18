@@ -367,41 +367,113 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     assign(socket, presence: presence_list)
   end
 
+  # Every data column may shrink to this width before the table stops fitting
+  # the viewport and scrolls horizontally.
+  @min_column_width_rem 12
+
+  defp table_min_width(cells) do
+    columns = length(cells["columns"] || [])
+    "calc(#{row_label_width(cells)} + #{columns * @min_column_width_rem}rem)"
+  end
+
+  # The row-label column only takes as much room as its longest label needs
+  # (~0.85ch per character plus the cell's horizontal padding); labels are
+  # truncated rather than allowed to spill into the neighbouring cell.
+  defp row_label_width(cells) do
+    longest =
+      cells["rows"]
+      |> List.wrap()
+      |> Enum.map(fn row -> row |> Map.get("label", "") |> String.length() end)
+      |> Enum.max(fn -> 0 end)
+
+    "#{Float.ceil(longest * 0.85 + 4) |> trunc()}ch"
+  end
+
+  defp active_usernames(presence) do
+    for {_user_id, %{metas: [meta | _]}} <- presence, do: meta[:username]
+  end
+
+  defp active_users_label([]), do: "No one online"
+  defp active_users_label([username]), do: username
+  defp active_users_label([username | rest]), do: "#{username} +#{length(rest)}"
+
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app
       flash={@flash}
       current_scope={@current_scope}
-      header_title="Canvases"
-      container_class="mx-auto w-full max-w-none space-y-4 lg:w-[85vw]"
+      header_title="Canvas Editor"
+      fill_height
+      container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
-      <div id="canvas-workspace" class="w-full">
-        <%!-- Header --%>
-        <div id="canvas-header" class="flex items-start justify-between gap-4 mb-8">
-          <div class="min-w-0 flex-1">
-            <.form for={%{}} id="canvas-name-form" phx-change="update_name">
+      <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col">
+        <%!-- Header: title, description, presence and actions in one compact row --%>
+        <div id="canvas-header" class="mb-3 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <div class="flex min-w-0 flex-1 items-start gap-4">
+            <.form
+              for={%{}}
+              id="canvas-name-form"
+              phx-change="update_name"
+              class="flex min-w-0 shrink items-center"
+            >
               <input
                 name="value"
                 type="text"
                 value={@c_name}
                 phx-debounce="1000"
-                class="text-2xl font-semibold text-base-content bg-transparent border-b-2 border-transparent hover:border-base-content/20 focus:border-primary focus:outline-none w-full"
+                class="field-sizing-content h-8 w-auto min-w-[6rem] max-w-[24rem] border-b-2 border-transparent bg-transparent text-xl font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none"
                 placeholder="Canvas name"
               />
             </.form>
 
-            <.form for={%{}} id="canvas-description-form" phx-change="update_description">
+            <.form
+              for={%{}}
+              id="canvas-description-form"
+              phx-change="update_description"
+              class="flex min-w-0 flex-1 items-start"
+            >
               <textarea
                 name="value"
                 phx-debounce="1000"
-                class="mt-1 w-full resize-none border-0 bg-transparent p-0 text-sm text-base-content/60 placeholder-base-content/35 focus:outline-none focus:text-base-content/85 transition-colors"
+                class="field-sizing-content box-content max-h-16 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-8 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none"
                 placeholder="Add a description..."
-                rows="2"
+                rows="1"
               ><%= @c_desc %></textarea>
             </.form>
           </div>
-          <div class="flex shrink-0 items-center">
+
+          <div class="flex shrink-0 flex-wrap items-center gap-3">
+            <%!-- Active users: truncated, with the full list in a hover tooltip --%>
+            <UITooltip.tooltip id="active-users-tooltip">
+              <UITooltip.tooltip_trigger>
+                <button
+                  type="button"
+                  class="inline-flex max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 py-1 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span class="relative flex size-2 shrink-0">
+                    <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
+                    <span class="relative inline-flex size-2 rounded-full bg-success"></span>
+                  </span>
+                  <span class="truncate">{active_users_label(active_usernames(@presence))}</span>
+                </button>
+              </UITooltip.tooltip_trigger>
+
+              <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
+                <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
+                  Active users
+                </p>
+                <ul class="space-y-1">
+                  <li
+                    :for={username <- active_usernames(@presence)}
+                    class="truncate text-sm text-base-content/80"
+                  >
+                    {username}
+                  </li>
+                </ul>
+              </UITooltip.tooltip_content>
+            </UITooltip.tooltip>
+
             <%= cond do %>
               <% @save_state == :saving -> %>
                 <UIBadge.badge variant="secondary" class="shrink-0">
@@ -420,30 +492,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   <span>Unsaved</span>
                 </UIBadge.badge>
             <% end %>
+
             <%= if @canvas.author_id == @user_id do %>
-              <.share_button id="share-canvas-button" label="Share" class="ml-4" />
+              <.share_button id="share-canvas-button" label="Share" />
             <% end %>
+
             <.link
               navigate={~p"/canvases"}
-              class="ml-4 shrink-0 text-sm text-base-content/60 hover:text-base-content transition-colors"
+              class="shrink-0 text-sm text-base-content/60 hover:text-base-content transition-colors"
             >
               Back to Canvases
             </.link>
-          </div>
-        </div>
-
-        <%!-- Presence + sharing --%>
-        <div class="flex flex-col gap-4 mb-4 rounded-xl border border-base-content/10 bg-base-200 p-4">
-          <div>
-            <div class="text-xs text-base-content/50 self-center mr-2 mb-2">Active Users:</div>
-            <div class="flex gap-2">
-              <%= for {_user_id, %{metas: metas}} <- @presence do %>
-                <% meta = List.first(metas) %>
-                <UIBadge.badge variant="secondary">
-                  {meta[:username]}
-                </UIBadge.badge>
-              <% end %>
-            </div>
           </div>
         </div>
 
@@ -459,66 +518,33 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           on_close="share_closed"
         />
 
-        <div class="rounded-xl border border-base-content/10 bg-base-200 p-8 w-full">
-          <div class="mb-6 flex items-center justify-between gap-4">
-            <h2 class="text-lg font-medium text-base-content">Canvas Structure</h2>
-
-            <UITooltip.tooltip id="canvas-structure-tooltip">
-              <UITooltip.tooltip_trigger>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1.5 rounded-lg border border-base-content/10 px-2.5 py-1 text-xs font-medium text-base-content/60 transition-colors hover:border-base-content/25 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <.icon name="hero-information-circle" class="w-4 h-4" />
-                  <span>Rows &amp; columns</span>
-                </button>
-              </UITooltip.tooltip_trigger>
-
-              <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
-                <div class="space-y-2.5">
-                  <div>
-                    <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
-                      Columns
-                    </p>
-                    <div class="flex flex-wrap gap-1">
-                      <%= for column <- @cells["columns"] || [] do %>
-                        <span class="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                          {column["label"]}
-                        </span>
-                      <% end %>
-                    </div>
-                  </div>
-                  <div>
-                    <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
-                      Rows
-                    </p>
-                    <div class="flex flex-wrap gap-1">
-                      <%= for row <- @cells["rows"] || [] do %>
-                        <span class="rounded bg-success/10 px-1.5 py-0.5 text-xs font-medium text-success">
-                          {row["label"]}
-                        </span>
-                      <% end %>
-                    </div>
-                  </div>
-                </div>
-              </UITooltip.tooltip_content>
-            </UITooltip.tooltip>
-          </div>
-
+        <div
+          id="canvas-grid"
+          class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
+        >
           <%!-- Grid Layout — accents come from the template and are read-only here --%>
-          <div class="overflow-x-auto">
-            <table class="w-full border-collapse">
+          <div class="flex min-h-0 flex-1 flex-col overflow-auto">
+            <table
+              class="h-full min-h-0 w-full flex-1 table-fixed border-collapse"
+              style={"min-width: #{table_min_width(@cells)}"}
+            >
+              <colgroup>
+                <col style={"width: #{row_label_width(@cells)}"} />
+                <%= for _column <- @cells["columns"] || [] do %>
+                  <col />
+                <% end %>
+              </colgroup>
               <thead>
                 <tr>
-                  <th class="px-4 py-2 border border-base-content/10 bg-base-content/5"></th>
+                  <th class="px-2 py-1 border border-base-content/20 bg-base-content/5"></th>
                   <%= for column <- @cells["columns"] || [] do %>
-                    <th class="border border-base-content/10 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
+                    <th class="border border-base-content/20 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
                       <div class="flex flex-col">
                         <.accent_bar
                           id={"accent-bar-column-#{column["id"]}"}
                           token={column["accent"]}
                         />
-                        <div class="px-4 py-2">
+                        <div class="px-2 py-1">
                           {column["label"]}
                         </div>
                       </div>
@@ -529,20 +555,20 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <tbody>
                 <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
                   <tr>
-                    <td class="relative border border-base-content/10 bg-base-content/5 p-0 align-top">
+                    <td class="relative border border-base-content/20 bg-base-content/5 p-0 align-top">
                       <.accent_bar
                         id={"accent-bar-row-#{row["id"]}"}
                         token={row["accent"]}
                         orientation={:left}
                       />
-                      <div class="px-4 py-2 font-medium text-base-content/70 text-sm">
+                      <div class="truncate px-2 py-1 font-medium text-base-content/70 text-sm">
                         {row["label"]}
                       </div>
                     </td>
                     <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                       <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                      <td class="px-4 py-2 border border-base-content/10 align-top">
+                      <td class="border border-base-content/20 align-top">
                         <%= if cell_key do %>
                           <% cell_data =
                             get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
@@ -550,23 +576,32 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                             Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
                               Map.get(cell_data, "title") || cell_key %>
 
-                          <div class="bg-base-300 p-3 rounded-lg">
-                            <div class="mb-2">
-                              <div class="text-sm font-medium text-base-content">{title}</div>
-                              <div class="text-xs text-base-content/40">{cell_key}</div>
+                          <div
+                            id={"cell-card-" <> cell_key}
+                            phx-hook="CellFocus"
+                            class="canvas-cell cursor-text bg-base-300 p-2 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
+                          >
+                            <div class="mb-1">
+                              <div class="text-sm font-medium text-base-content break-words">
+                                {title}
+                              </div>
                             </div>
 
                             <.form for={%{}} id={"cell-form-#{cell_key}"} phx-change="update_cell">
                               <input type="hidden" name="cell_key" value={cell_key} />
 
-                              <div class="mt-2 grid gap-2 text-sm">
+                              <div class="mt-1 grid min-w-0 gap-1 text-sm">
                                 <%= for {field, value} <- cell_data do %>
                                   <%!-- "semantics" is tolerated in older canvases but is
-                                  no longer authored or shown. --%>
-                                  <%= if field not in ["row", "column", "label", "semantics"] do %>
-                                    <div class="flex flex-col">
-                                      <label class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-1">
-                                        {field}
+                                  no longer authored or shown; "titles" holds labels. --%>
+                                  <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
+                                    <% field_title = Psc.Canvas.field_title(cell_data, field) %>
+                                    <div class="flex min-w-0 flex-col">
+                                      <label
+                                        :if={field_title != ""}
+                                        class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
+                                      >
+                                        {field_title}
                                       </label>
 
                                       <div
@@ -575,12 +610,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         phx-update="ignore"
                                         data-cell-key={cell_key}
                                         data-field={field}
+                                        data-field-wrapper
                                         data-current-user-id={@user_id}
                                         class="w-full"
                                       >
                                         <div
                                           id={"md-render-" <> cell_key <> "-" <> field}
-                                          class="md-render prose prose-sm dark:prose-invert break-words mb-1 bg-base-300 text-base-content p-2 rounded"
+                                          class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
                                           phx-update="ignore"
                                         >
                                           {value}
@@ -588,7 +624,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         <textarea
                                           name={"values[" <> field <> "]"}
                                           phx-debounce="150"
-                                          class="hidden w-full px-2 py-1 border border-base-content/10 rounded-md text-base-content bg-base-300 placeholder-base-content/40 focus:ring-1 focus:ring-primary resize-none"
+                                          class="hidden w-full resize-none bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
                                           placeholder="Enter value..."
                                           rows="3"
                                         ><%= value %></textarea>

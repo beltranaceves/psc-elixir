@@ -94,6 +94,20 @@ defmodule Psc.CanvasTest do
     end
   end
 
+  describe "field_title/2" do
+    test "uses an explicit title, including an intentionally empty one" do
+      assert Canvas.field_title(%{"titles" => %{"content" => "Problem statement"}}, "content") ==
+               "Problem statement"
+
+      assert Canvas.field_title(%{"titles" => %{"notes" => ""}}, "notes") == ""
+    end
+
+    test "falls back to the field key, except for the content body" do
+      assert Canvas.field_title(%{}, "notes") == "notes"
+      assert Canvas.field_title(%{}, "content") == ""
+    end
+  end
+
   describe "template layout_map validation" do
     test "rejects templates with empty rows" do
       user = Psc.AccountsFixtures.user_fixture()
@@ -130,6 +144,30 @@ defmodule Psc.CanvasTest do
   end
 
   describe "instantiate_template/2" do
+    test "copies per-field section titles into the canvas cells" do
+      user = Psc.AccountsFixtures.user_fixture()
+
+      lm = %{
+        "rows" => [%{"id" => "r1", "label" => "R"}],
+        "columns" => [%{"id" => "c1", "label" => "C"}],
+        "layout" => [["r1_c1"]],
+        "cells" => %{
+          "r1_c1" => %{
+            "label" => "Solo",
+            "fields" => ["content"],
+            "defaults" => %{"content" => ""},
+            "titles" => %{"content" => "Problem statement"}
+          }
+        }
+      }
+
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, layout_map: lm})
+      assert {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert cells["r1_c1"]["titles"] == %{"content" => "Problem statement"}
+    end
+
     test "transforms template cells into canvas cell shape" do
       user = Psc.AccountsFixtures.user_fixture()
 

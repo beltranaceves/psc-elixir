@@ -10,6 +10,13 @@ defmodule PscWeb.UnstrCanvasLiveTest do
   setup :register_and_log_in_user
 
   describe "index (canvases)" do
+    test "marks the Canvases nav item as the current page", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/canvases")
+
+      assert has_element?(lv, ~s|nav a[href="/canvases"][aria-current="page"]|)
+      refute has_element?(lv, ~s|nav a[href="/templates"][aria-current="page"]|)
+    end
+
     test "lists only templates the user may use", %{conn: conn, user: user} do
       own = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Own template"})
 
@@ -102,6 +109,79 @@ defmodule PscWeb.UnstrCanvasLiveTest do
   end
 
   describe "editor (canvas editor)" do
+    test "renders a fixed-layout grid with equal columns and a viewport-driven height", %{
+      conn: conn,
+      user: user
+    } do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, _lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+
+      # Content no longer drives column widths: 2x2 fixture → a label column
+      # sized from the longest row name + two 12rem minimum data columns.
+      assert html =~ "table-fixed"
+      assert html =~ "min-width: calc("
+
+      # The grid takes the remaining viewport height through flex, not a
+      # viewport-unit calculation.
+      assert html =~ "flex-1 table-fixed"
+      refute html =~ "100vh"
+
+      # Each data cell is a fixed-size, internally scrollable card.
+      assert html =~ "canvas-cell"
+    end
+
+    test "renders template section titles and hides empty ones", %{conn: conn, user: user} do
+      layout_map =
+        CanvasFixtures.template_layout_map_fixture()
+        |> update_in(["cells", "r1_c1"], fn cell ->
+          Map.merge(cell, %{
+            "fields" => ["content", "notes"],
+            "defaults" => %{"content" => "Body", "notes" => ""},
+            "titles" => %{"content" => "Problem statement", "notes" => ""}
+          })
+        end)
+
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, layout_map: layout_map})
+
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
+
+      # A custom section title is rendered…
+      assert has_element?(lv, "#cell-form-r1_c1 label", "Problem statement")
+      # …while an intentionally empty one is not rendered at all.
+      refute has_element?(lv, "#cell-form-r1_c1 label", "notes")
+    end
+
+    test "the conventional content field has no section title", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
+
+      refute has_element?(lv, "#cell-form-r1_c1 label", "content")
+      assert has_element?(lv, "#cell-form-r1_c1 #md-r1_c1-content")
+    end
+
+    test "titles the header Canvas Editor and leaves the Canvases nav item unhighlighted", %{
+      conn: conn,
+      user: user
+    } do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+
+      assert html =~ ~s|id="header-page-title"|
+      assert html =~ "Canvas Editor"
+
+      refute has_element?(lv, ~s|nav a[href="/canvases"][aria-current="page"]|)
+      refute has_element?(lv, ~s|nav a[href="/templates"][aria-current="page"]|)
+    end
+
     test "shows the template's cell label as the header, not as an editable field", %{
       conn: conn,
       user: user
@@ -147,33 +227,28 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       refute html =~ ~s(name="values[semantics]")
     end
 
-    test "puts the description under the title and the structure summary in a tooltip", %{
+    test "puts title, description, presence and actions in one header row", %{
       conn: conn,
       user: user
     } do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
 
-      # Title and description share the header, in that order.
+      # One compact header row: title, description, presence and the actions.
       assert has_element?(lv, "#canvas-header #canvas-name-form")
       assert has_element?(lv, "#canvas-header #canvas-description-form")
+      assert has_element?(lv, "#canvas-header #active-users-tooltip")
+      assert has_element?(lv, "#canvas-header #share-canvas-button")
+      assert has_element?(lv, "#canvas-header a[href='/canvases']")
 
-      # The columns/rows summary is no longer rendered as page content; it
-      # lives inside the hover tooltip attached to the structure heading.
-      assert has_element?(lv, "#canvas-structure-tooltip")
+      # The standalone "Canvas Structure" block is gone; the grid is the content.
+      refute has_element?(lv, "#canvas-structure-tooltip")
 
-      document = LazyHTML.from_fragment(html)
-
-      tooltip_content =
-        LazyHTML.query(document, "#canvas-structure-tooltip [data-part='content']")
-
-      tooltip_text = LazyHTML.text(tooltip_content)
-      assert tooltip_text =~ "Columns"
-      assert tooltip_text =~ "Rows"
-      assert tooltip_text =~ "Column 1"
-      assert tooltip_text =~ "Row 1"
+      # The trigger is truncated; the full list lives in the hover tooltip.
+      assert has_element?(lv, "#active-users-tooltip button")
+      assert has_element?(lv, "#active-users-tooltip [data-part='content']", user.email)
 
       # ... and the grid itself stays always visible for editing.
       assert has_element?(lv, "#md-r1_c1-content")

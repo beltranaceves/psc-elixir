@@ -12,6 +12,21 @@ defmodule Psc.Canvas do
   alias Psc.Canvas.Layout
 
   @doc """
+  Returns the display title for a cell field.
+
+  A template cell may carry a `"titles"` map keyed by field name; an entry
+  whose value is empty means the section is intentionally untitled. Without an
+  entry the field key is the title, except for the conventional `"content"`
+  body field, which is untitled so it can use the whole cell height.
+  """
+  def field_title(cell_data, field) do
+    case Map.fetch(cell_data["titles"] || %{}, field) do
+      {:ok, title} -> title |> to_string() |> String.trim()
+      :error -> if field == "content", do: "", else: field
+    end
+  end
+
+  @doc """
   List all canvases authored by a user.
   """
   def list_user_canvases(user_id) do
@@ -358,11 +373,15 @@ defmodule Psc.Canvas do
               "column" => column_id,
               "label" => meta["label"] || key
             })
+            |> maybe_put_titles(meta["titles"])
 
           Map.put(a, key, data)
       end)
     end)
   end
+
+  defp maybe_put_titles(data, titles) when titles in [nil, %{}], do: data
+  defp maybe_put_titles(data, titles), do: Map.put(data, "titles", titles)
 
   @doc """
   List all unstructured canvases authored by a user.

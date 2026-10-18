@@ -157,6 +157,37 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert has_element?(lv, "#cell-r1_c1-field-notes")
     end
 
+    test "sets an optional section title per field", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      # The conventional content field starts untitled: the key is the
+      # placeholder, the value is empty so no heading is rendered downstream.
+      assert has_element?(lv, "#cell-r1_c1-field-content-title[placeholder='content']")
+      assert has_element?(lv, ~s|#cell-r1_c1-field-content-title[value=""]|)
+
+      html =
+        lv
+        |> element("#cell-r1_c1-field-content-title-form")
+        |> render_change(%{
+          "value" => "Problem statement",
+          "cell_key" => "r1_c1",
+          "field" => "content"
+        })
+
+      assert html =~ "Problem statement"
+      assert has_element?(lv, "#unsaved-changes-hint")
+
+      # Clearing the title is allowed and stored explicitly.
+      lv
+      |> element("#cell-r1_c1-field-content-title-form")
+      |> render_change(%{"value" => "", "cell_key" => "r1_c1", "field" => "content"})
+
+      assert has_element?(lv, ~s|#cell-r1_c1-field-content-title[value=""]|)
+    end
+
     test "tracks unsaved changes and cancels cleanly when there are none", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates/new")
 

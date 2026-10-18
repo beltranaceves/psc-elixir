@@ -342,7 +342,7 @@ defmodule PscWeb.CanvasLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Canvases">
+    <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Canvas Editor">
       <div class="py-8">
         <div class="mx-auto max-w-5xl px-4">
           <%!-- Header --%>

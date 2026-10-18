@@ -28,6 +28,8 @@ it costs, and the evidence it was verified against.
 | [ADR-016](#adr-016--one-share-modal-component-for-templates-canvases-and-documents) | One Share modal component for templates, canvases and documents | Accepted | 2026-10-18 |
 | [ADR-017](#adr-017--remove-the-unused-relations-metadata) | Remove the unused `relations` metadata | Accepted | 2026-10-18 |
 | [ADR-018](#adr-018--documents-is-parked-as-a-standalone-feature) | Documents is parked as a standalone feature | Accepted | 2026-10-18 |
+| [ADR-019](#adr-019--auth-feedback-inline-validation-plus-feedback-cards) | Auth feedback: inline validation plus feedback cards | Accepted | 2026-10-18 |
+| [ADR-020](#adr-020--optional-cell-section-titles-and-a-dense-square-grid) | Optional cell section titles, and a dense square grid | Accepted | 2026-10-19 |
 
 ---
 
@@ -712,6 +714,41 @@ addressable by stable ids (`<field-id>-error`). A blank email now reports only
 messages. The short-password copy is "should be at least 12 characters", which required
 updating two test assertions. Info flashes disappear on their own, so anything depending
 on them must read the server flash rather than the DOM.
+
+---
+
+## ADR-020 — Optional cell section titles, and a dense square grid
+
+**Context.** Canvas cells rendered the raw field key as a section heading, so the
+conventional `content` body field showed a "CONTENT" label that wasted vertical space,
+and every cell repeated its own key under the cell label ("problem / problem"). The grid
+also carried generous padding (cell + card + markdown) and rounded corners, which fights
+the space-constrained nature of the canvas.
+
+**Decision.**
+- Template cells may carry an optional `"titles"` map keyed by field. A non-empty value
+  is the section heading, an empty value hides it, and a missing entry falls back to the
+  field key — except the conventional `content` field, which is untitled by default.
+  `Psc.Canvas.field_title/2` is the single source of truth, and template instantiation
+  copies the map into the canvas cell.
+- The template designer edits the title per field (placeholder = the key, clearing it is
+  allowed and stored explicitly).
+- The canvas editor no longer repeats the cell key under the cell label.
+- The grid is dense and square: no padding between the table and the cell card, 8 px card
+  padding, 2–4 px label/field gaps, 4 px markdown padding, trimmed prose margins, and no
+  rounded corners anywhere in the grid (panel, cells, previews, inline editor).
+- Grid lines use `base-content/20` rather than `/10`, so light mode keeps visible
+  separators. Editing a cell replaces the browser's default focus/selection styling with a
+  soft inset primary ring around the **whole cell** and a brand-tinted text selection.
+
+**Alternatives considered.** Keeping the key as the only heading (no way to make a
+section untitled); special-casing only `content` in the editor (no per-template control);
+retaining rounded corners and padding for looks (rejected: density wins here).
+
+**Consequences.** Existing templates render as before (keys stay headings, except
+`content`), while templates saved from the designer can rename or hide headings. Canvases
+keep the titles they were instantiated with; editing the template afterwards does not
+affect them, matching the rule for the rest of the structure.
 
 ---
 

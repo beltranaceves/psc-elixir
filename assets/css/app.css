@@ -263,3 +263,65 @@
     }
   }
 }
+
+/* Canvas grid: every cell is the same size. The page is a flex column (see
+   Layouts.app), the table panel flexes into the remaining viewport height and
+   the table rows share it equally; cells scroll internally when content is
+   taller. The table scrolls horizontally when the viewport cannot give each
+   column its minimum width. */
+@layer utilities {
+  .canvas-cell {
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, currentColor 30%, transparent) transparent;
+  }
+
+  .canvas-cell::-webkit-scrollbar {
+    width: 0.375rem;
+  }
+
+  .canvas-cell::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .canvas-cell::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in oklch, currentColor 30%, transparent);
+  }
+
+  /* Markdown headings stay proportionate in a space-constrained cell, so
+     words wrap normally instead of breaking mid-word. */
+  .canvas-cell .md-render :is(h1, h2) {
+    font-size: 1.25rem;
+    line-height: 1.5;
+    margin-block: 0.35em;
+  }
+
+  .canvas-cell .md-render h3 {
+    font-size: 1.05rem;
+    line-height: 1.4;
+    margin-block: 0.35em;
+  }
+
+  /* Dense cells: trim prose margins so text fills the cell instead of
+     leaving gaps at the top, bottom and between blocks. */
+  .canvas-cell .md-render :is(p, ul, ol, blockquote, pre) {
+    margin-block: 0.3em;
+  }
+
+  .canvas-cell .md-render > :first-child {
+    margin-top: 0;
+  }
+
+  .canvas-cell .md-render > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* Soft brand tint for selected text inside a cell instead of the browser's
+     default selection highlight; the cell itself shows the editing outline. */
+  .canvas-cell ::selection {
+    background: color-mix(in oklch, var(--primary) 30%, transparent);
+    color: inherit;
+  }
+}

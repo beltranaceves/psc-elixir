@@ -105,7 +105,8 @@ The `layout_map` field stores the full template definition as a nested map:
     "r1_c1" => %{
       "label" => "Problem",
       "fields" => ["content"],        # ordered list of field keys for this cell
-      "defaults" => %{"content" => ""}
+      "defaults" => %{"content" => ""},
+      "titles" => %{"content" => ""}  # optional section titles, keyed by field
     },
     "r1_c2" => %{
       "label" => "Leverage",
@@ -114,11 +115,25 @@ The `layout_map` field stores the full template definition as a nested map:
         "technology" => "",
         "components" => "",
         "information" => ""
-      }
+      },
+      "titles" => %{"technology" => "Technology", "components" => ""}
     }
   },
 }
 ```
+
+### Section titles
+
+Each field renders as a section in the canvas cell. The section title comes from the
+cell's optional `titles` map:
+
+- a non-empty entry is the displayed heading;
+- an **empty** entry renders no heading at all (more room for the content);
+- without an entry the field key is the heading, except for the conventional
+  `content` field, which is untitled by default.
+
+The designer exposes this as one "section title" input per field (placeholder = the
+field key), so a template can leave sections untitled.
 
 ### Field semantics
 
@@ -235,7 +250,9 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
 
 1. **Inline cell editing** — every grid cell is directly editable, with no selection step and no side panel:
    - **Label** text input at the top of the cell (blank falls back to showing the cell key as placeholder)
-   - **Fields** — one row per field: the field key, an editable default value, and a remove button
+   - **Fields** — one row per field: an editable **section title** (placeholder = the field
+  key; clearing it leaves the section untitled), an editable default value, and a remove
+  button
    - **Add field** — an inline form at the bottom of each cell
 
 2. **Save** — validates that every grid position has a cell entry, then persists via `update_template`.

@@ -35,6 +35,11 @@ defmodule PscWeb.Layouts do
     default: "mx-auto max-w-2xl space-y-4",
     doc: "the CSS class used for the main container; override to change width"
 
+  attr :fill_height, :boolean,
+    default: false,
+    doc:
+      "fills the viewport and lets the page content flex into the remaining height instead of scrolling the window"
+
   attr :header_title, :string,
     default: nil,
     doc: "route context shown in the app header (e.g. the current section name)"
@@ -48,93 +53,102 @@ defmodule PscWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="h-14 shrink-0 border-b border-base-content/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-6">
-      <.link navigate={~p"/"} class="flex shrink-0 items-center gap-2 text-base-content">
-        <span class="flex size-7 items-center justify-center rounded-md bg-primary text-primary-content text-sm font-bold">
-          P
+    <div class={[
+      "flex flex-col",
+      @fill_height && "h-dvh overflow-hidden",
+      !@fill_height && "min-h-dvh"
+    ]}>
+      <header class="h-14 shrink-0 border-b border-base-content/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-6">
+        <.link navigate={~p"/"} class="flex shrink-0 items-center gap-2 text-base-content">
+          <span class="flex size-7 items-center justify-center rounded-md bg-primary text-primary-content text-sm font-bold">
+            P
+          </span>
+          <span class="text-sm font-semibold tracking-tight">PSC</span>
+        </.link>
+
+        <span
+          :if={@header_title}
+          id="header-page-title"
+          class="hidden min-w-0 truncate text-sm font-medium text-base-content/70 md:inline"
+        >
+          {@header_title}
         </span>
-        <span class="text-sm font-semibold tracking-tight">PSC</span>
-      </.link>
 
-      <span
-        :if={@header_title}
-        id="header-page-title"
-        class="hidden min-w-0 truncate text-sm font-medium text-base-content/70 md:inline"
-      >
-        {@header_title}
-      </span>
+        <div class="ml-auto flex items-center gap-4">
+          <%!-- Private sections: only advertised to signed-in users. --%>
+          <nav :if={@current_scope && @current_scope.user} class="flex items-center gap-1">
+            <.link
+              navigate={~p"/canvases"}
+              aria-current={nav_current(@header_title, @header_section, "Canvases")}
+              class={[
+                "px-3 py-1.5 rounded-lg text-sm transition-colors",
+                nav_item_class(@header_title, @header_section, "Canvases")
+              ]}
+            >
+              Canvases
+            </.link>
+            <.link
+              navigate={~p"/templates"}
+              aria-current={nav_current(@header_title, @header_section, "Templates")}
+              class={[
+                "px-3 py-1.5 rounded-lg text-sm transition-colors",
+                nav_item_class(@header_title, @header_section, "Templates")
+              ]}
+            >
+              Templates
+            </.link>
+          </nav>
 
-      <div class="ml-auto flex items-center gap-4">
-        <%!-- Private sections: only advertised to signed-in users. --%>
-        <nav :if={@current_scope && @current_scope.user} class="flex items-center gap-1">
-          <.link
-            navigate={~p"/canvases"}
-            aria-current={nav_current(@header_title, @header_section, "Canvases")}
-            class={[
-              "px-3 py-1.5 rounded-lg text-sm transition-colors",
-              nav_item_class(@header_title, @header_section, "Canvases")
-            ]}
-          >
-            Canvases
-          </.link>
-          <.link
-            navigate={~p"/templates"}
-            aria-current={nav_current(@header_title, @header_section, "Templates")}
-            class={[
-              "px-3 py-1.5 rounded-lg text-sm transition-colors",
-              nav_item_class(@header_title, @header_section, "Templates")
-            ]}
-          >
-            Templates
-          </.link>
-        </nav>
-
-        <div class="flex items-center gap-4">
-          <.theme_toggle />
-          <%= if @current_scope && @current_scope.user do %>
-            <div class="flex items-center gap-3 text-sm">
-              <span class="text-base-content/60">{@current_scope.user.email}</span>
-              <.link
-                href={~p"/users/settings"}
-                class="text-base-content/70 hover:text-base-content transition-colors"
-              >
-                Settings
-              </.link>
-              <.link
-                href={~p"/users/log-out"}
-                method="delete"
-                class="text-base-content/70 hover:text-base-content transition-colors"
-              >
-                Log out
-              </.link>
-            </div>
-          <% else %>
-            <div class="flex items-center gap-3 text-sm">
-              <.link
-                href={~p"/users/register"}
-                class="text-base-content/70 hover:text-base-content transition-colors"
-              >
-                Register
-              </.link>
-              <.link
-                href={~p"/users/log-in"}
-                class="px-3 py-1.5 rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
-              >
-                Log in
-              </.link>
-            </div>
-          <% end %>
+          <div class="flex items-center gap-4">
+            <.theme_toggle />
+            <%= if @current_scope && @current_scope.user do %>
+              <div class="flex items-center gap-3 text-sm">
+                <span class="text-base-content/60">{@current_scope.user.email}</span>
+                <.link
+                  href={~p"/users/settings"}
+                  class="text-base-content/70 hover:text-base-content transition-colors"
+                >
+                  Settings
+                </.link>
+                <.link
+                  href={~p"/users/log-out"}
+                  method="delete"
+                  class="text-base-content/70 hover:text-base-content transition-colors"
+                >
+                  Log out
+                </.link>
+              </div>
+            <% else %>
+              <div class="flex items-center gap-3 text-sm">
+                <.link
+                  href={~p"/users/register"}
+                  class="text-base-content/70 hover:text-base-content transition-colors"
+                >
+                  Register
+                </.link>
+                <.link
+                  href={~p"/users/log-in"}
+                  class="px-3 py-1.5 rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
+                >
+                  Log in
+                </.link>
+              </div>
+            <% end %>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main class="px-4 py-8 sm:px-6 lg:px-8 bg-transparent text-base-content">
-      <div class={@container_class}>
-        {render_slot(@inner_block)}
-      </div>
-    </main>
+      <main class={[
+        "flex min-h-0 flex-1 flex-col px-4 py-8 sm:px-6 lg:px-8 bg-transparent text-base-content",
+        @fill_height && "overflow-y-auto"
+      ]}>
+        <div class={@container_class}>
+          {render_slot(@inner_block)}
+        </div>
+      </main>
 
-    <.flash_group flash={@flash} />
+      <.flash_group flash={@flash} />
+    </div>
     """
   end
 

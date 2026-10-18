@@ -174,8 +174,23 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
          cell
          |> Map.update("fields", [], &List.delete(&1, field))
          |> Map.update("defaults", %{}, &Map.delete(&1, field))
+         |> Map.update("titles", %{}, &Map.delete(&1, field))
 
        Map.put(lm, "cells", Map.put(cells, cell_key, new_cell))
+     end)}
+  end
+
+  def handle_event(
+        "update_cell_field_title",
+        %{"cell_key" => cell_key, "field" => field, "value" => value},
+        socket
+      ) do
+    {:noreply,
+     update_layout(socket, fn lm ->
+       cells = lm["cells"] || %{}
+       cell = Map.get(cells, cell_key, empty_cell_meta())
+       titles = Map.put(cell["titles"] || %{}, field, String.trim(value))
+       Map.put(lm, "cells", Map.put(cells, cell_key, Map.put(cell, "titles", titles)))
      end)}
   end
 
@@ -726,12 +741,30 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                               <ul class="mt-2 space-y-1">
                                 <%= for field <- get_in(@layout_map, ["cells", cell_key, "fields"]) || [] do %>
                                   <li class="flex items-center gap-1">
-                                    <span
-                                      class="w-20 shrink-0 truncate text-[0.6rem] font-medium uppercase tracking-wide text-base-content/50"
-                                      title={field}
+                                    <form
+                                      id={"cell-#{cell_key}-field-#{field}-title-form"}
+                                      phx-change="update_cell_field_title"
+                                      class="w-28 shrink-0"
                                     >
-                                      {field}
-                                    </span>
+                                      <input type="hidden" name="cell_key" value={cell_key} />
+                                      <input type="hidden" name="field" value={field} />
+                                      <input
+                                        type="text"
+                                        id={"cell-#{cell_key}-field-#{field}-title"}
+                                        value={
+                                          Psc.Canvas.field_title(
+                                            get_in(@layout_map, ["cells", cell_key]) || %{},
+                                            field
+                                          )
+                                        }
+                                        phx-debounce="300"
+                                        name="value"
+                                        placeholder={field}
+                                        title={"Section title for #{field} (empty hides it)"}
+                                        disabled={!@owner?}
+                                        class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
+                                      />
+                                    </form>
                                     <form
                                       id={"cell-#{cell_key}-field-#{field}-form"}
                                       phx-change="update_cell_field_default"

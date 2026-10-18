@@ -77,6 +77,19 @@ async function editCell(page: Page, cellKey: string, text: string, initialText =
 }
 
 test.describe('canvas editor (single player)', () => {
+  test('opens the field editor when clicking anywhere in a cell', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Click Anywhere'));
+
+    const card = page.locator('.canvas-cell').first();
+    await expect(card).toBeVisible();
+
+    // Click the cell header/padding, not the text field itself.
+    await card.click({ position: { x: 12, y: 12 } });
+
+    await expect(card.locator('textarea')).toBeVisible();
+    await expect(card.locator('textarea')).toBeFocused();
+  });
+
   test('creates a canvas, edits a cell, autosaves and persists across reload', async ({
     page,
   }) => {
@@ -161,14 +174,20 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
     await pageB.goto(canvasUrl);
     await expect(pageB.locator('#canvas-name-form input')).toHaveValue(canvasName);
 
-    // --- Presence: both users see each other in "Active Users" -----------
-    // Badges are div.rounded-full; the shared-with list uses plain rounded.
-    await expect(
-      page.locator('div.rounded-full').filter({ hasText: USER_B })
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      pageB.locator('div.rounded-full').filter({ hasText: USER_A })
-    ).toBeVisible({ timeout: 15_000 });
+    // --- Presence: both users see each other in the active-users tooltip ---
+    const activeUsers = (p: Page) => p.locator('#active-users-tooltip');
+    const expectSeesUser = async (p: Page, username: string) => {
+      await expect(async () => {
+        const text = await activeUsers(p).locator('[data-part="content"]').innerText();
+        expect(text).toContain(username);
+      }).toPass({ timeout: 15_000 });
+    };
+    await expectSeesUser(page, USER_B);
+    await expectSeesUser(pageB, USER_A);
+
+    // The trigger is truncated; the full list appears on hover.
+    await activeUsers(page).getByRole('button').hover();
+    await expect(activeUsers(page).locator('[data-part="content"]')).toBeVisible();
 
     // --- A edits → B's DOM updates live (no reload) ----------------------
     await editCell(page, 'problem', textFromA);
@@ -207,36 +226,36 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
 });
 
 test.describe('canvas editor layout', () => {
-  test('keeps the description under the title and reveals rows/columns on hover', async ({
-    page,
-  }) => {
+  test('keeps the header compact and the grid full-width', async ({ page }) => {
     await createCanvasAndOpen(page, uniqueName('Layout Canvas'));
 
-    // Title and description share the header block, description underneath.
+    // Title and description share one compact header row.
     const header = page.locator('#canvas-header');
-    await expect(header.locator('#canvas-name-form input')).toBeVisible();
-    await expect(header.locator('#canvas-description-form textarea')).toBeVisible();
+    const name = header.locator('#canvas-name-form input');
+    const description = header.locator('#canvas-description-form textarea');
+    await expect(name).toBeVisible();
+    await expect(description).toBeVisible();
 
-    // The rows/columns summary is a hover tooltip, not always-on page content.
-    const summary = page.locator('#canvas-structure-tooltip [data-part="content"]');
-    await expect(summary).toBeHidden();
-
-    await page.getByRole('button', { name: 'Rows & columns' }).hover();
-    await expect(summary).toBeVisible();
-    await expect(summary).toContainText('Columns');
-    await expect(summary).toContainText('Rows');
-    await expect(summary.locator('span').first()).toBeVisible();
+    const nameBox = await name.boundingBox();
+    const descriptionBox = await description.boundingBox();
+    expect(nameBox).not.toBeNull();
+    expect(descriptionBox).not.toBeNull();
+    // Same row: vertical centres within a few pixels (not stacked).
+    const nameCentre = nameBox!.y + nameBox!.height / 2;
+    const descriptionCentre = descriptionBox!.y + descriptionBox!.height / 2;
+    expect(Math.abs(nameCentre - descriptionCentre)).toBeLessThan(10);
+    expect(descriptionBox!.x).toBeGreaterThan(nameBox!.x);
 
     // The editable grid itself stays visible.
     await expect(page.locator('#md-problem-content')).toBeVisible();
 
-    // The workspace hugs the viewport (~85%) instead of a fixed 1280px cap.
+    // The workspace hugs the viewport (~95%) instead of a fixed 1280px cap.
     const box = await page.locator('#canvas-workspace').boundingBox();
     const viewport = page.viewportSize();
     expect(viewport).not.toBeNull();
     const ratio = box!.width / viewport!.width;
-    expect(ratio).toBeGreaterThan(0.8);
-    expect(ratio).toBeLessThan(0.9);
+    expect(ratio).toBeGreaterThan(0.9);
+    expect(ratio).toBeLessThan(0.97);
   });
 });
 
