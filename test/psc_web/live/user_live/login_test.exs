@@ -49,6 +49,45 @@ defmodule PscWeb.UserLive.LoginTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Invalid email or password"
       assert redirected_to(conn) == ~p"/users/log-in"
     end
+
+    test "renders inline errors and skips the request when credentials are blank", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/log-in")
+
+      html =
+        lv
+        |> form("#login_form_password", user: %{email: "", password: ""})
+        |> render_submit()
+
+      # Nothing is posted: the form would otherwise land in the controller and
+      # show the generic flash instead of pointing at the empty fields.
+      refute html =~ "phx-trigger-action"
+
+      assert has_element?(lv, "#login_form_password_email-error", "can't be blank")
+      assert has_element?(lv, "#login_form_password_password-error", "can't be blank")
+
+      assert has_element?(lv, ~s|input#login_form_password_email[aria-invalid="true"]|)
+
+      assert has_element?(
+               lv,
+               ~s|input#login_form_password_email[aria-describedby="login_form_password_email-error"]|
+             )
+    end
+
+    test "flags a malformed email inline", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/log-in")
+
+      lv
+      |> form("#login_form_password", user: %{email: "not-an-email", password: "secret"})
+      |> render_submit()
+
+      assert has_element?(
+               lv,
+               "#login_form_password_email-error",
+               "must have the @ sign and no spaces"
+             )
+
+      refute has_element?(lv, "#login_form_password_password-error p")
+    end
   end
 
   describe "login navigation" do

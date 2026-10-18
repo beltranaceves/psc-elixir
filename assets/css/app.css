@@ -48,8 +48,8 @@
   --color-success-content: oklch(98% 0.014 180.72);
   --color-warning: oklch(66% 0.179 58.318);
   --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
+  --color-error: oklch(70% 0.19 22);
+  --color-error-content: oklch(22% 0.04 22);
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
   --radius-box: 0.5rem;
@@ -136,8 +136,8 @@
     --muted-foreground: color-mix(in oklch, oklch(97.807% 0.029 256.847) 60%, transparent);
     --accent: oklch(20.15% 0.012 254.09);
     --accent-foreground: oklch(97.807% 0.029 256.847);
-    --destructive: oklch(58% 0.253 17.585);
-    --destructive-foreground: oklch(96% 0.015 12.422);
+    --destructive: oklch(70% 0.19 22);
+    --destructive-foreground: oklch(22% 0.04 22);
     --border: color-mix(in oklch, oklch(97.807% 0.029 256.847) 12%, transparent);
     --input: color-mix(in oklch, oklch(97.807% 0.029 256.847) 12%, transparent);
     --ring: oklch(58% 0.233 277.117);
@@ -166,7 +166,7 @@
     --popover-foreground: oklch(21% 0.006 285.885);
     --primary: oklch(62% 0.19 45);
     --primary-foreground: oklch(98% 0.016 73.684);
-    --secondary: oklch(96% 0.001 286.375);
+    --secondary: oklch(92% 0.004 286.32);
     --secondary-foreground: oklch(21% 0.006 285.885);
     --muted: oklch(96% 0.001 286.375);
     --muted-foreground: color-mix(in oklch, oklch(21% 0.006 285.885) 60%, transparent);
@@ -224,4 +224,42 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Feedback card (flash) entrance and auto-dismiss progress */
+@keyframes feedback-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes feedback-card-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@layer utilities {
+  .animate-feedback-card-in {
+    animation: feedback-card-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .animate-feedback-card-progress {
+    animation: feedback-card-progress 6s linear forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-feedback-card-in,
+    .animate-feedback-card-progress {
+      animation: none;
+    }
+  }
 }

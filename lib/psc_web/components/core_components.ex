@@ -54,28 +54,86 @@ defmodule PscWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
-      phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      phx-hook=".FeedbackCard"
+      data-dismiss-after={@kind == :info && 6000}
+      data-flash-kind={@kind}
+      class={[
+        "pointer-events-auto relative w-full overflow-hidden rounded-xl border bg-card text-card-foreground shadow-lg backdrop-blur-md animate-feedback-card-in",
+        @kind == :info && "border-primary/40",
+        @kind == :error && "border-destructive/40"
+      ]}
       {@rest}
     >
-      <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
-      ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
-        <div>
-          <p :if={@title} class="font-semibold">{@title}</p>
-          <p>{msg}</p>
+      <div
+        class={[
+          "pointer-events-none absolute inset-0",
+          @kind == :info && "bg-primary/5",
+          @kind == :error && "bg-destructive/5"
+        ]}
+        aria-hidden="true"
+      />
+
+      <div class="relative flex items-start gap-3 p-3.5">
+        <span class={[
+          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
+          @kind == :info && "bg-primary/15 text-primary",
+          @kind == :error && "bg-destructive/15 text-destructive"
+        ]}>
+          <.icon
+            name={if @kind == :info, do: "hero-information-circle", else: "hero-exclamation-circle"}
+            class="size-4"
+          />
+        </span>
+
+        <div class="min-w-0 flex-1 pt-0.5">
+          <p :if={@title} class="text-sm font-semibold leading-5">{@title}</p>
+          <p class={["break-words text-sm leading-5", @title && "mt-0.5 text-muted-foreground"]}>
+            {msg}
+          </p>
         </div>
-        <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+
+        <button
+          type="button"
+          class="-mr-1 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+          aria-label={gettext("close")}
+          phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+        >
+          <.icon name="hero-x-mark" class="size-4" />
         </button>
       </div>
+
+      <div
+        :if={@kind == :info}
+        class="relative h-0.5 w-full bg-primary/10"
+        aria-hidden="true"
+      >
+        <div class="h-full w-full origin-left animate-feedback-card-progress bg-primary/60" />
+      </div>
     </div>
+
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".FeedbackCard">
+      export default {
+        mounted() {
+          const dismissAfter = Number(this.el.dataset.dismissAfter)
+          if (!dismissAfter) return
+
+          // Fade out shortly before telling the server to drop the flash, so a
+          // hidden card can never linger in the socket assigns.
+          this.fadeTimer = setTimeout(() => {
+            this.el.classList.add("transition-all", "duration-200", "ease-in", "opacity-0", "scale-95")
+          }, dismissAfter - 200)
+
+          this.dismissTimer = setTimeout(() => {
+            this.pushEvent("lv:clear-flash", { key: this.el.dataset.flashKind })
+          }, dismissAfter)
+        },
+        destroyed() {
+          clearTimeout(this.fadeTimer)
+          clearTimeout(this.dismissTimer)
+        }
+      }
+    </script>
     """
   end
 

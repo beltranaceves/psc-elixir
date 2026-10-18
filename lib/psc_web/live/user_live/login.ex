@@ -36,7 +36,9 @@ defmodule PscWeb.UserLive.Login do
           id="login_form_password"
           action={~p"/users/log-in"}
           phx-submit="submit_password"
+          phx-change="validate"
           phx-trigger-action={@trigger_submit}
+          novalidate
         >
           <UIForm.form_item>
             <UIForm.form_label field={f[:email]}>Email</UIForm.form_label>
@@ -54,17 +56,17 @@ defmodule PscWeb.UserLive.Login do
             <UIForm.form_message field={f[:email]} />
           </UIForm.form_item>
           <UIForm.form_item>
-            <UIForm.form_label field={@form[:password]}>Password</UIForm.form_label>
+            <UIForm.form_label field={f[:password]}>Password</UIForm.form_label>
             <UIForm.form_control>
               <UIInput.input
-                field={@form[:password]}
+                field={f[:password]}
                 type="password"
                 autocomplete="current-password"
                 spellcheck="false"
                 placeholder="Your password"
               />
             </UIForm.form_control>
-            <UIForm.form_message field={@form[:password]} />
+            <UIForm.form_message field={f[:password]} />
           </UIForm.form_item>
           <UIButton.button
             class="w-full gap-2 mt-3"
@@ -93,13 +95,47 @@ defmodule PscWeb.UserLive.Login do
       Phoenix.Flash.get(socket.assigns.flash, :email) ||
         get_in(socket.assigns, [:current_scope, Access.key(:user), Access.key(:email)])
 
-    form = to_form(%{"email" => email}, as: "user")
+    form = to_form(login_changeset(%{"email" => email}), as: "user")
 
     {:ok, assign(socket, form: form, trigger_submit: false)}
   end
 
   @impl true
-  def handle_event("submit_password", _params, socket) do
-    {:noreply, assign(socket, :trigger_submit, true)}
+  def handle_event("validate", %{"user" => params}, socket) do
+    changeset = params |> login_changeset() |> Map.put(:action, :validate)
+    {:noreply, assign(socket, form: to_form(changeset, as: "user"))}
+  end
+
+  @impl true
+  def handle_event("submit_password", %{"user" => params}, socket) do
+    changeset = login_changeset(params)
+
+    if changeset.valid? do
+      # Hand over to the session controller, which owns the generic
+      # "Invalid email or password" flash (no user enumeration).
+      {:noreply, assign(socket, :trigger_submit, true)}
+    else
+      changeset = Map.put(changeset, :action, :validate)
+      {:noreply, assign(socket, form: to_form(changeset, as: "user"))}
+    end
+  end
+
+  # Login only checks presence and email shape: whether the account exists is
+  # deliberately left to the controller's generic error message.
+  defp login_changeset(params) do
+    changeset =
+      {%{}, %{email: :string, password: :string}}
+      |> Ecto.Changeset.cast(params, [:email, :password])
+      |> Ecto.Changeset.validate_required([:email, :password])
+
+    case Ecto.Changeset.get_change(changeset, :email) do
+      blank when blank in [nil, ""] ->
+        changeset
+
+      _email ->
+        Ecto.Changeset.validate_format(changeset, :email, ~r/^[^@,;\s]+@[^@,;\s]+$/,
+          message: "must have the @ sign and no spaces"
+        )
+    end
   end
 end

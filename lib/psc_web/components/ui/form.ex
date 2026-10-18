@@ -39,6 +39,8 @@ defmodule PscWeb.Components.UI.Form do
   """
   use PscWeb.Components.UI, :component
 
+  import PscWeb.Components.UI.Icon
+
   alias Phoenix.HTML.FormField
 
   @doc """
@@ -171,27 +173,48 @@ defmodule PscWeb.Components.UI.Form do
   attr :rest, :global
 
   def form_message(assigns) do
+    errors =
+      case assigns[:errors] do
+        [] -> field_errors(assigns[:field])
+        errors -> errors
+      end
+
+    # A custom inner-block message takes precedence over changeset errors.
+    has_custom_message = assigns[:inner_block] not in [nil, []]
+    errors = if has_custom_message, do: [], else: errors
+
     assigns =
       assigns
-      |> assign(error: has_error?(assigns[:field]) || not Enum.empty?(assigns[:errors]))
-      |> assign(
-        :message,
-        List.first(
-          case assigns[:errors] do
-            [] -> field_errors(assigns[:field])
-            errors -> errors
-          end
-        )
-      )
+      |> assign(:errors, errors)
+      |> assign(:has_custom_message, has_custom_message)
+      |> assign(:error_id, error_id(assigns[:field]))
 
     ~H"""
-    <p
-      :if={(msg = render_slot(@inner_block)) || @error}
-      class={classes(["text-sm font-medium", (msg || @error) && "text-destructive", @class])}
+    <div
+      :if={@error_id || @has_custom_message}
+      id={@error_id}
+      aria-live="polite"
+      class={classes(["space-y-1", @class])}
       {@rest}
     >
-      {msg || @message}
-    </p>
+      <p
+        :if={@has_custom_message}
+        class="flex items-start gap-1.5 rounded-md border border-destructive/25 px-2.5 py-1.5 text-sm font-medium text-destructive"
+      >
+        <.icon name="hero-exclamation-circle" class="mt-0.5 size-4 shrink-0" />
+        <span>{render_slot(@inner_block)}</span>
+      </p>
+      <p
+        :for={message <- @errors}
+        class="flex items-start gap-1.5 rounded-md border border-destructive/25 px-2.5 py-1.5 text-sm font-medium text-destructive"
+      >
+        <.icon name="hero-exclamation-circle" class="mt-0.5 size-4 shrink-0" />
+        <span>{message}</span>
+      </p>
+    </div>
     """
   end
+
+  defp error_id(%FormField{id: id}) when is_binary(id), do: "#{id}-error"
+  defp error_id(_), do: nil
 end

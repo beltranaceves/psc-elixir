@@ -150,7 +150,11 @@ defmodule PscWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div
+      id={@id}
+      aria-live="polite"
+      class="pointer-events-none fixed inset-x-3 top-16 z-50 flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:w-96 sm:items-end"
+    >
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 

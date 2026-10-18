@@ -47,10 +47,20 @@ defmodule Psc.Accounts.User do
     changeset =
       changeset
       |> validate_required([:email])
-      |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/,
-        message: "must have the @ sign and no spaces"
-      )
       |> validate_length(:email, max: 160)
+
+    # A blank field already reports "can't be blank"; adding a format error for
+    # the empty string would just stack noise under the same input.
+    changeset =
+      case get_change(changeset, :email) do
+        blank when blank in [nil, ""] ->
+          changeset
+
+        _email ->
+          validate_format(changeset, :email, ~r/^[^@,;\s]+@[^@,;\s]+$/,
+            message: "must have the @ sign and no spaces"
+          )
+      end
 
     if Keyword.get(opts, :validate_unique, true) do
       changeset
@@ -95,7 +105,8 @@ defmodule Psc.Accounts.User do
   defp validate_password(changeset, opts) do
     changeset
     |> validate_required([:password])
-    |> validate_length(:password, min: 12, max: 72)
+    |> validate_length(:password, min: 12, message: "should be at least 12 characters")
+    |> validate_length(:password, max: 72)
     # Examples of additional password validation:
     # |> validate_format(:password, ~r/[a-z]/, message: "at least one lower case character")
     # |> validate_format(:password, ~r/[A-Z]/, message: "at least one upper case character")

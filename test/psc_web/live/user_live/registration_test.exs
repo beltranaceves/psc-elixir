@@ -33,6 +33,37 @@ defmodule PscWeb.UserLive.RegistrationTest do
       assert result =~ "Register"
       assert result =~ "must have the @ sign and no spaces"
     end
+
+    test "wires validation errors to their field for assistive technology", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/register")
+
+      lv
+      |> element("#registration_form")
+      |> render_change(user: %{"email" => "with spaces"})
+
+      assert has_element?(lv, "#user_email-error[aria-live]")
+      assert has_element?(lv, ~s|input#user_email[aria-invalid="true"]|)
+
+      assert has_element?(
+               lv,
+               ~s|input#user_email[aria-describedby="user_email-error"]|
+             )
+
+      # Fields without errors stay clean.
+      refute has_element?(lv, ~s|input#user_password_confirmation[aria-invalid="true"]|)
+      refute has_element?(lv, "#user_password_confirmation-error p")
+    end
+
+    test "reports a blank email only once", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/users/register")
+
+      lv
+      |> element("#registration_form")
+      |> render_change(user: %{"email" => ""})
+
+      assert has_element?(lv, "#user_email-error", "can't be blank")
+      refute has_element?(lv, "#user_email-error", "must have the @ sign")
+    end
   end
 
   describe "register user" do

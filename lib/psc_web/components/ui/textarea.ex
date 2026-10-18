@@ -35,15 +35,21 @@ defmodule PscWeb.Components.UI.Textarea do
   attr :rest, :global, include: ~w(disabled form rows cols)
 
   def textarea(assigns) do
-    assigns = prepare_assign(assigns)
+    assigns =
+      assigns
+      |> prepare_assign()
+      |> assign_new(:errors, fn -> [] end)
 
     ~H"""
     <textarea
       id={@id}
       name={@name}
+      aria-invalid={@errors != [] && "true"}
+      aria-describedby={@errors != [] && @id && "#{@id}-error"}
       class={
         classes([
           "min-h-[80px] border-input bg-background flex w-full rounded-md border px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+          "aria-invalid:border-destructive/70 aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:ring-destructive/30",
           @class
         ])
       }

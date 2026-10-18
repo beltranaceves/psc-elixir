@@ -669,6 +669,52 @@ change. `docs/spec/` still describes the document editor, now explicitly as park
 
 ---
 
+## ADR-019 — Auth feedback: inline validation plus feedback cards
+
+**Context.** The log-in and sign-up pages signalled problems in three inconsistent ways:
+native browser bubbles (log-in email), plain red text under fields (sign-up), and a
+daisyUI `.toast`/`.alert` flash that overlapped the header, could only be dismissed with
+the mouse, and never went away on its own. Screen readers got nothing — inputs had no
+`aria-invalid`/`aria-describedby`, the log-in form could not show field errors at all
+(it was built from a plain params map), and only the first error per field was rendered.
+
+**Decision.** One feedback language across both pages:
+
+- **Inline errors** are destructive-outlined chips with an icon, one per error (not just
+  the first), inside a persistent `aria-live="polite"` region. Labels turn destructive and
+  inputs carry `aria-invalid="true"` plus `aria-describedby` pointing at the message
+  region — implemented once in `UI.Form.form_message/1` and `UI.Input`/`UI.Textarea`.
+- Forms opt out of native bubbles (`novalidate`) so all validation is rendered by the
+  app; `type`/`required` stay for semantics.
+- The log-in form validates presence and email shape with a schema-less changeset before
+  handing off to the session controller. Credentials stay generic ("Invalid email or
+  password") to avoid user enumeration.
+- **Flash** renders as a **feedback card**: icon badge, title/message, tinted border
+  (`primary` for info, `destructive` for error), entrance animation and a real focusable
+  close button. The stack sits below the header (`top-16`) instead of covering the nav.
+  Info cards auto-dismiss after 6 s with a progress bar and clear the server flash through
+  a colocated hook; error cards persist until dismissed.
+- The **dark theme's** `--destructive`/`--color-error` were brightened from
+  `oklch(58% 0.253 17.585)` to `oklch(70% 0.19 22)` (2.94:1 → 4.65:1 against the dark
+  background), with a dark `--destructive-foreground`/`--color-error-content` so solid
+  destructive buttons keep their contrast. Light mode keeps its original red.
+
+**Alternatives considered.** Reusing the bundled SaladUI `toaster` (a second notification
+system with its own JS stack, and its flash adapter would duplicate `flash_group`);
+keeping native browser validation (unstyleable, inconsistent between the two pages);
+rendering only the first error per field (cheap, but hides simultaneous problems); a
+tinted background behind inline errors (measured 3.2:1 in light mode, below AA, so the
+tint was dropped and the theme's destructive colour kept).
+
+**Consequences.** Error UI is consistent, keyboard- and screen-reader-accessible, and
+addressable by stable ids (`<field-id>-error`). A blank email now reports only
+"can't be blank" (the format check is skipped when blank) instead of stacking two
+messages. The short-password copy is "should be at least 12 characters", which required
+updating two test assertions. Info flashes disappear on their own, so anything depending
+on them must read the server flash rather than the DOM.
+
+---
+
 ## Measurement summary
 
 Numbers referenced above, all taken on 2026-10-18 against a local Postgres and the
