@@ -51,6 +51,18 @@ const liveSocket = new LiveSocket("/live", Socket, {
   hooks: {...colocatedHooks, DocumentEditorHook, CellHook, MarkdownField, CellFocus, SaladUI: SaladUI.SaladUIHook},
 })
 
+// Close native <details> menus when clicking outside or pressing Escape.
+document.addEventListener('click', e => {
+  document.querySelectorAll('details[data-menu][open]').forEach(details => {
+    if (!details.contains(e.target)) details.open = false
+  })
+})
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return
+  document.querySelectorAll('details[data-menu][open]').forEach(details => { details.open = false })
+})
+
 // Show progress bar on live navigation and form submits
 topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))

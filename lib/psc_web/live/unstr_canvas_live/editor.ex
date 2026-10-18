@@ -405,24 +405,28 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       current_scope={@current_scope}
       header_title="Canvas Editor"
       fill_height
+      main_class="px-4 py-2 sm:px-6 lg:px-8"
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col">
         <%!-- Header: title, description, presence and actions in one compact row --%>
-        <div id="canvas-header" class="mb-3 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <div class="flex min-w-0 flex-1 items-start gap-4">
+        <div
+          id="canvas-header"
+          class="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4"
+        >
+          <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:gap-4">
             <.form
               for={%{}}
               id="canvas-name-form"
               phx-change="update_name"
-              class="flex min-w-0 shrink items-center"
+              class="flex w-full min-w-0 shrink items-center sm:w-auto"
             >
               <input
                 name="value"
                 type="text"
                 value={@c_name}
                 phx-debounce="1000"
-                class="field-sizing-content h-8 w-auto min-w-[6rem] max-w-[24rem] border-b-2 border-transparent bg-transparent text-xl font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none"
+                class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-xl font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
                 placeholder="Canvas name"
               />
             </.form>
@@ -431,7 +435,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               for={%{}}
               id="canvas-description-form"
               phx-change="update_description"
-              class="flex min-w-0 flex-1 items-start"
+              class="flex w-full min-w-0 items-start sm:flex-1"
             >
               <textarea
                 name="value"
@@ -443,7 +447,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             </.form>
           </div>
 
-          <div class="flex shrink-0 flex-wrap items-center gap-3">
+          <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:gap-3">
             <%!-- Active users: truncated, with the full list in a hover tooltip --%>
             <UITooltip.tooltip id="active-users-tooltip">
               <UITooltip.tooltip_trigger>
@@ -496,13 +500,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <%= if @canvas.author_id == @user_id do %>
               <.share_button id="share-canvas-button" label="Share" />
             <% end %>
-
-            <.link
-              navigate={~p"/canvases"}
-              class="shrink-0 text-sm text-base-content/60 hover:text-base-content transition-colors"
-            >
-              Back to Canvases
-            </.link>
           </div>
         </div>
 
@@ -568,7 +565,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                     <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                       <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                      <td class="border border-base-content/20 align-top">
+                      <td class="relative border border-base-content/20 align-top">
                         <%= if cell_key do %>
                           <% cell_data =
                             get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
@@ -579,61 +576,63 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                           <div
                             id={"cell-card-" <> cell_key}
                             phx-hook="CellFocus"
-                            class="canvas-cell cursor-text bg-base-300 p-2 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
+                            class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
                           >
-                            <div class="mb-1">
-                              <div class="text-sm font-medium text-base-content break-words">
-                                {title}
+                            <div class="cell-body p-2">
+                              <div class="mb-1">
+                                <div class="text-sm font-medium text-base-content break-words">
+                                  {title}
+                                </div>
                               </div>
-                            </div>
 
-                            <.form for={%{}} id={"cell-form-#{cell_key}"} phx-change="update_cell">
-                              <input type="hidden" name="cell_key" value={cell_key} />
+                              <.form for={%{}} id={"cell-form-#{cell_key}"} phx-change="update_cell">
+                                <input type="hidden" name="cell_key" value={cell_key} />
 
-                              <div class="mt-1 grid min-w-0 gap-1 text-sm">
-                                <%= for {field, value} <- cell_data do %>
-                                  <%!-- "semantics" is tolerated in older canvases but is
+                                <div class="mt-1 grid min-w-0 gap-1 text-sm">
+                                  <%= for {field, value} <- cell_data do %>
+                                    <%!-- "semantics" is tolerated in older canvases but is
                                   no longer authored or shown; "titles" holds labels. --%>
-                                  <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
-                                    <% field_title = Psc.Canvas.field_title(cell_data, field) %>
-                                    <div class="flex min-w-0 flex-col">
-                                      <label
-                                        :if={field_title != ""}
-                                        class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
-                                      >
-                                        {field_title}
-                                      </label>
-
-                                      <div
-                                        id={"md-" <> cell_key <> "-" <> field}
-                                        phx-hook="MarkdownField"
-                                        phx-update="ignore"
-                                        data-cell-key={cell_key}
-                                        data-field={field}
-                                        data-field-wrapper
-                                        data-current-user-id={@user_id}
-                                        class="w-full"
-                                      >
-                                        <div
-                                          id={"md-render-" <> cell_key <> "-" <> field}
-                                          class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
-                                          phx-update="ignore"
+                                    <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
+                                      <% field_title = Psc.Canvas.field_title(cell_data, field) %>
+                                      <div class="flex min-w-0 flex-col">
+                                        <label
+                                          :if={field_title != ""}
+                                          class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
                                         >
-                                          {value}
+                                          {field_title}
+                                        </label>
+
+                                        <div
+                                          id={"md-" <> cell_key <> "-" <> field}
+                                          phx-hook="MarkdownField"
+                                          phx-update="ignore"
+                                          data-cell-key={cell_key}
+                                          data-field={field}
+                                          data-field-wrapper
+                                          data-current-user-id={@user_id}
+                                          class="w-full"
+                                        >
+                                          <div
+                                            id={"md-render-" <> cell_key <> "-" <> field}
+                                            class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
+                                            phx-update="ignore"
+                                          >
+                                            {value}
+                                          </div>
+                                          <textarea
+                                            name={"values[" <> field <> "]"}
+                                            phx-debounce="150"
+                                            class="field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
+                                            placeholder="Enter value..."
+                                            rows="3"
+                                          ><%= value %></textarea>
                                         </div>
-                                        <textarea
-                                          name={"values[" <> field <> "]"}
-                                          phx-debounce="150"
-                                          class="hidden w-full resize-none bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
-                                          placeholder="Enter value..."
-                                          rows="3"
-                                        ><%= value %></textarea>
                                       </div>
-                                    </div>
+                                    <% end %>
                                   <% end %>
-                                <% end %>
-                              </div>
-                            </.form>
+                                </div>
+                              </.form>
+                            </div>
                           </div>
                         <% end %>
                       </td>

@@ -266,28 +266,66 @@
 
 /* Canvas grid: every cell is the same size. The page is a flex column (see
    Layouts.app), the table panel flexes into the remaining viewport height and
-   the table rows share it equally; cells scroll internally when content is
-   taller. The table scrolls horizontally when the viewport cannot give each
-   column its minimum width. */
+   the table rows share it equally. Read mode clips overflow behind a soft fade;
+   editing a cell expands it so nothing scrolls inside a cell. The table scrolls
+   horizontally when the viewport cannot give each column its minimum width. */
 @layer utilities {
   .canvas-cell {
+    position: relative;
     height: 100%;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, currentColor 30%, transparent) transparent;
+    overflow: hidden;
   }
 
-  .canvas-cell::-webkit-scrollbar {
-    width: 0.375rem;
+  /* Read mode clips overflowing content with a soft bottom fade instead of a
+     scrollbar. The body is absolutely positioned so content cannot stretch the
+     grid row; editing a cell puts it back in the flow so the cell grows. */
+  .canvas-cell .cell-body {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
   }
 
-  .canvas-cell::-webkit-scrollbar-track {
-    background: transparent;
+  .canvas-cell:focus-within {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 20;
+    width: 100%;
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
   }
 
-  .canvas-cell::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: color-mix(in oklch, currentColor 30%, transparent);
+  .canvas-cell:focus-within .cell-body {
+    position: static;
+    height: auto;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  /* The panel owns the outer frame (rounded, one clean CSS border); the table
+     only draws the inner grid lines so the rounded corners are not doubled up
+     with square cell borders. */
+  #canvas-grid thead tr > *:first-child,
+  #canvas-grid tbody tr > *:first-child {
+    border-left-width: 0;
+  }
+
+  #canvas-grid thead tr > *:last-child,
+  #canvas-grid tbody tr > *:last-child {
+    border-right-width: 0;
+  }
+
+  #canvas-grid thead tr > * {
+    border-top-width: 0;
+  }
+
+  #canvas-grid tbody tr:last-child > * {
+    border-bottom-width: 0;
   }
 
   /* Markdown headings stay proportionate in a space-constrained cell, so

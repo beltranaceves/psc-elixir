@@ -35,6 +35,10 @@ defmodule PscWeb.Layouts do
     default: "mx-auto max-w-2xl space-y-4",
     doc: "the CSS class used for the main container; override to change width"
 
+  attr :main_class, :string,
+    default: "px-4 py-8 sm:px-6 lg:px-8",
+    doc: "the padding applied to the main element; reduce it for dense, full-height pages"
+
   attr :fill_height, :boolean,
     default: false,
     doc:
@@ -58,25 +62,25 @@ defmodule PscWeb.Layouts do
       @fill_height && "h-dvh overflow-hidden",
       !@fill_height && "min-h-dvh"
     ]}>
-      <header class="h-14 shrink-0 border-b border-base-content/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-6">
+      <header class="h-14 shrink-0 border-b border-base-content/10 bg-base-200/60 px-4 sm:px-6 lg:px-8 flex items-center gap-3 sm:gap-6">
         <.link navigate={~p"/"} class="flex shrink-0 items-center gap-2 text-base-content">
           <span class="flex size-7 items-center justify-center rounded-md bg-primary text-primary-content text-sm font-bold">
             P
           </span>
-          <span class="text-sm font-semibold tracking-tight">PSC</span>
+          <span class="hidden text-sm font-semibold tracking-tight sm:inline">PSC</span>
         </.link>
 
         <span
           :if={@header_title}
           id="header-page-title"
-          class="hidden min-w-0 truncate text-sm font-medium text-base-content/70 md:inline"
+          class="min-w-0 flex-1 truncate text-sm font-medium text-base-content/70 md:flex-none"
         >
           {@header_title}
         </span>
 
-        <div class="ml-auto flex items-center gap-4">
+        <div class="ml-auto flex items-center gap-3 sm:gap-4">
           <%!-- Private sections: only advertised to signed-in users. --%>
-          <nav :if={@current_scope && @current_scope.user} class="flex items-center gap-1">
+          <nav :if={@current_scope && @current_scope.user} class="hidden items-center gap-1 md:flex">
             <.link
               navigate={~p"/canvases"}
               aria-current={nav_current(@header_title, @header_section, "Canvases")}
@@ -99,10 +103,10 @@ defmodule PscWeb.Layouts do
             </.link>
           </nav>
 
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3 sm:gap-4">
             <.theme_toggle />
             <%= if @current_scope && @current_scope.user do %>
-              <div class="flex items-center gap-3 text-sm">
+              <div class="hidden items-center gap-3 text-sm lg:flex">
                 <span class="text-base-content/60">{@current_scope.user.email}</span>
                 <.link
                   href={~p"/users/settings"}
@@ -118,11 +122,53 @@ defmodule PscWeb.Layouts do
                   Log out
                 </.link>
               </div>
+
+              <%!-- Mobile: navigation and account actions live behind one menu. --%>
+              <details class="relative lg:hidden" data-menu>
+                <summary
+                  class="flex size-9 cursor-pointer list-none items-center justify-center rounded-lg text-base-content/70 transition-colors hover:bg-base-content/5 hover:text-base-content [&::-webkit-details-marker]:hidden"
+                  aria-label="Menu"
+                >
+                  <.icon name="hero-bars-3" class="size-5" />
+                </summary>
+                <div class="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-base-content/10 bg-base-200 p-1 shadow-lg">
+                  <p class="truncate px-3 py-2 text-xs text-base-content/50">
+                    {@current_scope.user.email}
+                  </p>
+                  <div class="my-1 h-px bg-base-content/10"></div>
+                  <.link
+                    navigate={~p"/canvases"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                  >
+                    Canvases
+                  </.link>
+                  <.link
+                    navigate={~p"/templates"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                  >
+                    Templates
+                  </.link>
+                  <div class="my-1 h-px bg-base-content/10"></div>
+                  <.link
+                    href={~p"/users/settings"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                  >
+                    Settings
+                  </.link>
+                  <.link
+                    href={~p"/users/log-out"}
+                    method="delete"
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                  >
+                    Log out
+                  </.link>
+                </div>
+              </details>
             <% else %>
               <div class="flex items-center gap-3 text-sm">
                 <.link
                   href={~p"/users/register"}
-                  class="text-base-content/70 hover:text-base-content transition-colors"
+                  class="hidden text-base-content/70 hover:text-base-content transition-colors sm:inline"
                 >
                   Register
                 </.link>
@@ -139,7 +185,8 @@ defmodule PscWeb.Layouts do
       </header>
 
       <main class={[
-        "flex min-h-0 flex-1 flex-col px-4 py-8 sm:px-6 lg:px-8 bg-transparent text-base-content",
+        "flex min-h-0 flex-1 flex-col bg-transparent text-base-content",
+        @main_class,
         @fill_height && "overflow-y-auto"
       ]}>
         <div class={@container_class}>

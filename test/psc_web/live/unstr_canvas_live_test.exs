@@ -241,7 +241,6 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#canvas-header #canvas-description-form")
       assert has_element?(lv, "#canvas-header #active-users-tooltip")
       assert has_element?(lv, "#canvas-header #share-canvas-button")
-      assert has_element?(lv, "#canvas-header a[href='/canvases']")
 
       # The standalone "Canvas Structure" block is gone; the grid is the content.
       refute has_element?(lv, "#canvas-structure-tooltip")

@@ -30,6 +30,7 @@ it costs, and the evidence it was verified against.
 | [ADR-018](#adr-018--documents-is-parked-as-a-standalone-feature) | Documents is parked as a standalone feature | Accepted | 2026-10-18 |
 | [ADR-019](#adr-019--auth-feedback-inline-validation-plus-feedback-cards) | Auth feedback: inline validation plus feedback cards | Accepted | 2026-10-18 |
 | [ADR-020](#adr-020--optional-cell-section-titles-and-a-dense-square-grid) | Optional cell section titles, and a dense square grid | Accepted | 2026-10-19 |
+| [ADR-021](#adr-021--mobile-top-bars-one-menu-and-a-stacked-canvas-header) | Mobile top bars: one menu and a stacked canvas header | Accepted | 2026-10-19 |
 
 ---
 
@@ -749,6 +750,35 @@ retaining rounded corners and padding for looks (rejected: density wins here).
 `content`), while templates saved from the designer can rename or hide headings. Canvases
 keep the titles they were instantiated with; editing the template afterwards does not
 affect them, matching the rule for the rest of the structure.
+
+---
+
+## ADR-021 — Mobile top bars: one menu and a stacked canvas header
+
+**Context.** At phone widths (~390 px) the app header overflowed: logo + section title +
+nav (Canvases/Templates) + theme toggle + email + Settings + Log out cannot share a
+single 56 px row, so the account actions were clipped. The canvas header had the opposite
+problem: title and description competed for one flex row, squeezing the description to
+zero width and truncating the title.
+
+**Decision.**
+- **App header.** Below `lg` the section title becomes the flexible, truncated element;
+  the nav and the account actions move into a single hamburger `<details>` menu (email as
+  the menu header, then Canvases, Templates, Settings, Log out). Only the logo, title,
+  theme toggle and menu button stay on the row. At `lg`+ the full desktop row returns.
+  Below `sm` the wordmark and the guest *Register* link are hidden to save space. The
+  menu closes on outside click and on Escape.
+- **Canvas header.** Below `sm` the header stacks: the title takes its own full-width
+  line, the description follows beneath it (wrapping to two lines), then the presence
+  pill / save state / Share row. From `sm` up the compact single-row layout is restored.
+
+**Alternatives considered.** Horizontally scrolling the header (hides affordances); a
+second header row for the nav (costs vertical space on a dense canvas); icon-only nav
+(ambiguous without labels).
+
+**Consequences.** The header never overflows down to 320 px and the canvas keeps its
+height (phones add ~54 px to the header). The account actions exist in two renderings
+(desktop block and mobile menu), so changes must be mirrored.
 
 ---
 
