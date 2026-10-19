@@ -12,13 +12,16 @@ defmodule PscWeb.UserSessionController do
     create(conn, params, "Welcome back!")
   end
 
-  # magic link login
+  # magic link login (also the signup auto-login)
   defp create(conn, %{"user" => %{"token" => token} = user_params}, info) do
     case Accounts.login_user_by_magic_link(token) do
       {:ok, {user, tokens_to_disconnect}} ->
         UserAuth.disconnect_sessions(tokens_to_disconnect)
 
+        # Sign-up lands in the workspace: a stale :user_return_to from an
+        # earlier signed-out visit (e.g. /documents) must not hijack it.
         conn
+        |> delete_session(:user_return_to)
         |> put_flash(:info, info)
         |> UserAuth.log_in_user(user, user_params)
 

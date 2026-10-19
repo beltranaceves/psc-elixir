@@ -99,6 +99,20 @@ defmodule PscWeb.UserSessionControllerTest do
       assert response =~ ~p"/users/log-out"
     end
 
+    test "ignores a stale return path so signup starts in the workspace", %{
+      conn: conn,
+      user: user
+    } do
+      {token, _hashed_token} = generate_user_magic_link_token(user)
+
+      conn =
+        conn
+        |> init_test_session(user_return_to: ~p"/documents")
+        |> post(~p"/users/log-in", %{"user" => %{"token" => token}})
+
+      assert redirected_to(conn) == ~p"/"
+    end
+
     test "redirects to login page when magic link is invalid", %{conn: conn} do
       conn =
         post(conn, ~p"/users/log-in", %{

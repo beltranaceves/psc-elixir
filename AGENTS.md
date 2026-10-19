@@ -57,6 +57,11 @@ stack `gigalixir-26`, free Postgres). Local commits may lag the deployed SHA —
 Deploy = `git push gigalixir main` (HTTPS remote; credentials cached — the push streams the
 remote build log; PowerShell mangles stderr, redirect: `git push gigalixir main 2>&1 | Out-File tmp\agent-logs\deploy.log`).
 
+Repeatable wrapper (same steps, plus health check): `powershell -ExecutionPolicy Bypass -File
+scripts\deploy.ps1`. It refuses a dirty tree or a non-`main` branch, streams the build log to
+`tmp\agent-logs\deploy.log`, waits for the release, prints `gigalixir ps`, and probes
+`https://psc.gigalixirapp.com/users/log-in`.
+
 **Migrations run at boot** — no SSH, no `ps:migrate`:
 `Procfile` → `web: bin/psc eval "Psc.Release.migrate()" && PHX_SERVER=true bin/psc start`
 (idempotent; logs "Migrations already up" on later boots).
