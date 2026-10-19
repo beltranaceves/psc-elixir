@@ -175,15 +175,26 @@ export default {
       cell.classList.remove("is-expanded", "is-closing")
     })
 
-    this.el.classList.remove("is-closing")
+    this.el.classList.remove("is-closing", "is-settled")
     this.el.classList.add("is-expanded")
 
     if (swipeIn) {
-      this.el.classList.add(`is-swipe-in-${swipeIn}`)
+      const swipeClass = `is-swipe-in-${swipeIn}`
+      this.el.classList.add(swipeClass)
+
+      // When the slide-in finishes, park the cell in a settled state: dropping
+      // the class would otherwise re-trigger the fullscreen animation.
+      const settle = event => {
+        if (event && event.target !== this.el) return
+        this.el.removeEventListener("animationend", settle)
+        if (!this.el.classList.contains(swipeClass)) return
+        this.el.classList.remove(swipeClass)
+        this.el.classList.add("is-settled")
+      }
+
+      this.el.addEventListener("animationend", settle)
       clearTimeout(this.swipeTimer)
-      this.swipeTimer = setTimeout(() => {
-        this.el.classList.remove(`is-swipe-in-${swipeIn}`)
-      }, 220)
+      this.swipeTimer = setTimeout(settle, 300)
     }
 
     this.expandedByPatch = true
@@ -222,7 +233,7 @@ export default {
   },
 
   finishCollapse() {
-    this.el.classList.remove("is-expanded")
+    this.el.classList.remove("is-expanded", "is-settled")
     this.releaseBody()
   },
 

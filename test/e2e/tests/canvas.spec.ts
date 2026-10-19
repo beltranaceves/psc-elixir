@@ -219,6 +219,21 @@ test.describe('canvas editor mobile fullscreen cells', () => {
     // The transition leaves no leftovers behind.
     await expect(page.locator('.canvas-cell.is-swipe-out-left')).toHaveCount(0);
     await expect(page.locator('.canvas-cell.is-swipe-in-right')).toHaveCount(0);
+
+    // The slide-in must not fall back to the fullscreen animation once it
+    // finishes — that replay looked like the cell reloaded itself.
+    await expect
+      .poll(async () =>
+        page.evaluate(() =>
+          document.querySelector('.canvas-cell.is-expanded')?.classList.contains('is-settled'),
+        ),
+      )
+      .toBe(true);
+    const animation = await page.evaluate(() => {
+      const cell = document.querySelector('.canvas-cell.is-expanded');
+      return cell ? getComputedStyle(cell).animationName : null;
+    });
+    expect(animation).toBe('none');
   });
 });
 

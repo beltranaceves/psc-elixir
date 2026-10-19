@@ -489,6 +489,12 @@
     animation: cell-swipe-out-bottom 170ms ease-in both;
   }
 
+  /* After the swipe-in animation has run, the cell must not fall back to the
+     fullscreen animation (which would replay and look like a reload). */
+  .canvas-cell.is-expanded.is-settled {
+    animation: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .canvas-cell.is-expanded,
     .canvas-cell.is-expanded.is-closing,
