@@ -19,8 +19,9 @@ $log = Join-Path $root 'tmp\agent-logs\deploy.log'
 $sha = (git rev-parse --short HEAD).Trim()
 
 Write-Host "Deploying $sha to Gigalixir (log: $log)..."
-# PowerShell mangles git's stderr; redirect it into the log as AGENTS.md says.
-git push gigalixir main 2>&1 | Tee-Object -FilePath $log
+# cmd merges git's stderr (the remote build log) before PowerShell sees it, so
+# the stream is plain text; PowerShell alone wraps stderr into error records.
+cmd /c "git push gigalixir main 2>&1" | Tee-Object -FilePath $log
 if ($LASTEXITCODE -ne 0) { throw "git push gigalixir failed - see $log" }
 
 $gigalixir = Join-Path $env:LOCALAPPDATA 'Programs\gigalixir\gigalixir.exe'
