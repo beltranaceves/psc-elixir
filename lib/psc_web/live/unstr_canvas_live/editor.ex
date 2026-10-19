@@ -428,6 +428,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp active_users_label([username]), do: username
   defp active_users_label([username | rest]), do: "#{username} +#{length(rest)}"
 
+  # A short presence label for narrow screens, where the full e-mail address
+  # would not fit next to the other actions.
+  defp active_users_compact_label(presence) do
+    case active_usernames(presence) do
+      [] -> "Offline"
+      [_one] -> "1 online"
+      many -> "#{length(many)} online"
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -439,56 +449,84 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       main_class="px-2 py-2 sm:px-6 lg:px-8"
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
-      <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col">
-        <%!-- Header: title, description, presence and actions in one compact row --%>
-        <div id="canvas-header" class="flex shrink-0 flex-col gap-2">
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:flex-nowrap sm:items-start">
-            <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:gap-4">
-              <.form
-                for={%{}}
-                id="canvas-name-form"
-                phx-change="update_name"
-                class="flex w-full min-w-0 shrink items-center sm:w-auto"
-              >
-                <input
-                  name="value"
-                  type="text"
-                  value={@c_name}
-                  phx-debounce="1000"
-                  class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-xl font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
-                  placeholder="Canvas name"
-                />
-              </.form>
+      <:header_nav>
+        <.tab_strip tabs={@tabs} active_tab={@active_tab} />
+      </:header_nav>
+      <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col gap-3 pb-16 lg:pb-0">
+        <%!-- Header: title, description, presence and actions --%>
+        <div id="canvas-header" class="flex shrink-0 flex-col gap-2 px-2 sm:px-0">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:items-start">
+            <.form
+              for={%{}}
+              id="canvas-name-form"
+              phx-change="update_name"
+              class="order-1 min-w-0 flex-1 sm:flex-none"
+            >
+              <input
+                name="value"
+                type="text"
+                value={@c_name}
+                phx-debounce="1000"
+                class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-lg font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
+                placeholder="Canvas name"
+              />
+            </.form>
 
-              <.form
-                for={%{}}
-                id="canvas-description-form"
-                phx-change="update_description"
-                class="flex w-full min-w-0 items-start sm:flex-1"
-              >
-                <textarea
-                  name="value"
-                  phx-debounce="1000"
-                  class="field-sizing-content box-content max-h-16 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-8 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none"
-                  placeholder="Add a description..."
-                  rows="1"
-                ><%= @c_desc %></textarea>
-              </.form>
+            <%!-- Save state: beside the title on phones, with the other
+            actions on larger screens. The badge keeps the same height as the
+            other header controls so they line up on one line. --%>
+            <div class="order-2 shrink-0 sm:order-4">
+              <%= cond do %>
+                <% @save_state == :saving -> %>
+                  <UIBadge.badge variant="secondary" class="h-8 shrink-0">
+                    <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
+                    </div>
+                    <span>Saving...</span>
+                  </UIBadge.badge>
+                <% @save_state == :saved -> %>
+                  <UIBadge.badge variant="default" class="h-8 shrink-0">
+                    <.icon name="hero-check-circle" class="w-4 h-4" />
+                    <span>Saved</span>
+                  </UIBadge.badge>
+                <% true -> %>
+                  <UIBadge.badge variant="outline" class="h-8 shrink-0">
+                    <.icon name="hero-exclamation-circle" class="w-4 h-4" />
+                    <span>Unsaved</span>
+                  </UIBadge.badge>
+              <% end %>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:gap-3">
-              <%!-- Active users: truncated, with the full list in a hover tooltip --%>
+            <.form
+              for={%{}}
+              id="canvas-description-form"
+              phx-change="update_description"
+              class="order-3 w-full min-w-0 sm:order-2 sm:w-auto sm:flex-1"
+            >
+              <textarea
+                name="value"
+                phx-debounce="1000"
+                class="field-sizing-content box-content max-h-12 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-6 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none sm:max-h-16 sm:leading-8"
+                placeholder="Add a description..."
+                rows="1"
+              ><%= @c_desc %></textarea>
+            </.form>
+
+            <%!-- Active users: truncated, with the full list in a hover tooltip --%>
+            <div class="order-4 sm:order-3">
               <UITooltip.tooltip id="active-users-tooltip">
                 <UITooltip.tooltip_trigger>
                   <button
                     type="button"
-                    class="inline-flex max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 py-1 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    class="inline-flex h-8 max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <span class="relative flex size-2 shrink-0">
                       <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
                       <span class="relative inline-flex size-2 rounded-full bg-success"></span>
                     </span>
-                    <span class="truncate">{active_users_label(active_usernames(@presence))}</span>
+                    <span class="truncate lg:hidden">{active_users_compact_label(@presence)}</span>
+                    <span class="hidden truncate lg:inline">
+                      {active_users_label(active_usernames(@presence))}
+                    </span>
                   </button>
                 </UITooltip.tooltip_trigger>
 
@@ -506,60 +544,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   </ul>
                 </UITooltip.tooltip_content>
               </UITooltip.tooltip>
-
-              <%= cond do %>
-                <% @save_state == :saving -> %>
-                  <UIBadge.badge variant="secondary" class="shrink-0">
-                    <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
-                    </div>
-                    <span>Saving...</span>
-                  </UIBadge.badge>
-                <% @save_state == :saved -> %>
-                  <UIBadge.badge variant="default" class="shrink-0">
-                    <.icon name="hero-check-circle" class="w-4 h-4" />
-                    <span>Saved</span>
-                  </UIBadge.badge>
-                <% true -> %>
-                  <UIBadge.badge variant="outline" class="shrink-0">
-                    <.icon name="hero-exclamation-circle" class="w-4 h-4" />
-                    <span>Unsaved</span>
-                  </UIBadge.badge>
-              <% end %>
-
-              <%= if @canvas.author_id == @user_id do %>
-                <.share_button id="share-canvas-button" label="Share" />
-              <% end %>
             </div>
-          </div>
 
-          <%!-- Tabs: the grid is one view on the canvas; the others are
-          placeholders for now. --%>
-          <nav
-            id="canvas-tabs"
-            role="tablist"
-            aria-label="Canvas views"
-            class="flex items-center gap-1 overflow-x-auto"
-          >
-            <button
-              :for={{tab_id, label, icon, _blurb} <- @tabs}
-              type="button"
-              role="tab"
-              id={"canvas-tab-#{tab_id}"}
-              aria-selected={to_string(@active_tab == tab_id)}
-              aria-controls="canvas-tabpanel"
-              phx-click="select_tab"
-              phx-value-tab={tab_id}
-              class={[
-                "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-                @active_tab == tab_id && "bg-base-content/10 text-base-content",
-                @active_tab != tab_id &&
-                  "text-base-content/60 hover:bg-base-content/5 hover:text-base-content"
-              ]}
-            >
-              <.icon name={icon} class="size-4" />
-              {label}
-            </button>
-          </nav>
+            <%= if @canvas.author_id == @user_id do %>
+              <div class="order-5 ml-auto sm:ml-0">
+                <.share_button id="share-canvas-button" label="Share" />
+              </div>
+            <% end %>
+          </div>
         </div>
 
         <.share_dialog
@@ -586,7 +578,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
             >
               <%!-- Grid Layout — accents come from the template and are read-only here --%>
-              <div class="flex min-h-0 flex-1 flex-col overflow-auto">
+              <div class="canvas-grid-scroll flex min-h-0 flex-1 flex-col overflow-auto">
                 <table
                   class="h-full min-h-0 w-full flex-1 table-fixed border-collapse"
                   style={"min-width: #{table_min_width(@cells)}"}
@@ -757,6 +749,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           <% end %>
         </div>
       </div>
+
+      <%!-- Below the header breakpoint the tabs live at the bottom of the
+      screen, like a native app. --%>
+      <.tab_bar tabs={@tabs} active_tab={@active_tab} />
     </Layouts.app>
     """
   end
@@ -765,6 +761,79 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     case find_tab(tab) do
       {_id, _label, icon, _blurb} -> icon
     end
+  end
+
+  # The tab strip lives in the app header on large screens. When the header
+  # runs out of room the same tabs become a bottom app bar, the way native
+  # apps switch sections.
+  attr :tabs, :list, required: true
+  attr :active_tab, :string, required: true
+
+  defp tab_strip(assigns) do
+    ~H"""
+    <nav
+      id="canvas-tabs"
+      role="tablist"
+      aria-label="Canvas views"
+      class="hidden items-center gap-0.5 rounded-lg border border-base-content/25 bg-base-content/5 px-1 py-0.5 lg:flex"
+    >
+      <button
+        :for={{tab_id, label, icon, _blurb} <- @tabs}
+        type="button"
+        role="tab"
+        id={"canvas-tab-#{tab_id}"}
+        aria-selected={to_string(@active_tab == tab_id)}
+        aria-controls="canvas-tabpanel"
+        aria-label={label}
+        title={label}
+        phx-click="select_tab"
+        phx-value-tab={tab_id}
+        class={[
+          "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          @active_tab == tab_id && "bg-base-content/10 text-base-content",
+          @active_tab != tab_id &&
+            "text-base-content/60 hover:bg-base-content/5 hover:text-base-content"
+        ]}
+      >
+        <.icon name={icon} class="size-4" />
+        <%!-- The names are dropped when the header gives the strip less room
+        than it needs, so the tabs never overflow into a scrollbar. --%>
+        <span class="@max-[23rem]:hidden">{label}</span>
+      </button>
+    </nav>
+    """
+  end
+
+  defp tab_bar(assigns) do
+    ~H"""
+    <nav
+      id="canvas-tabs-bar"
+      role="tablist"
+      aria-label="Canvas views"
+      class="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-1 border-t border-base-content/10 bg-base-200/95 px-1 py-1 backdrop-blur lg:hidden"
+    >
+      <button
+        :for={{tab_id, label, icon, _blurb} <- @tabs}
+        type="button"
+        role="tab"
+        id={"canvas-tab-bar-#{tab_id}"}
+        aria-selected={to_string(@active_tab == tab_id)}
+        aria-controls="canvas-tabpanel"
+        aria-label={label}
+        title={label}
+        phx-click="select_tab"
+        phx-value-tab={tab_id}
+        class={[
+          "flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-[0.7rem] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+          @active_tab == tab_id && "text-primary",
+          @active_tab != tab_id && "text-base-content/55"
+        ]}
+      >
+        <.icon name={icon} class="size-5" />
+        <span>{label}</span>
+      </button>
+    </nav>
+    """
   end
 
   defp placeholder_label(tab) do

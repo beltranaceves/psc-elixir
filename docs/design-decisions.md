@@ -32,6 +32,7 @@ it costs, and the evidence it was verified against.
 | [ADR-020](#adr-020--optional-cell-section-titles-and-a-dense-square-grid) | Optional cell section titles, and a dense square grid | Accepted | 2026-10-19 |
 | [ADR-021](#adr-021--mobile-top-bars-one-menu-and-a-stacked-canvas-header) | Mobile top bars: one menu and a stacked canvas header | Accepted | 2026-10-19 |
 | [ADR-022](#adr-022--ui-consolidation-one-canvas-model-one-creation-path) | UI consolidation: one canvas model, one creation path | Accepted | 2026-10-19 |
+| [ADR-023](#adr-023--the-canvas-tabs-follow-the-space-they-have) | The canvas tabs follow the space they have | Accepted | 2026-10-20 |
 
 ---
 
@@ -772,6 +773,8 @@ zero width and truncating the title.
 - **Canvas header.** Below `sm` the header stacks: the title takes its own full-width
   line, the description follows beneath it (wrapping to two lines), then the presence
   pill / save state / Share row. From `sm` up the compact single-row layout is restored.
+  (Superseded by [ADR-023](#adr-023--the-canvas-tabs-follow-the-space-they-have), which
+  moves the save state next to the title and gives the description its own row.)
 
 **Alternatives considered.** Horizontally scrolling the header (hides affordances); a
 second header row for the nav (costs vertical space on a dense canvas); icon-only nav
@@ -806,11 +809,20 @@ info, and a tooltip that could leave the viewport and stay open after a tap.
 - **Density.** The app shell's vertical padding dropped from 32 px to 24 px and page-level
   wrappers no longer add their own `py-*`; the default container gained `w-full` because an
   auto-margined flex item otherwise shrinks to fit-content instead of filling the page.
+- **The app header adapts to the viewport.** On phones and tablets the header carries only
+  the logo, the page title and a menu; the **theme switch (system / light / dark) lives inside
+  that menu**, together with the section links and the account actions. From large screens
+  (`xl`) up, the theme switch and the account actions return to the bar and the menu
+  disappears. Guests get the same menu, so the theme is reachable at every width.
 - **The canvas editor is a tabbed surface.** The header carries a tab strip — **Analysis ·
   Notes · Editor · Agent** — and the panel below renders the selected view. The grid
   (Editor) is the only implemented view; the others are placeholders. The tab lives in the
   URL (`?tab=…`) so a view can be linked and the browser's back button works; the default
-  is the editor.
+  is the editor. The strip is rendered in the **app header** (the free space between the
+  page title and the section nav) on large screens, where it reads as an outlined
+  segmented control, and as a **bottom app bar** on phones and tablets. Where the strip
+  lives, and whether it shows names or only icons, is decided by the room it actually
+  has — see [ADR-023](#adr-023--the-canvas-tabs-follow-the-space-they-have).
 - **Accent combination on cells (fullscreen only).** A template accent belongs to a row or a
   column, but the interesting thing is the *pair*: in the **mobile fullscreen cell** the
   column's colour is drawn on the top edge and the row's colour on the left edge, so the
@@ -820,6 +832,11 @@ info, and a tooltip that could leave the viewport and stay open after a tap.
 - **Editor gutters on phones.** The template designer and canvas editor drop to 8 px horizontal
   page gutters below `sm`, and the designer's grid card is full-bleed (its "Grid" header keeps
   its own padding), so the table starts ~9 px from the viewport edge instead of 41 px.
+- **The grid scrolls without a scrollbar on touch.** When the columns cannot have their
+  minimum width the grid scrolls horizontally. On phones and tablets (and on any coarse
+  pointer) the scrollbar is hidden — it is noise and it steals ~15 px of the grid — and the
+  column cut off at the edge is the affordance. Where a bar does show (fine pointers), it is
+  a slim, low-contrast one instead of the platform default.
 - **Auth on phones.** Auth inputs are 16 px / 44 px below `sm` (below 16 px iOS zooms the page
   on focus) and the form container is `max-w-md`, giving ~92 % of a 390 px viewport.
 - **Success is green.** Flash gained a `:success` kind (green border/badge, check icon,
@@ -855,6 +872,56 @@ block (≈18 modules), but renaming `UnstrCanvas` → `Canvas`, `Layout` → `Te
 `CanvasLayoutLive` → `TemplateLive` is a separate mechanical refactor that was **not** done
 here. Old `/canvases` URLs redirect through the authenticated scope, so they require a session
 just like the new ones.
+
+---
+
+## ADR-023 — The canvas tabs follow the space they have
+
+**Context.** The canvas tab strip was added to the app header, and the first placement
+guessed at the available room with viewport breakpoints: icons only between `md` and
+`xl`, full names from `xl`, bottom app bar below `md`. Three things were wrong with it.
+The strip was **left aligned** in the header instead of centred in the space between the
+page title and the section nav. The switch to **full names happened too late** (1280 px),
+so a 1024 px tablet got four bare icons where there was room for the words, while the
+switch to the **bottom app bar happened too late** as well (768 px), so tablets kept a
+strip that only half fitted. And the canvas header on a phone was still cramped: the
+title, the description, the presence pill, the save state and the Share button were
+stacked without a clear hierarchy, the description pushed the actions off the screen, and
+the presence pill showed a full e-mail address where it had no room for one.
+
+**Decision.**
+- **The header slot is a container.** `Layouts.app` renders `:header_nav` inside a
+  `@container` wrapper that is `justify-center`, so whatever is placed there is centred
+  in the free space between the page title and the section nav, not left aligned.
+- **Two renderings, one set of tabs.** The header strip (`#canvas-tabs`) is shown from
+  `lg` (1024 px) up; below that the same tabs are rendered as a fixed **bottom app bar**
+  (`#canvas-tabs-bar`), the way native apps switch sections. Both carry the same
+  `role="tablist"`, the same `select_tab` event and the same `?tab=` deep link; the one
+  that is not on screen is `display: none` and therefore out of the accessibility tree.
+- **Names follow the room, not the viewport.** The strip's labels are hidden by a
+  **container query** (`@max-[23rem]:hidden`) on the header slot: when the free space
+  drops below the width the four names need (≈ 350 px), the strip falls back to icons
+  instead of overflowing into a scrollbar. A long page title or a narrow window
+  therefore degrades gracefully at any viewport width.
+- **The canvas header has a hierarchy.** On phones and tablets the header is
+  title + save state on the first line, the description on its own line (two lines at
+  most), then the presence pill and the Share button on the last line (Share pushed to
+  the right). From `lg` up it is a single row again: title, description, presence, save
+  state, Share.
+- **Presence is compact where space is short.** Below `lg` the pill reads "1 online" /
+  "N online" instead of the full e-mail address; the full list is always in the tooltip.
+
+**Alternatives considered.** Keeping one element and repositioning it with CSS (the
+container query then also applied to the fixed bottom bar, whose ancestor became a
+containing block and broke the fixed positioning); guessing the breakpoints with
+viewport widths only (the icons-only state appeared far too late); keeping the e-mail
+address in the presence pill (it ate a third of a phone's header row).
+
+**Consequences.** The tab strip is rendered twice in the DOM, so the two sets of buttons
+need distinct ids (`canvas-tab-*` in the header, `canvas-tab-bar-*` in the app bar); the
+tab panel's `aria-labelledby` points at the header button, whose text still names the
+panel when it is off screen. The E2E suite drives the header strip (its viewport is
+1280 px), and the LiveView test asserts that both sets exist and switch tabs.
 
 ---
 

@@ -557,6 +557,41 @@
     border-bottom-width: 0;
   }
 
+  /* The grid scrolls horizontally when the columns cannot have their minimum
+     width. The scrollbar is noise on a phone — it also steals ~15 px of the
+     grid — so it is hidden on touch devices and narrow screens; the column
+     that is cut off at the edge is the affordance. Where it does show, it is a
+     slim, low-contrast bar. */
+  .canvas-grid-scroll {
+    scrollbar-width: thin;
+    scrollbar-color:
+      color-mix(in oklab, var(--color-base-content) 22%, transparent) transparent;
+  }
+
+  .canvas-grid-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .canvas-grid-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .canvas-grid-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--color-base-content) 22%, transparent);
+  }
+
+  @media (width < 40rem), (pointer: coarse) {
+    .canvas-grid-scroll {
+      scrollbar-width: none;
+    }
+
+    .canvas-grid-scroll::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   /* Markdown headings stay proportionate in a space-constrained cell, so
      words wrap normally instead of breaking mid-word. */
   .canvas-cell .md-render :is(h1, h2) {

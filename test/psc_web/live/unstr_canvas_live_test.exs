@@ -177,6 +177,11 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert html =~ "Agent"
       assert has_element?(lv, "#canvas-tabs [role='tab']")
 
+      # The tabs are rendered twice: in the app header for large screens and
+      # as a bottom app bar for phones and tablets.
+      assert has_element?(lv, "#canvas-tabs-bar [role='tab']")
+      assert has_element?(lv, "#canvas-tab-bar-editor[aria-selected='true']")
+
       # The editor is the default view and shows the grid.
       assert has_element?(lv, "#canvas-tab-editor[aria-selected='true']")
       assert has_element?(lv, "#canvas-grid")
@@ -187,6 +192,12 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#canvas-tab-notes[aria-selected='true']")
       assert has_element?(lv, "#canvas-placeholder-notes")
       refute has_element?(lv, "#canvas-grid")
+
+      # The bottom bar switches tabs as well.
+      lv |> element("#canvas-tab-bar-agent") |> render_click()
+      assert has_element?(lv, "#canvas-tab-bar-agent[aria-selected='true']")
+      assert has_element?(lv, "#canvas-tab-agent[aria-selected='true']")
+      assert has_element?(lv, "#canvas-placeholder-agent")
 
       # Tabs are deep-linkable.
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")

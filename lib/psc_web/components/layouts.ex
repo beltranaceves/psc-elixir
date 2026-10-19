@@ -48,6 +48,10 @@ defmodule PscWeb.Layouts do
     default: nil,
     doc: "route context shown in the app header (e.g. the current section name)"
 
+  slot :header_nav,
+    doc:
+      "navigation rendered in the free space of the app header; pages that need a different placement on small screens (e.g. a bottom app bar) style it themselves"
+
   attr :header_section, :string,
     default: nil,
     doc:
@@ -78,6 +82,14 @@ defmodule PscWeb.Layouts do
           {@header_title}
         </span>
 
+        <%!-- The slot holds the free space between the page title and the
+        section navigation. It is a container so that its content can react to
+        the room it actually gets (see the canvas tab strip) instead of
+        guessing with viewport breakpoints. --%>
+        <div class="@container flex min-w-0 items-center justify-center lg:flex-1">
+          {render_slot(@header_nav)}
+        </div>
+
         <div class="ml-auto flex items-center gap-3 sm:gap-4">
           <%!-- Private sections: only advertised to signed-in users. --%>
           <nav :if={@current_scope && @current_scope.user} class="hidden items-center gap-1 md:flex">
@@ -104,9 +116,13 @@ defmodule PscWeb.Layouts do
           </nav>
 
           <div class="flex items-center gap-3 sm:gap-4">
-            <.theme_toggle />
+            <%!-- The theme switch lives in the menu until there is room for it
+            in the bar (large screens); on phones and tablets the menu owns it. --%>
+            <div class="hidden xl:block">
+              <.theme_toggle />
+            </div>
             <%= if @current_scope && @current_scope.user do %>
-              <div class="hidden items-center gap-3 text-sm lg:flex">
+              <div class="hidden items-center gap-3 text-sm xl:flex">
                 <span class="text-base-content/60">{@current_scope.user.email}</span>
                 <.link
                   href={~p"/users/settings"}
@@ -123,8 +139,9 @@ defmodule PscWeb.Layouts do
                 </.link>
               </div>
 
-              <%!-- Mobile: navigation and account actions live behind one menu. --%>
-              <details class="relative lg:hidden" data-menu>
+              <%!-- Mobile and tablet: navigation, theme and account actions live
+              behind one menu. --%>
+              <details class="relative xl:hidden" data-menu>
                 <summary
                   class="flex size-9 cursor-pointer list-none items-center justify-center rounded-lg text-base-content/70 transition-colors hover:bg-base-content/5 hover:text-base-content [&::-webkit-details-marker]:hidden"
                   aria-label="Menu"
@@ -138,16 +155,18 @@ defmodule PscWeb.Layouts do
                   <div class="my-1 h-px bg-base-content/10"></div>
                   <.link
                     navigate={~p"/canvas"}
-                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content md:hidden"
                   >
                     Canvases
                   </.link>
                   <.link
                     navigate={~p"/templates"}
-                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content md:hidden"
                   >
                     Templates
                   </.link>
+                  <div class="my-1 h-px bg-base-content/10"></div>
+                  <.theme_menu />
                   <div class="my-1 h-px bg-base-content/10"></div>
                   <.link
                     href={~p"/users/settings"}
@@ -165,10 +184,10 @@ defmodule PscWeb.Layouts do
                 </div>
               </details>
             <% else %>
-              <div class="flex items-center gap-3 text-sm">
+              <div class="hidden items-center gap-3 text-sm xl:flex">
                 <.link
                   href={~p"/users/register"}
-                  class="hidden text-base-content/70 hover:text-base-content transition-colors sm:inline"
+                  class="text-base-content/70 hover:text-base-content transition-colors"
                 >
                   Register
                 </.link>
@@ -179,6 +198,32 @@ defmodule PscWeb.Layouts do
                   Log in
                 </.link>
               </div>
+
+              <%!-- Guests get the same menu, with the theme switch inside. --%>
+              <details class="relative xl:hidden" data-menu>
+                <summary
+                  class="flex size-9 cursor-pointer list-none items-center justify-center rounded-lg text-base-content/70 transition-colors hover:bg-base-content/5 hover:text-base-content [&::-webkit-details-marker]:hidden"
+                  aria-label="Menu"
+                >
+                  <.icon name="hero-bars-3" class="size-5" />
+                </summary>
+                <div class="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-base-content/10 bg-base-200 p-1 shadow-lg">
+                  <.theme_menu />
+                  <div class="my-1 h-px bg-base-content/10"></div>
+                  <.link
+                    href={~p"/users/register"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                  >
+                    Register
+                  </.link>
+                  <.link
+                    href={~p"/users/log-in"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
+                  >
+                    Log in
+                  </.link>
+                </div>
+              </details>
             <% end %>
           </div>
         </div>
@@ -252,15 +297,24 @@ defmodule PscWeb.Layouts do
 
   See <head> in root.html.heex which applies the theme before page load.
   """
+  attr :class, :string,
+    default: nil,
+    doc: "extra classes for the toggle (e.g. w-full inside a menu)"
+
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
+    <div class={[
+      "card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full",
+      @class
+    ]}>
       <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]" />
 
       <button
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
+        aria-label="System theme"
+        title="System theme"
       >
         <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -269,6 +323,8 @@ defmodule PscWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
+        aria-label="Light theme"
+        title="Light theme"
       >
         <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
@@ -277,9 +333,23 @@ defmodule PscWeb.Layouts do
         class="flex p-2 cursor-pointer w-1/3"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
+        aria-label="Dark theme"
+        title="Dark theme"
       >
         <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
       </button>
+    </div>
+    """
+  end
+
+  # The theme switch as a menu entry: a label plus the full-width toggle.
+  defp theme_menu(assigns) do
+    ~H"""
+    <p class="px-3 pt-1 pb-1.5 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
+      Theme
+    </p>
+    <div class="px-1 pb-1.5">
+      <.theme_toggle class="w-full" />
     </div>
     """
   end
