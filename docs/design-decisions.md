@@ -824,7 +824,11 @@ info, and a tooltip that could leave the viewport and stay open after a tap.
   cramped grid cells are readable and editable without fighting the grid. The expansion
   animates in/out (respecting `prefers-reduced-motion`) and swiping left/right/up/down inside
   the fullscreen cell moves to the neighbouring cell on that axis — vertical swipes scroll
-  instead when the content is taller than the screen.
+  instead when the content is taller than the screen. The first tap is intercepted in the
+  **capture phase**, because the markdown display has its own click listener that would
+  otherwise open the editor immediately; gestures are read from touch events (with
+  `touch-action: pan-y` so the browser keeps vertical panning) and the cell slides out in the
+  direction of the finger while the next one arrives from the opposite edge.
 
 **Alternatives considered.** Keeping both canvas models (two vocabularies, dead routes, more
 tests); keeping the inline template form (two creation flows, list buried below the fold on

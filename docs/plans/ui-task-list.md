@@ -326,8 +326,11 @@ bottom-right) with a short scale/fade animation (skipped under `prefers-reduced-
 second tap enters editing, and the button/Escape returns to the grid (with an exit fade).
 Swiping horizontally moves between columns and vertically between rows, handing the fullscreen
 state to the neighbour; vertical swipes scroll instead when the cell content is taller than the
-screen. Desktop still opens the field on the first click. Covered by the E2E test
-`canvas editor mobile fullscreen cells`.
+screen. The transition is directional: the cell slides out with the finger and the next one
+arrives from the opposite edge (`is-swipe-out-*` / `is-swipe-in-*`). The first tap is captured
+before the markdown display's own click listener, so a tap never drops straight into edit mode
+(the bug found on a real phone). Desktop still opens the field on the first click. Covered by
+the E2E tests `canvas editor mobile fullscreen cells` (mouse and real touch events).
 
 ---
 

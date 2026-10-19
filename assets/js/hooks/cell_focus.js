@@ -16,15 +16,27 @@ export default {
     this.el._cellFocus = this
 
     this.handleClick = event => this.onClick(event)
+    // Capture phase: it must run before the markdown display's own click
+    // listener, which would otherwise open the editor on the first tap.
+    this.handleCaptureClick = event => this.onCaptureClick(event)
     this.handleKeydown = event => {
       if (event.key === "Escape" && this.isExpanded()) this.collapse()
     }
-    this.handlePointerDown = event => this.onPointerDown(event)
-    this.handlePointerUp = event => this.onPointerUp(event)
+    this.handlePointerDown = event => {
+      if (event.pointerType !== "touch") this.startSwipe(event)
+    }
+    this.handlePointerUp = event => {
+      if (event.pointerType !== "touch") this.finishSwipe(event)
+    }
+    this.handleTouchStart = event => this.startSwipe(event)
+    this.handleTouchEnd = event => this.finishSwipe(event)
 
+    this.el.addEventListener("click", this.handleCaptureClick, true)
     this.el.addEventListener("click", this.handleClick)
     this.el.addEventListener("pointerdown", this.handlePointerDown)
     this.el.addEventListener("pointerup", this.handlePointerUp)
+    this.el.addEventListener("touchstart", this.handleTouchStart, { passive: true })
+    this.el.addEventListener("touchend", this.handleTouchEnd, { passive: true })
     document.addEventListener("keydown", this.handleKeydown)
   },
 
@@ -35,13 +47,35 @@ export default {
   },
 
   destroyed() {
+    this.el.removeEventListener("click", this.handleCaptureClick, true)
     this.el.removeEventListener("click", this.handleClick)
     this.el.removeEventListener("pointerdown", this.handlePointerDown)
     this.el.removeEventListener("pointerup", this.handlePointerUp)
+    this.el.removeEventListener("touchstart", this.handleTouchStart)
+    this.el.removeEventListener("touchend", this.handleTouchEnd)
     document.removeEventListener("keydown", this.handleKeydown)
     if (this.el._cellFocus === this) delete this.el._cellFocus
     clearTimeout(this.closeTimer)
+    clearTimeout(this.swipeTimer)
     this.releaseBody()
+  },
+
+  onCaptureClick(event) {
+    // A swipe ends with a click; swallow it before the display opens editing.
+    if (this.suppressClick) {
+      this.suppressClick = false
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+
+    if (!window.matchMedia(MOBILE_QUERY).matches) return
+    if (this.isExpanded()) return
+
+    // First tap: fullscreen only, do not let the display start editing.
+    event.preventDefault()
+    event.stopPropagation()
+    this.expand()
   },
 
   onClick(event) {
@@ -52,61 +86,59 @@ export default {
       return
     }
 
-    // A swipe ends with a click; it must not open the editor.
-    if (this.suppressClick) {
-      this.suppressClick = false
-      event.preventDefault()
-      return
-    }
-
     if (!window.matchMedia(MOBILE_QUERY).matches) return this.openField(event)
-
-    if (!this.isExpanded()) {
-      event.preventDefault()
-      this.expand()
-      return
-    }
-
-    this.openField(event)
+    if (this.isExpanded()) this.openField(event)
   },
 
-  onPointerDown(event) {
+  startSwipe(event) {
     this.startPoint = null
     if (!this.isExpanded()) return
     if (event.target.closest("textarea, input, select, button, a")) return
 
-    this.startPoint = {
-      x: event.clientX,
-      y: event.clientY,
-      scrollTop: this.el.scrollTop,
-    }
+    const point = event.touches ? event.touches[0] : event
+    if (!point) return
+
+    this.startPoint = { x: point.clientX, y: point.clientY }
   },
 
-  onPointerUp(event) {
+  finishSwipe(event) {
     const start = this.startPoint
     this.startPoint = null
     if (!start || !this.isExpanded()) return
 
-    const dx = event.clientX - start.x
-    const dy = event.clientY - start.y
+    const point = event.changedTouches ? event.changedTouches[0] : event
+    if (!point) return
+
+    const dx = point.clientX - start.x
+    const dy = point.clientY - start.y
     if (Math.hypot(dx, dy) < SWIPE_THRESHOLD) return
 
     const horizontal = Math.abs(dx) > Math.abs(dy)
 
     // Any deliberate swipe ends with a click event; never treat it as a tap.
     this.suppressClick = true
-    setTimeout(() => (this.suppressClick = false), 350)
+    setTimeout(() => (this.suppressClick = false), 400)
 
     // Vertical swipes belong to scrolling when the cell content is taller than
     // the screen; horizontal swipes always navigate.
     if (!horizontal && this.el.scrollHeight > this.el.clientHeight + 4) return
 
     const delta = horizontal ? (dx < 0 ? 1 : -1) : dy < 0 ? 1 : -1
-    this.navigate(horizontal ? "column" : "row", delta)
+    // The cell slides away in the direction of the finger; the next one
+    // arrives from the opposite edge.
+    const direction = horizontal
+      ? dx < 0
+        ? { out: "left", in: "right" }
+        : { out: "right", in: "left" }
+      : dy < 0
+        ? { out: "top", in: "bottom" }
+        : { out: "bottom", in: "top" }
+
+    this.navigate(horizontal ? "column" : "row", delta, direction)
   },
 
   // Move the fullscreen state to the cell `delta` steps away on one axis.
-  navigate(axis, delta) {
+  navigate(axis, delta, direction) {
     const td = this.el.closest("td")
     const tr = td && td.parentElement
     const tbody = tr && tr.parentElement
@@ -127,33 +159,53 @@ export default {
     const target = targetCell && targetCell.querySelector(".canvas-cell")
     if (!target || target === this.el || !target._cellFocus) return
 
-    this.collapse({ instant: true })
-    target._cellFocus.expand()
+    this.collapse({ swipeOut: direction.out })
+    target._cellFocus.expand({ swipeIn: direction.in })
   },
 
   isExpanded() {
     return this.el.classList.contains("is-expanded")
   },
 
-  expand() {
+  expand({ swipeIn = null } = {}) {
     document.querySelectorAll(".canvas-cell.is-expanded").forEach(cell => {
-      if (cell !== this.el) cell.classList.remove("is-expanded", "is-closing")
+      if (cell === this.el) return
+      // A cell that is sliding out keeps its frame until its animation ends.
+      if ([...cell.classList].some(name => name.startsWith("is-swipe-out-"))) return
+      cell.classList.remove("is-expanded", "is-closing")
     })
 
     this.el.classList.remove("is-closing")
     this.el.classList.add("is-expanded")
+
+    if (swipeIn) {
+      this.el.classList.add(`is-swipe-in-${swipeIn}`)
+      clearTimeout(this.swipeTimer)
+      this.swipeTimer = setTimeout(() => {
+        this.el.classList.remove(`is-swipe-in-${swipeIn}`)
+      }, 220)
+    }
+
     this.expandedByPatch = true
     document.body.classList.add("overflow-hidden")
     this.el.scrollTop = 0
   },
 
-  collapse({ instant = false } = {}) {
+  collapse({ instant = false, swipeOut = null } = {}) {
     if (!this.isExpanded()) return
 
     this.expandedByPatch = false
 
     if (instant) {
       this.finishCollapse()
+    } else if (swipeOut) {
+      // Slide out in the direction of the finger, then drop the fullscreen frame.
+      this.el.classList.add(`is-swipe-out-${swipeOut}`)
+      clearTimeout(this.closeTimer)
+      this.closeTimer = setTimeout(() => {
+        this.el.classList.remove(`is-swipe-out-${swipeOut}`)
+        this.finishCollapse()
+      }, 170)
     } else {
       // Play the exit animation, then drop the fullscreen class.
       this.el.classList.add("is-closing")

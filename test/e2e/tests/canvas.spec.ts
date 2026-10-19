@@ -107,15 +107,19 @@ test.describe('canvas editor mobile fullscreen cells', () => {
 
     // Swipe left → next column, swipe right → back.
     await swipe(320, 420, 180, 420);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
     await expect(expanded).toHaveAttribute('data-cell-key', 'leverage');
     await swipe(120, 420, 280, 420);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
     await expect(expanded).toHaveAttribute('data-cell-key', 'problem');
 
     // Swipe up → next row, swipe down → back. A swipe never opens the editor.
     await swipe(200, 500, 200, 350);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
     await expect(expanded).toHaveAttribute('data-cell-key', 'outer_environment');
     await expect(expanded.locator('textarea:visible')).toHaveCount(0);
     await swipe(200, 350, 200, 520);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
     await expect(expanded).toHaveAttribute('data-cell-key', 'problem');
 
     // Second tap: the field opens for editing inside the fullscreen cell.
@@ -128,6 +132,93 @@ test.describe('canvas editor mobile fullscreen cells', () => {
     await expect(card).not.toHaveClass(/is-expanded/, { timeout: 2000 });
     await expect(page.locator('[data-cell-exit]').first()).toBeHidden();
     await expect(card.locator('textarea:visible')).toHaveCount(0);
+  });
+
+  test('a touch tap only expands the cell — no instant edit — and swipes navigate', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('Touch Cell'));
+
+    // Real touch events (the phone path): the markdown display has its own
+    // click listener, so a tap must not slip through into edit mode.
+    const client = await page.context().newCDPSession(page);
+    await client.send('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+
+    const touch = async (type: string, points: { x: number; y: number }[]) => {
+      await client.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+    };
+
+    const tap = async (x: number, y: number) => {
+      await touch('touchStart', [{ x, y }]);
+      await touch('touchEnd', []);
+    };
+
+    const swipe = async (x1: number, y1: number, x2: number, y2: number) => {
+      await touch('touchStart', [{ x: x1, y: y1 }]);
+      for (let i = 1; i <= 6; i++) {
+        await touch('touchMove', [
+          { x: x1 + ((x2 - x1) * i) / 6, y: y1 + ((y2 - y1) * i) / 6 },
+        ]);
+      }
+      await touch('touchEnd', []);
+    };
+
+    const expanded = page.locator('.canvas-cell.is-expanded');
+    const card = page.locator('.canvas-cell').first();
+    await expect(card).toBeVisible();
+
+    // Record the directional swipe classes as they are applied.
+    await page.evaluate(() => {
+      (window as any).__swipeClasses = [];
+      const observer = new MutationObserver(() => {
+        document.querySelectorAll('.canvas-cell').forEach(cell => {
+          Array.from(cell.classList).forEach(name => {
+            if (name.startsWith('is-swipe-') && !(window as any).__swipeClasses.includes(name)) {
+              (window as any).__swipeClasses.push(name);
+            }
+          });
+        });
+      });
+      observer.observe(document.body, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ['class'],
+      });
+    });
+
+    const spot = await card.evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return { x: Math.round(r.left + 20), y: Math.round(r.top + 14) };
+    });
+
+    // Tap: full screen, still read-only.
+    await tap(spot.x, spot.y);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'problem');
+    await expect(page.locator('.canvas-cell textarea:visible')).toHaveCount(0);
+
+    // Swipe left → next column, swipe up → next row; still read-only.
+    await swipe(320, 420, 170, 420);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'leverage');
+    await swipe(200, 500, 200, 340);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'inner_environment');
+    await expect(page.locator('.canvas-cell textarea:visible')).toHaveCount(0);
+
+    // The cells slide in the direction of the finger.
+    const swipeClasses = await page.evaluate(() => (window as any).__swipeClasses);
+    expect(swipeClasses).toContain('is-swipe-out-left');
+    expect(swipeClasses).toContain('is-swipe-in-right');
+    expect(swipeClasses).toContain('is-swipe-out-top');
+    expect(swipeClasses).toContain('is-swipe-in-bottom');
+
+    // The transition leaves no leftovers behind.
+    await expect(page.locator('.canvas-cell.is-swipe-out-left')).toHaveCount(0);
+    await expect(page.locator('.canvas-cell.is-swipe-in-right')).toHaveCount(0);
   });
 });
 

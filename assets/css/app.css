@@ -271,6 +271,96 @@
   }
 }
 
+/* Directional swipe between cells: the outgoing cell slides away in the
+   direction of the finger, the incoming one arrives from the opposite edge. */
+@keyframes cell-swipe-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cell-swipe-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(30%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cell-swipe-in-top {
+  from {
+    opacity: 0;
+    transform: translateY(-30%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cell-swipe-in-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(30%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cell-swipe-out-left {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+}
+
+@keyframes cell-swipe-out-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30%);
+  }
+}
+
+@keyframes cell-swipe-out-top {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-30%);
+  }
+}
+
+@keyframes cell-swipe-out-bottom {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(30%);
+  }
+}
+
 @layer utilities {
   .animate-feedback-card-in {
     animation: feedback-card-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -346,6 +436,9 @@
     border-radius: 0;
     box-shadow: none;
     -webkit-overflow-scrolling: touch;
+    /* Horizontal swipes reach the hook (navigation); vertical panning stays
+       native so tall cells can still scroll. */
+    touch-action: pan-y;
     animation: cell-fullscreen-in 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
@@ -354,9 +447,59 @@
     animation: cell-fullscreen-out 140ms ease-in both;
   }
 
+  /* Swipe transitions between cells. The incoming cell paints above the
+     outgoing one, which keeps its frame until its slide-out finished. */
+  .canvas-cell.is-swipe-in-left {
+    z-index: 61;
+    animation: cell-swipe-in-left 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .canvas-cell.is-swipe-in-right {
+    z-index: 61;
+    animation: cell-swipe-in-right 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .canvas-cell.is-swipe-in-top {
+    z-index: 61;
+    animation: cell-swipe-in-top 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .canvas-cell.is-swipe-in-bottom {
+    z-index: 61;
+    animation: cell-swipe-in-bottom 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .canvas-cell.is-swipe-out-left {
+    pointer-events: none;
+    animation: cell-swipe-out-left 170ms ease-in both;
+  }
+
+  .canvas-cell.is-swipe-out-right {
+    pointer-events: none;
+    animation: cell-swipe-out-right 170ms ease-in both;
+  }
+
+  .canvas-cell.is-swipe-out-top {
+    pointer-events: none;
+    animation: cell-swipe-out-top 170ms ease-in both;
+  }
+
+  .canvas-cell.is-swipe-out-bottom {
+    pointer-events: none;
+    animation: cell-swipe-out-bottom 170ms ease-in both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .canvas-cell.is-expanded,
-    .canvas-cell.is-expanded.is-closing {
+    .canvas-cell.is-expanded.is-closing,
+    .canvas-cell.is-swipe-in-left,
+    .canvas-cell.is-swipe-in-right,
+    .canvas-cell.is-swipe-in-top,
+    .canvas-cell.is-swipe-in-bottom,
+    .canvas-cell.is-swipe-out-left,
+    .canvas-cell.is-swipe-out-right,
+    .canvas-cell.is-swipe-out-top,
+    .canvas-cell.is-swipe-out-bottom {
       animation: none;
     }
   }
