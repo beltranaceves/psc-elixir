@@ -579,18 +579,19 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                             data-cell-key={cell_key}
                             class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
                           >
-                            <%!-- Each cell carries the colour of its column (top) and
-                            its row (left): the visual combination of both. --%>
+                            <%!-- The colour combination of this cell (column on top,
+                            row on the left) is only shown in the mobile fullscreen
+                            view, where there is room for it. --%>
                             <.accent_bar
                               id={"accent-bar-cell-#{cell_key}-column"}
                               token={column["accent"]}
-                              class="absolute inset-x-0 top-0 h-1 z-10"
+                              class="cell-accent absolute inset-x-0 top-0 h-1 z-10"
                             />
                             <.accent_bar
                               id={"accent-bar-cell-#{cell_key}-row"}
                               token={row["accent"]}
                               orientation={:left}
-                              class="z-10"
+                              class="cell-accent z-10"
                             />
 
                             <div class="cell-body p-2">

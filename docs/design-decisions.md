@@ -806,11 +806,12 @@ info, and a tooltip that could leave the viewport and stay open after a tap.
 - **Density.** The app shell's vertical padding dropped from 32 px to 24 px and page-level
   wrappers no longer add their own `py-*`; the default container gained `w-full` because an
   auto-margined flex item otherwise shrinks to fit-content instead of filling the page.
-- **Accent combination on cells.** A template accent belongs to a row or a column, but the
-  interesting thing is the *pair*: every cell draws its column's colour on its top edge
-  and its row's colour on its left edge, so the grid reads as a colour matrix (the same
-  combination is previewed in the template designer). The bars live inside the cell card,
-  so they travel with it when a cell goes full screen on a phone.
+- **Accent combination on cells (fullscreen only).** A template accent belongs to a row or a
+  column, but the interesting thing is the *pair*: in the **mobile fullscreen cell** the
+  column's colour is drawn on the top edge and the row's colour on the left edge, so the
+  single cell shows which column and row it belongs to. In the grid the combination stays
+  hidden — it would only add noise to every cell edge — and the designer keeps the plain
+  header bars for authoring.
 - **Editor gutters on phones.** The template designer and canvas editor drop to 8 px horizontal
   page gutters below `sm`, and the designer's grid card is full-bleed (its "Grid" header keeps
   its own padding), so the table starts ~9 px from the viewport edge instead of 41 px.

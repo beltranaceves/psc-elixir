@@ -581,10 +581,6 @@ test.describe('template designer accents', () => {
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
 
-    // The designer previews the same combination on each cell.
-    await expect(page.locator('#accent-bar-cell-r1_c1-column')).toHaveClass(/bg-violet-400/);
-    await expect(page.locator('#accent-bar-cell-r1_c1-row')).toHaveClass(/bg-teal-400/);
-
     // A canvas instantiated from that template inherits the accents.
     await page.goto('/canvas');
     await page.locator('.phx-connected').first().waitFor();
@@ -601,18 +597,29 @@ test.describe('template designer accents', () => {
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
 
-    // Each cell carries its column colour on top and its row colour on the left.
+    // The row/column colour combination belongs to the fullscreen cell view, so
+    // it stays hidden in the grid.
+    await expect(page.locator('#accent-bar-cell-r1_c1-column')).toBeHidden();
+    await expect(page.locator('#accent-bar-cell-r1_c1-row')).toBeHidden();
+
+    // On a phone the fullscreen cell shows the combination of both colours.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(400);
+    await page.locator('#cell-card-r1_c1').evaluate(el => {
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(
+        new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          clientX: r.left + 14,
+          clientY: r.top + 12,
+        }),
+      );
+    });
+    await expect(page.locator('#accent-bar-cell-r1_c1-column')).toBeVisible();
+    await expect(page.locator('#accent-bar-cell-r1_c1-row')).toBeVisible();
     await expect(page.locator('#accent-bar-cell-r1_c1-column')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-cell-r1_c1-row')).toHaveClass(/bg-teal-400/);
-
-    // The cell outline sits on the cell's own edges.
-    const cellOutline = await page.locator('#accent-bar-cell-r1_c1-row').boundingBox();
-    const cell = await page.locator('#cell-card-r1_c1').boundingBox();
-    expect(Math.round(cellOutline!.x)).toBe(Math.round(cell!.x));
-    expect(cellOutline!.height).toBeGreaterThan(cell!.height - 4);
-
-    const cellTop = await page.locator('#accent-bar-cell-r1_c1-column').boundingBox();
-    expect(Math.round(cellTop!.y)).toBe(Math.round(cell!.y));
 
     // The read-only bar also spans the whole row height.
     const canvasBar = await page.locator('#accent-bar-row-r1').boundingBox();

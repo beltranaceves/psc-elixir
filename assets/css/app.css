@@ -526,6 +526,16 @@
     display: inline-flex;
   }
 
+  /* The row/column colour combination belongs to the fullscreen cell view: in
+     the grid it would only add noise to the cell edges. */
+  .canvas-cell .cell-accent {
+    display: none;
+  }
+
+  .canvas-cell.is-expanded .cell-accent {
+    display: block;
+  }
+
   /* The panel owns the outer frame (rounded, one clean CSS border); the table
      only draws the inner grid lines so the rounded corners are not doubled up
      with square cell borders. */
