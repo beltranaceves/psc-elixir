@@ -562,7 +562,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                         {row["label"]}
                       </div>
                     </td>
-                    <%= for {_column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
+                    <%= for {column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                       <% layout = @cells["layout"] || [] %>
                       <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
                       <td class="relative border border-base-content/20 align-top">
@@ -579,6 +579,20 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                             data-cell-key={cell_key}
                             class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
                           >
+                            <%!-- Each cell carries the colour of its column (top) and
+                            its row (left): the visual combination of both. --%>
+                            <.accent_bar
+                              id={"accent-bar-cell-#{cell_key}-column"}
+                              token={column["accent"]}
+                              class="absolute inset-x-0 top-0 h-1 z-10"
+                            />
+                            <.accent_bar
+                              id={"accent-bar-cell-#{cell_key}-row"}
+                              token={row["accent"]}
+                              orientation={:left}
+                              class="z-10"
+                            />
+
                             <div class="cell-body p-2">
                               <div class="mb-1">
                                 <div class="text-sm font-medium text-base-content break-words">

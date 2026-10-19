@@ -581,6 +581,10 @@ test.describe('template designer accents', () => {
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
 
+    // The designer previews the same combination on each cell.
+    await expect(page.locator('#accent-bar-cell-r1_c1-column')).toHaveClass(/bg-violet-400/);
+    await expect(page.locator('#accent-bar-cell-r1_c1-row')).toHaveClass(/bg-teal-400/);
+
     // A canvas instantiated from that template inherits the accents.
     await page.goto('/canvas');
     await page.locator('.phx-connected').first().waitFor();
@@ -596,6 +600,19 @@ test.describe('template designer accents', () => {
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
+
+    // Each cell carries its column colour on top and its row colour on the left.
+    await expect(page.locator('#accent-bar-cell-r1_c1-column')).toHaveClass(/bg-violet-400/);
+    await expect(page.locator('#accent-bar-cell-r1_c1-row')).toHaveClass(/bg-teal-400/);
+
+    // The cell outline sits on the cell's own edges.
+    const cellOutline = await page.locator('#accent-bar-cell-r1_c1-row').boundingBox();
+    const cell = await page.locator('#cell-card-r1_c1').boundingBox();
+    expect(Math.round(cellOutline!.x)).toBe(Math.round(cell!.x));
+    expect(cellOutline!.height).toBeGreaterThan(cell!.height - 4);
+
+    const cellTop = await page.locator('#accent-bar-cell-r1_c1-column').boundingBox();
+    expect(Math.round(cellTop!.y)).toBe(Math.round(cell!.y));
 
     // The read-only bar also spans the whole row height.
     const canvasBar = await page.locator('#accent-bar-row-r1').boundingBox();

@@ -722,7 +722,23 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                           </div>
                         </td>
                         <%= for cell_key <- Enum.at(@layout_map["layout"], ri, []) do %>
-                          <td class="p-2 border border-base-content/10 align-top">
+                          <% [_row_id, column_id] = String.split(cell_key, "_", parts: 2) %>
+                          <% column =
+                            Enum.find(@layout_map["columns"] || [], &(&1["id"] == column_id)) %>
+                          <td class="relative p-2 border border-base-content/10 align-top">
+                            <%!-- Each cell previews the colour combination of its
+                            column (top) and its row (left). --%>
+                            <.accent_bar
+                              id={"accent-bar-cell-#{cell_key}-column"}
+                              token={column && column["accent"]}
+                              class="absolute inset-x-0 top-0 h-1 z-10"
+                            />
+                            <.accent_bar
+                              id={"accent-bar-cell-#{cell_key}-row"}
+                              token={row_meta["accent"]}
+                              orientation={:left}
+                              class="z-10"
+                            />
                             <div id={"cell-#{cell_key}"} class="rounded-lg bg-base-300/50 p-2">
                               <form
                                 id={"cell-#{cell_key}-label-form"}
