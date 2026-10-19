@@ -54,19 +54,18 @@ defmodule PscWeb.Router do
       on_mount: [{PscWeb.UserAuth, :require_authenticated}] do
       live "/documents", DocumentLive.Index, :index
       live "/documents/:id", DocumentLive.Editor, :show
-      # The fixed 12-cell Problem-Solution canvas (pre-configurable
-      # implementation) — parked under its own path so the canonical
-      # "Canvases" routes belong to configurable canvases.
-      live "/psc-canvas", CanvasLive.Index, :index
-      live "/psc-canvas/:id", CanvasLive.Editor, :edit
-      live "/canvases", UnstrCanvasLive.Index, :index
-      live "/canvases/:id", UnstrCanvasLive.Editor, :edit
+      live "/canvas", UnstrCanvasLive.Index, :index
+      live "/canvas/:id", UnstrCanvasLive.Editor, :edit
       live "/templates", CanvasLayoutLive.Index, :index
       live "/templates/new", CanvasLayoutLive.Editor, :new
       live "/templates/:id", CanvasLayoutLive.Editor, :edit
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
+
+    # Old canvas URLs, kept alive for bookmarks from earlier releases.
+    get "/canvases", RedirectController, :canvases
+    get "/canvases/:id", RedirectController, :canvas
 
     post "/users/update-password", UserSessionController, :update_password
   end

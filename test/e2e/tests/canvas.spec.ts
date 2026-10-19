@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * Unstructured canvas editor (/canvases) E2E tests.
+ * Unstructured canvas editor (/canvas) E2E tests.
  *
  * test 1 — single-player: create a canvas, edit a cell through the
  *   MarkdownField hook (click → type → blur), watch the autosave badge go
@@ -37,7 +37,7 @@ async function dismissFlash(page: Page): Promise<void> {
 
 /** Create a canvas from the index page and open its editor. */
 async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
-  await page.goto('/canvases');
+  await page.goto('/canvas');
   await page.locator('.phx-connected').first().waitFor();
 
   await page.getByPlaceholder('Enter canvas name...').fill(name);
@@ -50,7 +50,7 @@ async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
   const card = page.locator(`h3:text-is("${name}")`).locator('..');
   await card.getByRole('link', { name: 'Edit' }).click();
 
-  await page.waitForURL(/\/canvases\/[0-9a-f-]{36}/);
+  await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
   await expect(page.locator('#canvas-name-form')).toBeVisible();
   return page.url();
 }
@@ -75,6 +75,61 @@ async function editCell(page: Page, cellKey: string, text: string, initialText =
   // The blur handler requests a server-side Markdown re-render.
   await expect(display).toContainText(text, { timeout: 15_000 });
 }
+
+test.describe('canvas editor mobile fullscreen cells', () => {
+  test('fullscreens a tapped cell, edits, swipes between cells and returns', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('Mobile Cell'));
+
+    const expanded = page.locator('.canvas-cell.is-expanded');
+    const card = page.locator('.canvas-cell').first();
+    await expect(card).toBeVisible();
+
+    // First tap: the cell animates into the whole viewport, no editor yet.
+    await card.click({ position: { x: 14, y: 12 } });
+    await expect(card).toHaveClass(/is-expanded/);
+    await expect(card).toHaveCSS('animation-name', 'cell-fullscreen-in');
+    // The entrance animation scales the card; wait for its final size.
+    await expect
+      .poll(async () => {
+        const box = await card.boundingBox();
+        return box ? [Math.round(box.width), Math.round(box.height)] : null;
+      })
+      .toEqual([390, 844]);
+    await expect(page.locator('[data-cell-exit]').first()).toBeVisible();
+
+    const swipe = async (fromX: number, fromY: number, toX: number, toY: number) => {
+      await page.mouse.move(fromX, fromY);
+      await page.mouse.down();
+      await page.mouse.move(toX, toY, { steps: 8 });
+      await page.mouse.up();
+    };
+
+    // Swipe left → next column, swipe right → back.
+    await swipe(320, 420, 180, 420);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'leverage');
+    await swipe(120, 420, 280, 420);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'problem');
+
+    // Swipe up → next row, swipe down → back. A swipe never opens the editor.
+    await swipe(200, 500, 200, 350);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'outer_environment');
+    await expect(expanded.locator('textarea:visible')).toHaveCount(0);
+    await swipe(200, 350, 200, 520);
+    await expect(expanded).toHaveAttribute('data-cell-key', 'problem');
+
+    // Second tap: the field opens for editing inside the fullscreen cell.
+    await card.locator('.cell-body').click({ position: { x: 40, y: 60 } });
+    await expect(card.locator('textarea:visible')).toHaveCount(1);
+
+    // The floating button returns to the grid and ends editing. The exit
+    // animation is short-lived, so assert the resulting state, not the frame.
+    await page.locator('[data-cell-exit]').first().click({ force: true });
+    await expect(card).not.toHaveClass(/is-expanded/, { timeout: 2000 });
+    await expect(page.locator('[data-cell-exit]').first()).toBeHidden();
+    await expect(card.locator('textarea:visible')).toHaveCount(0);
+  });
+});
 
 test.describe('canvas editor (single player)', () => {
   test('opens the field editor when clicking anywhere in a cell', async ({ page }) => {
@@ -360,18 +415,18 @@ test.describe('canvas accents', () => {
     await page.waitForURL(/\/templates$/);
 
     // A canvas built from it shows the bars and offers no color controls.
-    await page.goto('/canvases');
+    await page.goto('/canvas');
     await page.locator('.phx-connected').first().waitFor();
     const canvasName = uniqueName('Read-only canvas');
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
-    await page.getByLabel('Template').selectOption({ label: templateName });
+    await page.getByLabel('Start from').selectOption({ label: templateName });
     await page.getByRole('button', { name: 'Create Canvas' }).click();
     await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
     await dismissFlash(page);
 
     const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
     await canvasCard.getByRole('link', { name: 'Edit' }).click();
-    await page.waitForURL(/\/canvases\/[0-9a-f-]{36}/);
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
 
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-sky-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-amber-400/);
@@ -421,18 +476,18 @@ test.describe('template designer accents', () => {
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
 
     // A canvas instantiated from that template inherits the accents.
-    await page.goto('/canvases');
+    await page.goto('/canvas');
     await page.locator('.phx-connected').first().waitFor();
     const canvasName = uniqueName('Inherited Accents');
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
-    await page.getByLabel('Template').selectOption({ label: templateName });
+    await page.getByLabel('Start from').selectOption({ label: templateName });
     await page.getByRole('button', { name: 'Create Canvas' }).click();
     await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
     await dismissFlash(page);
 
     const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
     await canvasCard.getByRole('link', { name: 'Edit' }).click();
-    await page.waitForURL(/\/canvases\/[0-9a-f-]{36}/);
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
 

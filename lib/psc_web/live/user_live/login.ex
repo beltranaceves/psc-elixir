@@ -12,7 +12,7 @@ defmodule PscWeb.UserLive.Login do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-sm space-y-4">
+      <div class="mx-auto w-full max-w-md space-y-4">
         <div class="text-center">
           <.header>
             <p>Log in</p>
@@ -45,6 +45,7 @@ defmodule PscWeb.UserLive.Login do
             <UIForm.form_control>
               <UIInput.input
                 readonly={!!@current_scope}
+                class="h-11 text-base sm:h-10 sm:text-sm"
                 field={f[:email]}
                 type="email"
                 autocomplete="username"
@@ -60,6 +61,7 @@ defmodule PscWeb.UserLive.Login do
             <UIForm.form_control>
               <UIInput.input
                 field={f[:password]}
+                class="h-11 text-base sm:h-10 sm:text-sm"
                 type="password"
                 autocomplete="current-password"
                 spellcheck="false"

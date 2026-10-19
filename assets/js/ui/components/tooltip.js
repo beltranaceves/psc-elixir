@@ -117,6 +117,23 @@ class TooltipComponent extends Component {
     }, this.config.openDelay);
   }
 
+  // Touch devices have no hover-out: a tap opens the tooltip and the next tap
+  // (or an outside press, handled by the positioned element) closes it.
+  setupComponentEvents() {
+    super.setupComponentEvents();
+
+    if (!this.trigger) return;
+
+    this.handleTriggerClick = event => {
+      if (event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches) return;
+
+      this.clearTimers();
+      this.transition(this.stateMachine.state === "open" ? "close" : "open");
+    };
+
+    this.trigger.addEventListener("click", this.handleTriggerClick);
+  }
+
   delayClose(event) {
     if (event?.currentTarget?.contains(event.relatedTarget)) return;
 
@@ -164,6 +181,11 @@ class TooltipComponent extends Component {
       onPosition: ({ placement: actualPlacement }) => {
         this.content?.setAttribute("data-side", actualPlacement);
       },
+      // Close when the user presses anywhere outside (mouse or touch). Tooltips
+      // used to stay open after a tap on mobile, where there is no hover-out.
+      onOutsideClick: () => {
+        if (this.stateMachine?.state === "open") this.transition("close");
+      },
     };
 
     // Create positioned element
@@ -203,6 +225,11 @@ class TooltipComponent extends Component {
 
   beforeDestroy() {
     this.clearTimers();
+
+    if (this.trigger && this.handleTriggerClick) {
+      this.trigger.removeEventListener("click", this.handleTriggerClick);
+      this.handleTriggerClick = null;
+    }
 
     // Clean up the positioned element if it exists
     if (this.positionedElement) {

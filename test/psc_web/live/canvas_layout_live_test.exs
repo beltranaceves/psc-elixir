@@ -13,23 +13,22 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       {:ok, _lv, html} = live(conn, ~p"/templates")
 
       assert html =~ "Templates"
-      assert html =~ "Create New Template"
+      assert html =~ "New Template"
+      # Creating happens in the designer only — no duplicate inline form.
+      refute html =~ "Create New Template"
+      refute html =~ ~s(id="new-template-form")
     end
 
-    test "creates a template from the index form", %{conn: conn, user: user} do
+    test "the New Template action opens the designer", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates")
 
-      html =
+      {:ok, editor, _html} =
         lv
-        |> form("#new-template-form", %{
-          "name" => "My VIT",
-          "description" => "Visual inquiry template"
-        })
-        |> render_submit()
+        |> element("a[href='/templates/new']")
+        |> render_click()
+        |> follow_redirect(conn, ~p"/templates/new")
 
-      assert html =~ "Template created"
-      assert html =~ "My VIT"
-      assert Canvas.list_templates(user) |> Enum.any?(&(&1.name == "My VIT"))
+      assert has_element?(editor, "#template-form")
     end
 
     test "own templates show the Owner badge", %{conn: conn, user: user} do
@@ -80,7 +79,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/templates")
 
-      assert {:error, {:redirect, %{to: "/canvases/" <> canvas_id}}} =
+      assert {:error, {:redirect, %{to: "/canvas/" <> canvas_id}}} =
                lv
                |> element("button[phx-click='instantiate'][phx-value-id='#{template.id}']")
                |> render_click()

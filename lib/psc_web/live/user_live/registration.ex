@@ -14,7 +14,7 @@ defmodule PscWeb.UserLive.Registration do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto max-w-sm">
+      <div class="mx-auto w-full max-w-md">
         <div class="text-center">
           <.header>
             Register for an account
@@ -35,6 +35,7 @@ defmodule PscWeb.UserLive.Registration do
               <UIInput.input
                 field={@form[:email]}
                 type="email"
+                class="h-11 text-base sm:h-10 sm:text-sm"
                 autocomplete="username"
                 spellcheck="false"
                 placeholder="you@example.com"
@@ -53,6 +54,7 @@ defmodule PscWeb.UserLive.Registration do
                 type="password"
                 autocomplete="new-password"
                 placeholder="At least 12 characters"
+                class="h-11 text-base sm:h-10 sm:text-sm"
                 required
               />
             </UIForm.form_control>
@@ -69,6 +71,7 @@ defmodule PscWeb.UserLive.Registration do
                 type="password"
                 autocomplete="new-password"
                 placeholder="Repeat your password"
+                class="h-11 text-base sm:h-10 sm:text-sm"
                 required
               />
             </UIForm.form_control>

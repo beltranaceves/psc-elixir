@@ -1,6 +1,6 @@
 # Canvas — per-cell CRDT flow
 
-The configurable canvas (`/canvases`) stores all cell content in a single
+The configurable canvas (`/canvas`) stores all cell content in a single
 `cells` map. Edits are structured operations (`update_cell`, `update_name`,
 `update_description`) that are event-sourced, broadcast, and folded into the map —
 with a per-tab `client_id` so a client skips the echo of its own operations.

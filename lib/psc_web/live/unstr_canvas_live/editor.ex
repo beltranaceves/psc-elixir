@@ -58,7 +58,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       {:ok,
        socket
        |> put_flash(:error, "Canvas not found")
-       |> redirect(to: ~p"/canvases")}
+       |> redirect(to: ~p"/canvas")}
     end
   end
 
@@ -133,7 +133,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           {:noreply,
            socket
            |> assign(:canvas, updated_canvas)
-           |> put_flash(:info, "Canvas shared with #{email}")}
+           |> put_flash(:success, "Canvas shared with #{email}")}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to share canvas")}
@@ -151,7 +151,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           {:noreply,
            socket
            |> assign(:canvas, updated_canvas)
-           |> put_flash(:info, "Access removed for #{email}")}
+           |> put_flash(:success, "Access removed for #{email}")}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to remove access")}
@@ -405,7 +405,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       current_scope={@current_scope}
       header_title="Canvas Editor"
       fill_height
-      main_class="px-4 py-2 sm:px-6 lg:px-8"
+      main_class="px-2 py-2 sm:px-6 lg:px-8"
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col">
@@ -576,6 +576,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                           <div
                             id={"cell-card-" <> cell_key}
                             phx-hook="CellFocus"
+                            data-cell-key={cell_key}
                             class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
                           >
                             <div class="cell-body p-2">
@@ -633,6 +634,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                 </div>
                               </.form>
                             </div>
+
+                            <button
+                              type="button"
+                              data-cell-exit="true"
+                              class="cell-exit fixed bottom-5 right-5 z-[70] size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-base-300"
+                              aria-label="Close full screen"
+                            >
+                              <.icon name="hero-x-mark" class="size-5" />
+                            </button>
                           </div>
                         <% end %>
                       </td>

@@ -4,7 +4,7 @@
 
 The canvas editor renders and edits a **canvas**. It is structure-agnostic: it decodes the canvas's `cells` map and renders whatever grid dimensions, cells, and cell fields are defined. All edits flow through CRDT operations for real-time multi-user collaboration.
 
-> **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.UnstrCanvasLive` (this canvas editor) and `PscWeb.CanvasLayoutLive` (the template designer), and the routes are `/canvases` and `/templates`.
+> **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.UnstrCanvasLive` (this canvas editor) and `PscWeb.CanvasLayoutLive` (the template designer), and the routes are `/canvas` and `/templates`.
 
 ### Design principle
 

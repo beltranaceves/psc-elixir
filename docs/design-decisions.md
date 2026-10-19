@@ -31,6 +31,7 @@ it costs, and the evidence it was verified against.
 | [ADR-019](#adr-019--auth-feedback-inline-validation-plus-feedback-cards) | Auth feedback: inline validation plus feedback cards | Accepted | 2026-10-18 |
 | [ADR-020](#adr-020--optional-cell-section-titles-and-a-dense-square-grid) | Optional cell section titles, and a dense square grid | Accepted | 2026-10-19 |
 | [ADR-021](#adr-021--mobile-top-bars-one-menu-and-a-stacked-canvas-header) | Mobile top bars: one menu and a stacked canvas header | Accepted | 2026-10-19 |
+| [ADR-022](#adr-022--ui-consolidation-one-canvas-model-one-creation-path) | UI consolidation: one canvas model, one creation path | Accepted | 2026-10-19 |
 
 ---
 
@@ -349,24 +350,24 @@ end
 
 ## ADR-010 — Vocabulary: canvas, template, canvas editor, template designer
 
-**Context.** The codebase accumulated four names for two concepts: an *unstructured canvas* / *unstr canvas* / *canvas instance*, and a *canvas layout* / *layout* / *template* / *creator*. The routes made it worse — `/canvas-designer` was the canvas **editor** while `/canvas-layouts` was the **template** designer — and `/canvases` was already taken by the earlier fixed-12-cell PSC implementation, which duplicated the newer one. For a report and for users, this is noise.
+**Context.** The codebase accumulated four names for two concepts: an *unstructured canvas* / *unstr canvas* / *canvas instance*, and a *canvas layout* / *layout* / *template* / *creator*. The routes made it worse — `/canvas-designer` was the canvas **editor** while `/canvas-layouts` was the **template** designer — and `/canvas` was already taken by the earlier fixed-12-cell PSC implementation, which duplicated the newer one. For a report and for users, this is noise.
 
 **Decision.** Two nouns, two surface names:
 
 | Domain | Table | Schema | Route | Surface |
 |---|---|---|---|---|
-| **Canvas** | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | `/canvases` | **canvas editor** (`PscWeb.UnstrCanvasLive`) |
+| **Canvas** | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | `/canvas` | **canvas editor** (`PscWeb.UnstrCanvasLive`) |
 | **Template** | `canvas_layouts` | `Psc.Canvas.Layout` | `/templates` | **template designer** (`PscWeb.CanvasLayoutLive`) |
 | Problem–Solution Canvas (fixed 12 cells) | `canvases` | `Psc.Canvas.Canvas` | `/psc-canvas` | legacy canvas |
 
-- `/canvas-designer` → `/canvases`; `/canvas-layouts` → `/templates`.
+- `/canvas-designer` → `/canvas`; `/canvas-layouts` → `/templates`.
 - UI text follows the nouns (nav reads Canvases · Templates — Documents is parked, see ADR-018; the create form's "Layout" selector is now "Template").
 - Docs follow too: `docs/spec/creator.md` → `template-designer.md`, `docs/spec/editor.md` → `canvas-editor.md`, and `unstr_canvas_collaboration_flow.md` → `canvas_collaboration_flow.md`. Each spec opens with a table bridging the domain words to the identifiers.
 - **Module, table and function names are unchanged.** Renaming `unstr_canvases`/`canvas_layouts` would mean a table migration and a wide rename for no user-visible gain; instead the mapping is documented once ([data_model.md](data_model.md)) and repeated at the top of each spec.
 
 **Alternatives considered.** A full rename of tables and modules to match the vocabulary — deferred as churn with migration risk. Keeping the old routes as redirects — skipped because the app is pre-release and no external links depend on them.
 
-**Consequences.** The legacy fixed-PSC canvas moved from `/canvases` to `/psc-canvas`; it is unreachable from the navigation and its fate (retire, or fold its data into a built-in template) is an open question, recorded below rather than decided here.
+**Consequences.** The legacy fixed-PSC canvas moved from `/canvas` to `/psc-canvas`; it is unreachable from the navigation and its fate (retire, or fold its data into a built-in template) is an open question, recorded below rather than decided here.
 
 ---
 
@@ -407,7 +408,7 @@ pure consumer: it renders whatever the template's JSON carried at instantiation,
 canvases created before an accent existed stay unchanged until they are recreated — the
 same rule already applied to row/column labels. Colour is never the only carrier of
 meaning: labels remain, bars are `aria-hidden`, and each swatch is a labelled button.
-Clearing an accent writes `nil`, and existing templates/canvases without the key render
+Clearing an accent writes `nil`, and existing templates/canvas without the key render
 exactly as before.
 
 ---
@@ -662,7 +663,7 @@ first-class route misrepresents the platform and splits the mental model.
 **Alternatives considered.** Delete the routes and LiveViews (throws away the editor,
 inline preview and CRDT document work that the canvas integration will reuse); keep the
 nav item but flag it as experimental (still advertises a standalone feature that is not
-part of the product); redirect `/documents` to `/canvases` (surprising for anyone with a
+part of the product); redirect `/documents` to `/canvas` (surprising for anyone with a
 bookmark and hides the parked state).
 
 **Consequences.** The platform now presents two nouns — Canvases and Templates — matching
@@ -779,6 +780,64 @@ second header row for the nav (costs vertical space on a dense canvas); icon-onl
 **Consequences.** The header never overflows down to 320 px and the canvas keeps its
 height (phones add ~54 px to the header). The account actions exist in two renderings
 (desktop block and mobile menu), so changes must be mirrored.
+
+---
+
+## ADR-022 — UI consolidation: one canvas model, one creation path
+
+**Context.** After the canvas-editor rework the app had accumulated UI debt: two canvas
+implementations (the fixed 12-cell PSC and the configurable canvas), two different ways to
+create a template, doubled page padding, inconsistent buttons in the template library,
+auth inputs small enough to trigger iOS focus zoom, a success message rendered as neutral
+info, and a tooltip that could leave the viewport and stay open after a tap.
+
+**Decision.**
+- **One canvas model.** Removed the legacy fixed canvas: `/psc-canvas` routes,
+  `PscWeb.CanvasLive.*`, `Psc.Canvas.Canvas` plus its 15 embedded cell schemas, their context
+  functions and tests. The configurable canvas is the only canvas; its routes moved from
+  `/canvases` to **`/canvas`** (and `/canvas/:id`), with `RedirectController` keeping the old
+  URLs alive for bookmarks.
+- **One template creation path.** The template library no longer carries an inline
+  "Create New Template" form; **New Template** opens the designer (the only place a structure
+  is authored). Card actions all use the same button family (primary *Use Template*;
+  outline *Edit* / *Share* / *Delete*) at the same height, radius and font.
+- **Template-first canvas creation.** The canvas list's create section is **"Start a canvas"**
+  with the **"Start from"** template picker first, then name and description.
+- **Density.** The app shell's vertical padding dropped from 32 px to 24 px and page-level
+  wrappers no longer add their own `py-*`; the default container gained `w-full` because an
+  auto-margined flex item otherwise shrinks to fit-content instead of filling the page.
+- **Editor gutters on phones.** The template designer and canvas editor drop to 8 px horizontal
+  page gutters below `sm`, and the designer's grid card is full-bleed (its "Grid" header keeps
+  its own padding), so the table starts ~9 px from the viewport edge instead of 41 px.
+- **Auth on phones.** Auth inputs are 16 px / 44 px below `sm` (below 16 px iOS zooms the page
+  on focus) and the form container is `max-w-md`, giving ~92 % of a 390 px viewport.
+- **Success is green.** Flash gained a `:success` kind (green border/badge, check icon,
+  auto-dismiss) used for positive outcomes; `:info` stays neutral (welcome, logged out) and
+  `:error` unchanged.
+- **Tooltip robustness.** The positioner clamps into the viewport after flipping; tooltips
+  close on an outside press (mouse or touch) and toggle on tap where hover is unavailable; the
+  JS hide timer matches the CSS exit animation so the fade is not cut short.
+- **Designer on phones.** The designer grid keeps a computed minimum width and pans
+  horizontally instead of squeezing every input to a few pixels.
+- **Fullscreen cells on phones.** A first tap on a canvas cell expands it to the viewport
+  (scroll locked, floating close button, Escape also closes); a second tap enters editing, so
+  cramped grid cells are readable and editable without fighting the grid. The expansion
+  animates in/out (respecting `prefers-reduced-motion`) and swiping left/right/up/down inside
+  the fullscreen cell moves to the neighbouring cell on that axis — vertical swipes scroll
+  instead when the content is taller than the screen.
+
+**Alternatives considered.** Keeping both canvas models (two vocabularies, dead routes, more
+tests); keeping the inline template form (two creation flows, list buried below the fold on
+mobile); shrinking fonts to fit the designer grid (unusable inputs); fixing the tooltip only
+at the usage site (the bug is in the shared component); mapping `:info` to green globally
+(loses the neutral-information channel).
+
+**Consequences.** `grep -r unstr` still shows the `UnstrCanvas*` module names and
+`grep -ri "canvas"` is still frequent — deleting the legacy generation removed the largest
+block (≈18 modules), but renaming `UnstrCanvas` → `Canvas`, `Layout` → `Template` and
+`CanvasLayoutLive` → `TemplateLive` is a separate mechanical refactor that was **not** done
+here. Old `/canvases` URLs redirect through the authenticated scope, so they require a session
+just like the new ones.
 
 ---
 

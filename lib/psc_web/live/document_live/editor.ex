@@ -175,7 +175,7 @@ defmodule PscWeb.DocumentLive.Editor do
           {:noreply,
            socket
            |> assign(:document, updated_document)
-           |> put_flash(:info, "Document shared with #{email}")}
+           |> put_flash(:success, "Document shared with #{email}")}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to share document")}
@@ -194,7 +194,7 @@ defmodule PscWeb.DocumentLive.Editor do
           {:noreply,
            socket
            |> assign(:document, updated_document)
-           |> put_flash(:info, "Access removed for #{email}")}
+           |> put_flash(:success, "Access removed for #{email}")}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to remove access")}

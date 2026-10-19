@@ -8,7 +8,7 @@ operation logs used to rebuild state.
 
 | Domain | Table | Schema | Surface |
 |---|---|---|---|
-| Canvas (configurable workspace) | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | `/canvases`, `PscWeb.UnstrCanvasLive` |
+| Canvas (configurable workspace) | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | `/canvas`, `PscWeb.UnstrCanvasLive` |
 | Template (reusable structure) | `canvas_layouts` | `Psc.Canvas.Layout` | `/templates`, `PscWeb.CanvasLayoutLive` |
 | Problem–Solution Canvas (fixed 12 cells) | `canvases` | `Psc.Canvas.Canvas` | `/psc-canvas`, `PscWeb.CanvasLive` |
 

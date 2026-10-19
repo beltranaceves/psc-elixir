@@ -15,8 +15,8 @@ test.describe('authenticated app', () => {
   });
 
   test('canvases index loads', async ({ page }) => {
-    await page.goto('/canvases');
-    await expect(page).toHaveURL(/\/canvases/);
+    await page.goto('/canvas');
+    await expect(page).toHaveURL(/\/canvas/);
     await expect(page.getByRole('heading', { level: 1, name: 'Canvases' })).toBeVisible();
   });
 

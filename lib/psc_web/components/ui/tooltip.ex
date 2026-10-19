@@ -171,7 +171,9 @@ defmodule PscWeb.Components.UI.Tooltip do
   defp get_animation_config do
     %{
       "open_to_closed" => %{
-        duration: 130,
+        # Must match the CSS exit animation (tw-animate default is 150ms);
+        # a shorter JS timer hides the element before the fade finishes.
+        duration: 150,
         target_part: "content"
       }
     }

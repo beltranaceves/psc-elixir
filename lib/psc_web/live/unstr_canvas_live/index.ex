@@ -41,7 +41,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
         {:noreply,
          socket
          |> assign(:my_canvases, my_canvases)
-         |> put_flash(:info, "Canvas created successfully")}
+         |> put_flash(:success, "Canvas created successfully")}
 
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You do not have access to that template")}
@@ -63,7 +63,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
       {:noreply,
        socket
        |> assign(:my_canvases, my_canvases)
-       |> put_flash(:info, "Canvas deleted")}
+       |> put_flash(:success, "Canvas deleted")}
     else
       {:noreply, put_flash(socket, :error, "Unauthorized")}
     end
@@ -115,20 +115,26 @@ defmodule PscWeb.UnstrCanvasLive.Index do
       header_title="Canvases"
       container_class="w-full mx-auto max-w-screen-xl"
     >
-      <div class="max-w-6xl mx-auto px-4 py-8">
-        <div class="mb-8">
+      <div class="mx-auto w-full max-w-6xl">
+        <div class="mb-6">
           <h1 class="text-2xl font-semibold text-base-content">Canvases</h1>
         </div>
 
-        <%!-- Create New Canvas Form --%>
-        <div class="mb-8 rounded-xl border border-base-content/10 bg-base-200 p-6">
-          <h2 class="text-lg font-medium text-base-content mb-4">Create New Canvas</h2>
+        <%!-- Start a canvas: templates first, so the structure is chosen before naming --%>
+        <div class="mb-6 rounded-xl border border-base-content/10 bg-base-200 p-4 sm:p-6">
+          <h2 class="mb-4 text-lg font-medium text-base-content">Start a canvas</h2>
           <.form
             for={@new_canvas_form}
             id="new-canvas-form"
             phx-submit="create_canvas"
             class="space-y-4"
           >
+            <.input
+              field={@new_canvas_form[:template_id]}
+              type="select"
+              options={@template_options}
+              label="Start from"
+            />
             <.input
               field={@new_canvas_form[:name]}
               type="text"
@@ -141,12 +147,6 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               type="textarea"
               label="Description"
               placeholder="Enter canvas description..."
-            />
-            <.input
-              field={@new_canvas_form[:template_id]}
-              type="select"
-              options={@template_options}
-              label="Template"
             />
             <.button type="submit">
               Create Canvas
@@ -166,10 +166,15 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               <%= for canvas <- @my_canvases do %>
                 <div class="rounded-xl border border-base-content/10 bg-base-200 p-6 hover:border-base-content/25 transition-colors">
                   <h3 class="font-medium text-base-content">{canvas.name}</h3>
-                  <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
+                  <p
+                    :if={canvas.description not in [nil, ""]}
+                    class="mt-2 text-sm text-base-content/60"
+                  >
+                    {canvas.description}
+                  </p>
                   <div class="mt-4 flex gap-2">
                     <.link
-                      navigate={~p"/canvases/#{canvas.id}"}
+                      navigate={~p"/canvas/#{canvas.id}"}
                       class="flex-1 px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       Edit
@@ -205,7 +210,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                   <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
                   <div class="mt-4">
                     <.link
-                      navigate={~p"/canvases/#{canvas.id}"}
+                      navigate={~p"/canvas/#{canvas.id}"}
                       class="block w-full px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
                       View

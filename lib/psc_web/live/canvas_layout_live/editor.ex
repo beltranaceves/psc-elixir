@@ -230,7 +230,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       {:ok, _template} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Template saved")
+         |> put_flash(:success, "Template saved")
          |> redirect(to: ~p"/templates")}
 
       {:error, _changeset} ->
@@ -290,7 +290,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
         {:noreply,
          socket
          |> assign(:editing_layout, Canvas.get_template_with_author(updated.id))
-         |> put_flash(:info, "Template shared with #{email}")}
+         |> put_flash(:success, "Template shared with #{email}")}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to share template")}
@@ -304,7 +304,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
         {:noreply,
          socket
          |> assign(:editing_layout, Canvas.get_template_with_author(updated.id))
-         |> put_flash(:info, "Access removed for #{email}")}
+         |> put_flash(:success, "Access removed for #{email}")}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to remove access")}
@@ -430,9 +430,10 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       current_scope={@current_scope}
       header_title="Designer"
       header_section="Templates"
+      main_class="px-2 py-2 sm:px-6 lg:px-8"
       container_class="w-full mx-auto max-w-screen-xl"
     >
-      <div class="px-4 py-6">
+      <div>
         <%= if @editing_layout && !@owner? do %>
           <div class="mb-6 p-3 rounded-lg border border-base-content/10 bg-base-200 text-sm text-base-content/60">
             You have read-only access to this template. Ask the owner to make changes.
@@ -458,7 +459,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             id="template-form"
             phx-change="mark_dirty"
             phx-submit="save_template"
-            class="p-6 rounded-xl border border-base-content/10 bg-base-200 space-y-4"
+            class="rounded-xl border border-base-content/10 bg-base-200 p-4 space-y-4 sm:p-6"
           >
             <div>
               <UILabel.label for={@template_form[:name].id}>Name</UILabel.label>
@@ -514,11 +515,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             <% end %>
           </.form>
 
-          <div class="p-6 rounded-xl border border-base-content/10 bg-base-200">
-            <div class="flex items-center justify-between mb-4">
+          <div class="overflow-hidden rounded-xl border border-base-content/10 bg-base-200 p-0 sm:p-6">
+            <div class="mb-2 flex items-center justify-between gap-2 px-2 pt-2 sm:mb-4 sm:px-0 sm:pt-0">
               <h2 class="text-sm font-medium text-base-content">Grid</h2>
               <%= if @owner? do %>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                   <UIButton.button variant="outline" size="sm" phx-click="add_column">
                     Add Column
                   </UIButton.button>
@@ -530,12 +531,15 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             </div>
 
             <%= if Enum.empty?(@layout_map["rows"]) or Enum.empty?(@layout_map["columns"]) do %>
-              <p class="text-sm text-base-content/50">
+              <p class="px-2 pb-2 text-sm text-base-content/50 sm:px-0 sm:pb-0">
                 Add at least one row and one column to start building your template.
               </p>
             <% else %>
               <div class="overflow-auto">
-                <table class="w-full border-collapse table-fixed text-sm">
+                <table
+                  class="w-full border-collapse table-fixed text-sm"
+                  style={"min-width: #{length(@layout_map["columns"] || []) * 14 + 10}rem"}
+                >
                   <thead>
                     <tr>
                       <th class="w-40 p-2 border border-base-content/10"></th>

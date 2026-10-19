@@ -20,11 +20,11 @@ defmodule PscWeb.UserSessionControllerTest do
       assert get_session(conn, :user_token)
       assert redirected_to(conn) == ~p"/"
 
-      # "/" routes logged-in users to /canvases; account menu is in the navbar
+      # "/" routes logged-in users to /canvas; account menu is in the navbar
       conn = get(conn, ~p"/")
-      assert redirected_to(conn) == ~p"/canvases"
+      assert redirected_to(conn) == ~p"/canvas"
 
-      conn = get(conn, ~p"/canvases")
+      conn = get(conn, ~p"/canvas")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"
@@ -87,12 +87,12 @@ defmodule PscWeb.UserSessionControllerTest do
       assert get_session(conn, :user_token)
       assert redirected_to(conn) == ~p"/"
 
-      # "/" is now an entry point: logged-in users are routed to /canvases
+      # "/" is now an entry point: logged-in users are routed to /canvas
       # and the account menu lives in the app navbar there.
       conn = get(conn, ~p"/")
-      assert redirected_to(conn) == ~p"/canvases"
+      assert redirected_to(conn) == ~p"/canvas"
 
-      conn = get(conn, ~p"/canvases")
+      conn = get(conn, ~p"/canvas")
       response = html_response(conn, 200)
       assert response =~ user.email
       assert response =~ ~p"/users/settings"

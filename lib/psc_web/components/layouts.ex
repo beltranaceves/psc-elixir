@@ -32,11 +32,11 @@ defmodule PscWeb.Layouts do
     doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
 
   attr :container_class, :string,
-    default: "mx-auto max-w-2xl space-y-4",
+    default: "mx-auto w-full max-w-2xl space-y-4",
     doc: "the CSS class used for the main container; override to change width"
 
   attr :main_class, :string,
-    default: "px-4 py-8 sm:px-6 lg:px-8",
+    default: "px-4 py-6 sm:px-6 lg:px-8",
     doc: "the padding applied to the main element; reduce it for dense, full-height pages"
 
   attr :fill_height, :boolean,
@@ -82,7 +82,7 @@ defmodule PscWeb.Layouts do
           <%!-- Private sections: only advertised to signed-in users. --%>
           <nav :if={@current_scope && @current_scope.user} class="hidden items-center gap-1 md:flex">
             <.link
-              navigate={~p"/canvases"}
+              navigate={~p"/canvas"}
               aria-current={nav_current(@header_title, @header_section, "Canvases")}
               class={[
                 "px-3 py-1.5 rounded-lg text-sm transition-colors",
@@ -137,7 +137,7 @@ defmodule PscWeb.Layouts do
                   </p>
                   <div class="my-1 h-px bg-base-content/10"></div>
                   <.link
-                    navigate={~p"/canvases"}
+                    navigate={~p"/canvas"}
                     class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content"
                   >
                     Canvases
@@ -216,6 +216,7 @@ defmodule PscWeb.Layouts do
       aria-live="polite"
       class="pointer-events-none fixed inset-x-3 top-16 z-50 flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:w-96 sm:items-end"
     >
+      <.flash kind={:success} flash={@flash} />
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 

@@ -4,7 +4,7 @@
 
 The template designer lets users define **reusable templates** and share them across users. A template captures the full structure of a canvas: grid dimensions and per-cell metadata (label, content fields). Templates are the instantiation source for canvases — when a user creates a canvas from a template, the template's structure is copied into the canvas's `cells` map.
 
-> **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.CanvasLayoutLive` (this template designer) and `PscWeb.UnstrCanvasLive` (the canvas editor), and the routes are `/templates` and `/canvases`.
+> **Terminology.** A **canvas** is one configurable workspace; a **template** is the reusable structure a canvas is created from. In code these are the `unstr_canvases` and `canvas_layouts` tables (`Psc.Canvas.UnstrCanvas`, `Psc.Canvas.Layout`), the surfaces are `PscWeb.CanvasLayoutLive` (this template designer) and `PscWeb.UnstrCanvasLive` (the canvas editor), and the routes are `/templates` and `/canvas`.
 
 ### Design principle
 

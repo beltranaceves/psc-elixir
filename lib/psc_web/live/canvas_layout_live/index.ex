@@ -6,8 +6,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Input, as: UIInput
   alias PscWeb.Components.UI.Badge, as: UIBadge
-  alias PscWeb.Components.UI.Textarea, as: UITextarea
-  alias PscWeb.Components.UI.Label, as: UILabel
+  alias PscWeb.Components.UI.Helpers, as: UIHelpers
 
   alias Psc.Canvas
 
@@ -19,27 +18,8 @@ defmodule PscWeb.CanvasLayoutLive.Index do
     {:ok,
      socket
      |> assign(:templates, templates)
-     |> assign(:new_template_form, to_form(%{}))
      |> assign(:delete_confirm_id, nil)
      |> assign(:share_form_for, nil)}
-  end
-
-  @impl true
-  def handle_event("create_template", %{"name" => name, "description" => description}, socket) do
-    user = socket.assigns.current_scope.user
-    attrs = %{"name" => name, "description" => description, "layout_map" => default_layout_map()}
-
-    case Canvas.create_template(user.id, attrs) do
-      {:ok, _template} ->
-        {:noreply,
-         socket
-         |> assign(:templates, Canvas.list_templates(user))
-         |> assign(:new_template_form, to_form(%{}))
-         |> put_flash(:info, "Template created")}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to create template")}
-    end
   end
 
   @impl true
@@ -62,7 +42,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
        socket
        |> assign(:templates, Canvas.list_templates(user))
        |> assign(:delete_confirm_id, nil)
-       |> put_flash(:info, "Template deleted")}
+       |> put_flash(:success, "Template deleted")}
     else
       false -> {:noreply, put_flash(socket, :error, "Only the template owner can delete")}
       _ -> {:noreply, put_flash(socket, :error, "Template not found")}
@@ -89,7 +69,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
        socket
        |> assign(:templates, Canvas.list_templates(user))
        |> assign(:share_form_for, nil)
-       |> put_flash(:info, "Template shared with #{email}")}
+       |> put_flash(:success, "Template shared with #{email}")}
     else
       false -> {:noreply, put_flash(socket, :error, "Only the template owner can share")}
       _ -> {:noreply, put_flash(socket, :error, "Failed to share template")}
@@ -106,7 +86,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       {:noreply,
        socket
        |> assign(:templates, Canvas.list_templates(user))
-       |> put_flash(:info, "Access removed for #{email}")}
+       |> put_flash(:success, "Access removed for #{email}")}
     else
       false -> {:noreply, put_flash(socket, :error, "Only the template owner can manage access")}
       _ -> {:noreply, put_flash(socket, :error, "Failed to remove access")}
@@ -123,8 +103,8 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           {:ok, canvas} ->
             {:noreply,
              socket
-             |> put_flash(:info, "Canvas created from template")
-             |> redirect(to: ~p"/canvases/#{canvas.id}")}
+             |> put_flash(:success, "Canvas created from template")
+             |> redirect(to: ~p"/canvas/#{canvas.id}")}
 
           {:error, _changeset} ->
             {:noreply, put_flash(socket, :error, "Failed to create canvas from template")}
@@ -135,39 +115,6 @@ defmodule PscWeb.CanvasLayoutLive.Index do
     end
   end
 
-  # Default 2x2 template shape per docs/spec/creator.md: rows/columns/layout
-  # plus cells nested under "cells" with label/fields/defaults.
-  defp default_layout_map do
-    cell = fn label ->
-      %{
-        "label" => label,
-        "fields" => ["content"],
-        "defaults" => %{"content" => ""}
-      }
-    end
-
-    %{
-      "rows" => [
-        %{"id" => "r1", "label" => "Row 1"},
-        %{"id" => "r2", "label" => "Row 2"}
-      ],
-      "columns" => [
-        %{"id" => "c1", "label" => "Column 1"},
-        %{"id" => "c2", "label" => "Column 2"}
-      ],
-      "layout" => [
-        ["r1_c1", "r1_c2"],
-        ["r2_c1", "r2_c2"]
-      ],
-      "cells" => %{
-        "r1_c1" => cell.("Cell 1"),
-        "r1_c2" => cell.("Cell 2"),
-        "r2_c1" => cell.("Cell 3"),
-        "r2_c2" => cell.("Cell 4")
-      }
-    }
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -175,55 +122,32 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       flash={@flash}
       current_scope={@current_scope}
       header_title="Templates"
-      container_class="w-full mx-auto max-w-screen-xl"
+      container_class="w-full"
     >
-      <div class="px-4 py-8">
-        <div class="flex items-center justify-between mb-8">
+      <div class="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-4">
+        <div class="flex items-center justify-between gap-3">
           <h1 class="text-2xl font-semibold text-base-content">Templates</h1>
           <.link
             navigate={~p"/templates/new"}
-            class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-content hover:opacity-90 transition-opacity"
+            class={[UIHelpers.button_variant(%{variant: "default", size: "sm"}), "gap-1.5"]}
           >
-            New Template
+            <.icon name="hero-plus" class="size-4" /> New Template
           </.link>
         </div>
 
-        <div class="mb-8 p-6 rounded-xl border border-base-content/10 bg-base-200">
-          <h2 class="text-lg font-medium text-base-content mb-4">Create New Template</h2>
-          <.form
-            for={@new_template_form}
-            id="new-template-form"
-            phx-submit="create_template"
-            class="space-y-4"
-          >
-            <div>
-              <UILabel.label for="new-template-name">Name</UILabel.label>
-              <UIInput.input
-                field={@new_template_form[:name]}
-                type="text"
-                placeholder="Template name..."
-                required
-              />
-            </div>
-            <div>
-              <UILabel.label for="new-template-description">Description</UILabel.label>
-              <UITextarea.textarea
-                field={@new_template_form[:description]}
-                rows="2"
-              />
-            </div>
-            <UIButton.button type="submit">Create Template</UIButton.button>
-          </.form>
-        </div>
-
         <div>
-          <h2 class="text-lg font-medium text-base-content mb-4">Available Templates</h2>
+          <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-base-content/50">
+            Available templates
+          </h2>
           <%= if Enum.empty?(@templates) do %>
-            <div class="p-8 text-center rounded-xl border border-base-content/10 bg-base-200">
-              <p class="text-base-content/60">No templates yet. Create one to get started.</p>
+            <div class="rounded-xl border border-dashed border-base-content/20 bg-base-200 p-8 text-center">
+              <p class="text-base-content/60">No templates yet.</p>
+              <p class="mt-1 text-sm text-base-content/45">
+                A template defines the grid and cells a canvas starts from.
+              </p>
             </div>
           <% else %>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               <%= for template <- @templates do %>
                 <.template_card
                   template={template}
@@ -257,7 +181,10 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         <% end %>
       </div>
 
-      <p class="text-sm text-base-content/60 mb-3 line-clamp-2">
+      <p
+        :if={@template.description not in [nil, ""]}
+        class="mb-3 text-sm text-base-content/60 line-clamp-2"
+      >
         {@template.description}
       </p>
 
@@ -278,13 +205,13 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         </UIButton.button>
         <.link
           navigate={~p"/templates/#{@template.id}"}
-          class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-base-content/10 text-base-content hover:bg-base-content/5 transition-colors"
+          class={[UIHelpers.button_variant(%{variant: "outline", size: "sm"}), "gap-1.5"]}
         >
           Edit
         </.link>
         <%= if @template.author_id == @current_user.id do %>
           <UIButton.button
-            variant="ghost"
+            variant="outline"
             size="sm"
             phx-click="show_share_form"
             phx-value-id={@template.id}
@@ -303,7 +230,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
                 Yes
               </UIButton.button>
               <UIButton.button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 phx-click="cancel_delete"
               >
@@ -312,9 +239,9 @@ defmodule PscWeb.CanvasLayoutLive.Index do
             </span>
           <% else %>
             <UIButton.button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              class="text-error"
+              class="text-error hover:text-error"
               phx-click="confirm_delete"
               phx-value-id={@template.id}
             >

@@ -78,6 +78,13 @@ class Positioner {
       }
     }
 
+    // Keep the element inside the viewport. Flipping only chooses a side; a
+    // trigger near an edge can still push the element off-screen, so clamp the
+    // final coordinates as well.
+    const edge = 8;
+    x = Math.min(Math.max(x, containerRect.left + edge), containerRect.right - elementRect.width - edge);
+    y = Math.min(Math.max(y, containerRect.top + edge), containerRect.bottom - elementRect.height - edge);
+
     return {
       x,
       y,

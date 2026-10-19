@@ -14,7 +14,7 @@ defmodule PscWeb.UserLive.LoginTest do
 
       # Documents/Canvases/Templates are private: never advertised to guests.
       refute has_element?(lv, ~s|nav a[href="/documents"]|)
-      refute has_element?(lv, ~s|nav a[href="/canvases"]|)
+      refute has_element?(lv, ~s|nav a[href="/canvas"]|)
       refute has_element?(lv, ~s|nav a[href="/templates"]|)
     end
   end

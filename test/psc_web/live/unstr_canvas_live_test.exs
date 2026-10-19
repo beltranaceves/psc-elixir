@@ -11,9 +11,9 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
   describe "index (canvases)" do
     test "marks the Canvases nav item as the current page", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/canvases")
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
 
-      assert has_element?(lv, ~s|nav a[href="/canvases"][aria-current="page"]|)
+      assert has_element?(lv, ~s|nav a[href="/canvas"][aria-current="page"]|)
       refute has_element?(lv, ~s|nav a[href="/templates"][aria-current="page"]|)
     end
 
@@ -28,7 +28,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       private = CanvasFixtures.canvas_layout_fixture(%{name: "Someone elses template"})
 
-      {:ok, lv, html} = live(conn, ~p"/canvases")
+      {:ok, lv, html} = live(conn, ~p"/canvas")
 
       options_html = lv |> element("#new-canvas-form") |> render()
 
@@ -49,7 +49,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template =
         CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Structured template"})
 
-      {:ok, lv, _html} = live(conn, ~p"/canvases")
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
 
       lv
       |> form("#new-canvas-form", %{
@@ -80,7 +80,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
     end
 
     test "creates a blank canvas when no template is chosen", %{conn: conn, user: user} do
-      {:ok, lv, _html} = live(conn, ~p"/canvases")
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
 
       lv
       |> form("#new-canvas-form", %{"name" => "Blank one", "template_id" => ""})
@@ -96,7 +96,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       other = AccountsFixtures.user_fixture()
       foreign = CanvasFixtures.canvas_layout_fixture(%{author_id: other.id, name: "Private"})
 
-      {:ok, lv, _html} = live(conn, ~p"/canvases")
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
 
       # Bypasses the select's option list on purpose: the guard must hold even
       # when a forged template id arrives at the server.
@@ -116,7 +116,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, _lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, _lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       # Content no longer drives column widths: 2x2 fixture → a label column
       # sized from the longest row name + two 12rem minimum data columns.
@@ -148,7 +148,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       # A custom section title is rendered…
       assert has_element?(lv, "#cell-form-r1_c1 label", "Problem statement")
@@ -160,7 +160,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       refute has_element?(lv, "#cell-form-r1_c1 label", "content")
       assert has_element?(lv, "#cell-form-r1_c1 #md-r1_c1-content")
@@ -173,12 +173,12 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       assert html =~ ~s|id="header-page-title"|
       assert html =~ "Canvas Editor"
 
-      refute has_element?(lv, ~s|nav a[href="/canvases"][aria-current="page"]|)
+      refute has_element?(lv, ~s|nav a[href="/canvas"][aria-current="page"]|)
       refute has_element?(lv, ~s|nav a[href="/templates"][aria-current="page"]|)
     end
 
@@ -189,7 +189,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, _lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, _lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       # Cells come from the template with their label metadata intact
       assert %{"row" => "r1", "column" => "c1", "label" => "Cell 1"} =
@@ -222,7 +222,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, _} = Canvas.save_unstr_canvas_content_to_db(canvas.id, legacy_cells)
 
-      {:ok, _lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, _lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       refute html =~ ~s(name="values[semantics]")
     end
@@ -234,7 +234,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       # One compact header row: title, description, presence and the actions.
       assert has_element?(lv, "#canvas-header #canvas-name-form")
@@ -276,7 +276,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert Enum.find(canvas.cells["columns"], &(&1["id"] == "c1"))["accent"] == "sky"
       assert Enum.find(canvas.cells["rows"], &(&1["id"] == "r1"))["accent"] == "emerald"
 
-      {:ok, lv, html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       assert html =~ ~s(id="accent-bar-column-c1")
       assert html =~ ~s(id="accent-bar-row-r1")
@@ -293,7 +293,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, lv, _html} = live(conn, ~p"/canvases/#{canvas.id}")
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       assert has_element?(lv, "#share-canvas-button .hero-share")
       lv |> element("#share-canvas-button") |> render_click()

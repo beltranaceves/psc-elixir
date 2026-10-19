@@ -42,7 +42,11 @@ defmodule PscWeb.CoreComponents do
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+
+  attr :kind, :atom,
+    values: [:info, :success, :error],
+    doc: "used for styling and flash lookup"
+
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -56,11 +60,12 @@ defmodule PscWeb.CoreComponents do
       id={@id}
       role="alert"
       phx-hook=".FeedbackCard"
-      data-dismiss-after={@kind == :info && 6000}
+      data-dismiss-after={@kind in [:info, :success] && 6000}
       data-flash-kind={@kind}
       class={[
         "pointer-events-auto relative w-full overflow-hidden rounded-xl border bg-card text-card-foreground shadow-lg backdrop-blur-md animate-feedback-card-in",
         @kind == :info && "border-primary/40",
+        @kind == :success && "border-success/50",
         @kind == :error && "border-destructive/40"
       ]}
       {@rest}
@@ -69,6 +74,7 @@ defmodule PscWeb.CoreComponents do
         class={[
           "pointer-events-none absolute inset-0",
           @kind == :info && "bg-primary/5",
+          @kind == :success && "bg-success/10",
           @kind == :error && "bg-destructive/5"
         ]}
         aria-hidden="true"
@@ -78,12 +84,10 @@ defmodule PscWeb.CoreComponents do
         <span class={[
           "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full",
           @kind == :info && "bg-primary/15 text-primary",
+          @kind == :success && "bg-success/20 text-success",
           @kind == :error && "bg-destructive/15 text-destructive"
         ]}>
-          <.icon
-            name={if @kind == :info, do: "hero-information-circle", else: "hero-exclamation-circle"}
-            class="size-4"
-          />
+          <.icon name={flash_icon(@kind)} class="size-4" />
         </span>
 
         <div class="min-w-0 flex-1 pt-0.5">
@@ -104,11 +108,19 @@ defmodule PscWeb.CoreComponents do
       </div>
 
       <div
-        :if={@kind == :info}
-        class="relative h-0.5 w-full bg-primary/10"
+        :if={@kind in [:info, :success]}
+        class={[
+          "relative h-0.5 w-full",
+          @kind == :info && "bg-primary/10",
+          @kind == :success && "bg-success/15"
+        ]}
         aria-hidden="true"
       >
-        <div class="h-full w-full origin-left animate-feedback-card-progress bg-primary/60" />
+        <div class={[
+          "h-full w-full origin-left animate-feedback-card-progress",
+          @kind == :info && "bg-primary/60",
+          @kind == :success && "bg-success/70"
+        ]} />
       </div>
     </div>
 
@@ -136,6 +148,10 @@ defmodule PscWeb.CoreComponents do
     </script>
     """
   end
+
+  defp flash_icon(:success), do: "hero-check-circle"
+  defp flash_icon(:error), do: "hero-exclamation-circle"
+  defp flash_icon(_kind), do: "hero-information-circle"
 
   @doc """
   Renders a button with navigation support.

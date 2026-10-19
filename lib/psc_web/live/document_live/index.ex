@@ -56,7 +56,7 @@ defmodule PscWeb.DocumentLive.Index do
           {:noreply,
            socket
            |> assign(show_new_form: false, new_title: "")
-           |> put_flash(:info, "Document created successfully")}
+           |> put_flash(:success, "Document created successfully")}
 
         {:error, _changeset} ->
           {:noreply, put_flash(socket, :error, "Failed to create document")}
@@ -81,7 +81,7 @@ defmodule PscWeb.DocumentLive.Index do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Documents">
-      <div class="mx-auto max-w-2xl px-6 py-12">
+      <div class="mx-auto max-w-2xl">
         <div class="mb-8 flex items-center justify-between">
           <h1 class="text-2xl font-semibold text-base-content">My Documents</h1>
           <.button phx-click="show_new_form">
