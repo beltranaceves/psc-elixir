@@ -18,6 +18,21 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @idle_save_interval 1500
   @periodic_save_interval 10000
 
+  # The canvas editor is a tabbed surface: the grid is one of several views on
+  # the same canvas. Everything but the editor is a placeholder for now.
+  @tabs [
+    {"analysis", "Analysis", "hero-chart-bar",
+     "Insights over the canvas: relevance, staleness and content coverage."},
+    {"notes", "Notes", "hero-document-text", "Shared notes attached to this canvas."},
+    {"editor", "Editor", "hero-pencil-square", "The canvas grid."},
+    {"agent", "Agent", "hero-sparkles", "Talk to an agent that can read and edit this canvas."}
+  ]
+
+  defp find_tab(id) do
+    Enum.find(@tabs, fn {tab_id, _label, _icon, _blurb} -> tab_id == id end) ||
+      Enum.find(@tabs, fn {tab_id, _label, _icon, _blurb} -> tab_id == "editor" end)
+  end
+
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     canvas = Canvas.get_unstr_canvas_with_author(id)
@@ -47,6 +62,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:idle_timer_ref, nil)
         |> assign(:save_state, :saved)
         |> assign(:share_open, false)
+        |> assign(:active_tab, "editor")
+        |> assign(:tabs, @tabs)
         |> subscribe_to_canvas(id)
 
       if connected?(socket) do
@@ -118,6 +135,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def handle_event("open_share", _params, socket) do
     {:noreply, assign(socket, :share_open, true)}
+  end
+
+  @impl true
+  def handle_event("select_tab", %{"tab" => tab}, socket) do
+    {:noreply, push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}")}
   end
 
   @impl true
@@ -219,6 +241,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     html = Markdown.render(value)
 
     socket = push_event(socket, "field_rendered", %{cell_key: cell_key, field: field, html: html})
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_params(%{"tab" => tab}, _url, socket) do
+    {:noreply, assign(socket, :active_tab, find_tab(tab) |> elem(0))}
+  end
+
+  def handle_params(_params, _url, socket) do
     {:noreply, socket}
   end
 
@@ -410,97 +441,125 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     >
       <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col">
         <%!-- Header: title, description, presence and actions in one compact row --%>
-        <div
-          id="canvas-header"
-          class="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4"
-        >
-          <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:gap-4">
-            <.form
-              for={%{}}
-              id="canvas-name-form"
-              phx-change="update_name"
-              class="flex w-full min-w-0 shrink items-center sm:w-auto"
-            >
-              <input
-                name="value"
-                type="text"
-                value={@c_name}
-                phx-debounce="1000"
-                class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-xl font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
-                placeholder="Canvas name"
-              />
-            </.form>
+        <div id="canvas-header" class="flex shrink-0 flex-col gap-2">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 sm:flex-nowrap sm:items-start">
+            <div class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-start sm:gap-4">
+              <.form
+                for={%{}}
+                id="canvas-name-form"
+                phx-change="update_name"
+                class="flex w-full min-w-0 shrink items-center sm:w-auto"
+              >
+                <input
+                  name="value"
+                  type="text"
+                  value={@c_name}
+                  phx-debounce="1000"
+                  class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-xl font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
+                  placeholder="Canvas name"
+                />
+              </.form>
 
-            <.form
-              for={%{}}
-              id="canvas-description-form"
-              phx-change="update_description"
-              class="flex w-full min-w-0 items-start sm:flex-1"
-            >
-              <textarea
-                name="value"
-                phx-debounce="1000"
-                class="field-sizing-content box-content max-h-16 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-8 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none"
-                placeholder="Add a description..."
-                rows="1"
-              ><%= @c_desc %></textarea>
-            </.form>
-          </div>
+              <.form
+                for={%{}}
+                id="canvas-description-form"
+                phx-change="update_description"
+                class="flex w-full min-w-0 items-start sm:flex-1"
+              >
+                <textarea
+                  name="value"
+                  phx-debounce="1000"
+                  class="field-sizing-content box-content max-h-16 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-8 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none"
+                  placeholder="Add a description..."
+                  rows="1"
+                ><%= @c_desc %></textarea>
+              </.form>
+            </div>
 
-          <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:gap-3">
-            <%!-- Active users: truncated, with the full list in a hover tooltip --%>
-            <UITooltip.tooltip id="active-users-tooltip">
-              <UITooltip.tooltip_trigger>
-                <button
-                  type="button"
-                  class="inline-flex max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 py-1 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <span class="relative flex size-2 shrink-0">
-                    <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
-                    <span class="relative inline-flex size-2 rounded-full bg-success"></span>
-                  </span>
-                  <span class="truncate">{active_users_label(active_usernames(@presence))}</span>
-                </button>
-              </UITooltip.tooltip_trigger>
-
-              <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
-                <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
-                  Active users
-                </p>
-                <ul class="space-y-1">
-                  <li
-                    :for={username <- active_usernames(@presence)}
-                    class="truncate text-sm text-base-content/80"
+            <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:gap-3">
+              <%!-- Active users: truncated, with the full list in a hover tooltip --%>
+              <UITooltip.tooltip id="active-users-tooltip">
+                <UITooltip.tooltip_trigger>
+                  <button
+                    type="button"
+                    class="inline-flex max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 py-1 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    {username}
-                  </li>
-                </ul>
-              </UITooltip.tooltip_content>
-            </UITooltip.tooltip>
+                    <span class="relative flex size-2 shrink-0">
+                      <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
+                      <span class="relative inline-flex size-2 rounded-full bg-success"></span>
+                    </span>
+                    <span class="truncate">{active_users_label(active_usernames(@presence))}</span>
+                  </button>
+                </UITooltip.tooltip_trigger>
 
-            <%= cond do %>
-              <% @save_state == :saving -> %>
-                <UIBadge.badge variant="secondary" class="shrink-0">
-                  <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
-                  </div>
-                  <span>Saving...</span>
-                </UIBadge.badge>
-              <% @save_state == :saved -> %>
-                <UIBadge.badge variant="default" class="shrink-0">
-                  <.icon name="hero-check-circle" class="w-4 h-4" />
-                  <span>Saved</span>
-                </UIBadge.badge>
-              <% true -> %>
-                <UIBadge.badge variant="outline" class="shrink-0">
-                  <.icon name="hero-exclamation-circle" class="w-4 h-4" />
-                  <span>Unsaved</span>
-                </UIBadge.badge>
-            <% end %>
+                <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
+                  <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
+                    Active users
+                  </p>
+                  <ul class="space-y-1">
+                    <li
+                      :for={username <- active_usernames(@presence)}
+                      class="truncate text-sm text-base-content/80"
+                    >
+                      {username}
+                    </li>
+                  </ul>
+                </UITooltip.tooltip_content>
+              </UITooltip.tooltip>
 
-            <%= if @canvas.author_id == @user_id do %>
-              <.share_button id="share-canvas-button" label="Share" />
-            <% end %>
+              <%= cond do %>
+                <% @save_state == :saving -> %>
+                  <UIBadge.badge variant="secondary" class="shrink-0">
+                    <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
+                    </div>
+                    <span>Saving...</span>
+                  </UIBadge.badge>
+                <% @save_state == :saved -> %>
+                  <UIBadge.badge variant="default" class="shrink-0">
+                    <.icon name="hero-check-circle" class="w-4 h-4" />
+                    <span>Saved</span>
+                  </UIBadge.badge>
+                <% true -> %>
+                  <UIBadge.badge variant="outline" class="shrink-0">
+                    <.icon name="hero-exclamation-circle" class="w-4 h-4" />
+                    <span>Unsaved</span>
+                  </UIBadge.badge>
+              <% end %>
+
+              <%= if @canvas.author_id == @user_id do %>
+                <.share_button id="share-canvas-button" label="Share" />
+              <% end %>
+            </div>
           </div>
+
+          <%!-- Tabs: the grid is one view on the canvas; the others are
+          placeholders for now. --%>
+          <nav
+            id="canvas-tabs"
+            role="tablist"
+            aria-label="Canvas views"
+            class="flex items-center gap-1 overflow-x-auto"
+          >
+            <button
+              :for={{tab_id, label, icon, _blurb} <- @tabs}
+              type="button"
+              role="tab"
+              id={"canvas-tab-#{tab_id}"}
+              aria-selected={to_string(@active_tab == tab_id)}
+              aria-controls="canvas-tabpanel"
+              phx-click="select_tab"
+              phx-value-tab={tab_id}
+              class={[
+                "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                @active_tab == tab_id && "bg-base-content/10 text-base-content",
+                @active_tab != tab_id &&
+                  "text-base-content/60 hover:bg-base-content/5 hover:text-base-content"
+              ]}
+            >
+              <.icon name={icon} class="size-4" />
+              {label}
+            </button>
+          </nav>
         </div>
 
         <.share_dialog
@@ -516,160 +575,207 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         />
 
         <div
-          id="canvas-grid"
-          class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
+          id="canvas-tabpanel"
+          role="tabpanel"
+          aria-labelledby={"canvas-tab-#{@active_tab}"}
+          class="flex min-h-0 w-full flex-1 flex-col"
         >
-          <%!-- Grid Layout — accents come from the template and are read-only here --%>
-          <div class="flex min-h-0 flex-1 flex-col overflow-auto">
-            <table
-              class="h-full min-h-0 w-full flex-1 table-fixed border-collapse"
-              style={"min-width: #{table_min_width(@cells)}"}
+          <%= if @active_tab == "editor" do %>
+            <div
+              id="canvas-grid"
+              class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
             >
-              <colgroup>
-                <col style={"width: #{row_label_width(@cells)}"} />
-                <%= for _column <- @cells["columns"] || [] do %>
-                  <col />
-                <% end %>
-              </colgroup>
-              <thead>
-                <tr>
-                  <th class="px-2 py-1 border border-base-content/20 bg-base-content/5"></th>
-                  <%= for column <- @cells["columns"] || [] do %>
-                    <th class="border border-base-content/20 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
-                      <div class="flex flex-col">
-                        <.accent_bar
-                          id={"accent-bar-column-#{column["id"]}"}
-                          token={column["accent"]}
-                        />
-                        <div class="px-2 py-1">
-                          {column["label"]}
-                        </div>
-                      </div>
-                    </th>
-                  <% end %>
-                </tr>
-              </thead>
-              <tbody>
-                <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
-                  <tr>
-                    <td class="relative border border-base-content/20 bg-base-content/5 p-0 align-top">
-                      <.accent_bar
-                        id={"accent-bar-row-#{row["id"]}"}
-                        token={row["accent"]}
-                        orientation={:left}
-                      />
-                      <div class="truncate px-2 py-1 font-medium text-base-content/70 text-sm">
-                        {row["label"]}
-                      </div>
-                    </td>
-                    <%= for {column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
-                      <% layout = @cells["layout"] || [] %>
-                      <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                      <td class="relative border border-base-content/20 align-top">
-                        <%= if cell_key do %>
-                          <% cell_data =
-                            get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
-                          <% title =
-                            Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
-                              Map.get(cell_data, "title") || cell_key %>
+              <%!-- Grid Layout — accents come from the template and are read-only here --%>
+              <div class="flex min-h-0 flex-1 flex-col overflow-auto">
+                <table
+                  class="h-full min-h-0 w-full flex-1 table-fixed border-collapse"
+                  style={"min-width: #{table_min_width(@cells)}"}
+                >
+                  <colgroup>
+                    <col style={"width: #{row_label_width(@cells)}"} />
+                    <%= for _column <- @cells["columns"] || [] do %>
+                      <col />
+                    <% end %>
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th class="px-2 py-1 border border-base-content/20 bg-base-content/5"></th>
+                      <%= for column <- @cells["columns"] || [] do %>
+                        <th class="border border-base-content/20 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
+                          <div class="flex flex-col">
+                            <.accent_bar
+                              id={"accent-bar-column-#{column["id"]}"}
+                              token={column["accent"]}
+                            />
+                            <div class="px-2 py-1">
+                              {column["label"]}
+                            </div>
+                          </div>
+                        </th>
+                      <% end %>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
+                      <tr>
+                        <td class="relative border border-base-content/20 bg-base-content/5 p-0 align-top">
+                          <.accent_bar
+                            id={"accent-bar-row-#{row["id"]}"}
+                            token={row["accent"]}
+                            orientation={:left}
+                          />
+                          <div class="truncate px-2 py-1 font-medium text-base-content/70 text-sm">
+                            {row["label"]}
+                          </div>
+                        </td>
+                        <%= for {column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
+                          <% layout = @cells["layout"] || [] %>
+                          <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
+                          <td class="relative border border-base-content/20 align-top">
+                            <%= if cell_key do %>
+                              <% cell_data =
+                                get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
+                              <% title =
+                                Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
+                                  Map.get(cell_data, "title") || cell_key %>
 
-                          <div
-                            id={"cell-card-" <> cell_key}
-                            phx-hook="CellFocus"
-                            data-cell-key={cell_key}
-                            class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
-                          >
-                            <%!-- The colour combination of this cell (column on top,
+                              <div
+                                id={"cell-card-" <> cell_key}
+                                phx-hook="CellFocus"
+                                data-cell-key={cell_key}
+                                class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
+                              >
+                                <%!-- The colour combination of this cell (column on top,
                             row on the left) is only shown in the mobile fullscreen
                             view, where there is room for it. --%>
-                            <.accent_bar
-                              id={"accent-bar-cell-#{cell_key}-column"}
-                              token={column["accent"]}
-                              class="cell-accent absolute inset-x-0 top-0 h-1 z-10"
-                            />
-                            <.accent_bar
-                              id={"accent-bar-cell-#{cell_key}-row"}
-                              token={row["accent"]}
-                              orientation={:left}
-                              class="cell-accent z-10"
-                            />
+                                <.accent_bar
+                                  id={"accent-bar-cell-#{cell_key}-column"}
+                                  token={column["accent"]}
+                                  class="cell-accent absolute inset-x-0 top-0 h-1 z-10"
+                                />
+                                <.accent_bar
+                                  id={"accent-bar-cell-#{cell_key}-row"}
+                                  token={row["accent"]}
+                                  orientation={:left}
+                                  class="cell-accent z-10"
+                                />
 
-                            <div class="cell-body p-2">
-                              <div class="mb-1">
-                                <div class="text-sm font-medium text-base-content break-words">
-                                  {title}
-                                </div>
-                              </div>
+                                <div class="cell-body p-2">
+                                  <div class="mb-1">
+                                    <div class="text-sm font-medium text-base-content break-words">
+                                      {title}
+                                    </div>
+                                  </div>
 
-                              <.form for={%{}} id={"cell-form-#{cell_key}"} phx-change="update_cell">
-                                <input type="hidden" name="cell_key" value={cell_key} />
+                                  <.form
+                                    for={%{}}
+                                    id={"cell-form-#{cell_key}"}
+                                    phx-change="update_cell"
+                                  >
+                                    <input type="hidden" name="cell_key" value={cell_key} />
 
-                                <div class="mt-1 grid min-w-0 gap-1 text-sm">
-                                  <%= for {field, value} <- cell_data do %>
-                                    <%!-- "semantics" is tolerated in older canvases but is
+                                    <div class="mt-1 grid min-w-0 gap-1 text-sm">
+                                      <%= for {field, value} <- cell_data do %>
+                                        <%!-- "semantics" is tolerated in older canvases but is
                                   no longer authored or shown; "titles" holds labels. --%>
-                                    <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
-                                      <% field_title = Psc.Canvas.field_title(cell_data, field) %>
-                                      <div class="flex min-w-0 flex-col">
-                                        <label
-                                          :if={field_title != ""}
-                                          class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
-                                        >
-                                          {field_title}
-                                        </label>
+                                        <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
+                                          <% field_title = Psc.Canvas.field_title(cell_data, field) %>
+                                          <div class="flex min-w-0 flex-col">
+                                            <label
+                                              :if={field_title != ""}
+                                              class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
+                                            >
+                                              {field_title}
+                                            </label>
 
-                                        <div
-                                          id={"md-" <> cell_key <> "-" <> field}
-                                          phx-hook="MarkdownField"
-                                          phx-update="ignore"
-                                          data-cell-key={cell_key}
-                                          data-field={field}
-                                          data-field-wrapper
-                                          data-current-user-id={@user_id}
-                                          class="w-full"
-                                        >
-                                          <div
-                                            id={"md-render-" <> cell_key <> "-" <> field}
-                                            class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
-                                            phx-update="ignore"
-                                          >
-                                            {value}
+                                            <div
+                                              id={"md-" <> cell_key <> "-" <> field}
+                                              phx-hook="MarkdownField"
+                                              phx-update="ignore"
+                                              data-cell-key={cell_key}
+                                              data-field={field}
+                                              data-field-wrapper
+                                              data-current-user-id={@user_id}
+                                              class="w-full"
+                                            >
+                                              <div
+                                                id={"md-render-" <> cell_key <> "-" <> field}
+                                                class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
+                                                phx-update="ignore"
+                                              >
+                                                {value}
+                                              </div>
+                                              <textarea
+                                                name={"values[" <> field <> "]"}
+                                                phx-debounce="150"
+                                                class="field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
+                                                placeholder="Enter value..."
+                                                rows="3"
+                                              ><%= value %></textarea>
+                                            </div>
                                           </div>
-                                          <textarea
-                                            name={"values[" <> field <> "]"}
-                                            phx-debounce="150"
-                                            class="field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
-                                            placeholder="Enter value..."
-                                            rows="3"
-                                          ><%= value %></textarea>
-                                        </div>
-                                      </div>
-                                    <% end %>
-                                  <% end %>
+                                        <% end %>
+                                      <% end %>
+                                    </div>
+                                  </.form>
                                 </div>
-                              </.form>
-                            </div>
 
-                            <button
-                              type="button"
-                              data-cell-exit="true"
-                              class="cell-exit fixed bottom-5 right-5 z-[70] size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-base-300"
-                              aria-label="Close full screen"
-                            >
-                              <.icon name="hero-x-mark" class="size-5" />
-                            </button>
-                          </div>
+                                <button
+                                  type="button"
+                                  data-cell-exit="true"
+                                  class="cell-exit fixed bottom-5 right-5 z-[70] size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-base-300"
+                                  aria-label="Close full screen"
+                                >
+                                  <.icon name="hero-x-mark" class="size-5" />
+                                </button>
+                              </div>
+                            <% end %>
+                          </td>
                         <% end %>
-                      </td>
+                      </tr>
                     <% end %>
-                  </tr>
-                <% end %>
-              </tbody>
-            </table>
-          </div>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          <% else %>
+            <div
+              id={"canvas-placeholder-" <> @active_tab}
+              class="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center"
+            >
+              <span class="flex size-12 items-center justify-center rounded-full bg-base-content/5 text-base-content/40">
+                <.icon name={placeholder_icon(@active_tab)} class="size-6" />
+              </span>
+              <h2 class="text-lg font-medium text-base-content">
+                {placeholder_label(@active_tab)}
+              </h2>
+              <p class="max-w-sm text-sm text-base-content/60">
+                {placeholder_blurb(@active_tab)}
+              </p>
+              <p class="text-xs text-base-content/40">Coming soon.</p>
+            </div>
+          <% end %>
         </div>
       </div>
     </Layouts.app>
     """
+  end
+
+  defp placeholder_icon(tab) do
+    case find_tab(tab) do
+      {_id, _label, icon, _blurb} -> icon
+    end
+  end
+
+  defp placeholder_label(tab) do
+    case find_tab(tab) do
+      {_id, label, _icon, _blurb} -> label
+    end
+  end
+
+  defp placeholder_blurb(tab) do
+    case find_tab(tab) do
+      {_id, _label, _icon, blurb} -> blurb
+    end
   end
 end

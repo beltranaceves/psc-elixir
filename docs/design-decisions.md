@@ -806,6 +806,11 @@ info, and a tooltip that could leave the viewport and stay open after a tap.
 - **Density.** The app shell's vertical padding dropped from 32 px to 24 px and page-level
   wrappers no longer add their own `py-*`; the default container gained `w-full` because an
   auto-margined flex item otherwise shrinks to fit-content instead of filling the page.
+- **The canvas editor is a tabbed surface.** The header carries a tab strip — **Analysis ·
+  Notes · Editor · Agent** — and the panel below renders the selected view. The grid
+  (Editor) is the only implemented view; the others are placeholders. The tab lives in the
+  URL (`?tab=…`) so a view can be linked and the browser's back button works; the default
+  is the editor.
 - **Accent combination on cells (fullscreen only).** A template accent belongs to a row or a
   column, but the interesting thing is the *pair*: in the **mobile fullscreen cell** the
   column's colour is drawn on the top edge and the row's colour on the left edge, so the

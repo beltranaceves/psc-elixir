@@ -166,6 +166,34 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#cell-form-r1_c1 #md-r1_c1-content")
     end
 
+    test "has a tab picker that swaps the panel", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      assert html =~ "Analysis"
+      assert html =~ "Notes"
+      assert html =~ "Agent"
+      assert has_element?(lv, "#canvas-tabs [role='tab']")
+
+      # The editor is the default view and shows the grid.
+      assert has_element?(lv, "#canvas-tab-editor[aria-selected='true']")
+      assert has_element?(lv, "#canvas-grid")
+      refute has_element?(lv, "#canvas-placeholder-notes")
+
+      # Switching tabs swaps the panel for the placeholder.
+      lv |> element("#canvas-tab-notes") |> render_click()
+      assert has_element?(lv, "#canvas-tab-notes[aria-selected='true']")
+      assert has_element?(lv, "#canvas-placeholder-notes")
+      refute has_element?(lv, "#canvas-grid")
+
+      # Tabs are deep-linkable.
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+      assert has_element?(lv, "#canvas-tab-agent[aria-selected='true']")
+      assert has_element?(lv, "#canvas-placeholder-agent")
+    end
+
     test "titles the header Canvas Editor and leaves the Canvases nav item unhighlighted", %{
       conn: conn,
       user: user

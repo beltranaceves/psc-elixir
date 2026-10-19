@@ -237,6 +237,26 @@ test.describe('canvas editor mobile fullscreen cells', () => {
   });
 });
 
+test.describe('canvas editor tabs', () => {
+  test('switches between the editor grid and the placeholder views', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Tabbed Canvas'));
+
+    const tabs = page.locator('#canvas-tabs [role="tab"]');
+    await expect(tabs).toHaveCount(4);
+    await expect(page.locator('#canvas-tab-editor')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#canvas-grid')).toBeVisible();
+
+    await page.locator('#canvas-tab-notes').click();
+    await expect(page.locator('#canvas-tab-notes')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#canvas-placeholder-notes')).toBeVisible();
+    await expect(page.locator('#canvas-grid')).toHaveCount(0);
+    await expect(page).toHaveURL(/tab=notes/);
+
+    await page.locator('#canvas-tab-editor').click();
+    await expect(page.locator('#canvas-grid')).toBeVisible();
+  });
+});
+
 test.describe('canvas editor (single player)', () => {
   test('opens the field editor when clicking anywhere in a cell', async ({ page }) => {
     await createCanvasAndOpen(page, uniqueName('Click Anywhere'));
