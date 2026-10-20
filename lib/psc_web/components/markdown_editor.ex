@@ -37,6 +37,14 @@ defmodule PscWeb.Components.MarkdownEditor do
     the events exchanged with the owning LiveView.
   * `:empty_message` — what the preview shows when there is no content.
   * `:preview_label` — the accessible label of the preview.
+  * `:auto_grow` — grow with the content instead of filling the container.
+    The canvas editor fills its pane; a note inside a card grows instead, so
+    the card never shows a scrollbar for text that was just written.
+  * `:body_class` — the padding and typography shared by the textarea and the
+    preview, so a compact editor can be smaller than the canvas one.
+  * `:hidden_fields` — extra hidden inputs inside the editor's form, so the
+    `phx-change` payload can carry context the form does not know about (the
+    index of the note being edited, for instance).
   """
   attr :id, :string, required: true
   attr :input_id, :string, required: true
@@ -52,6 +60,9 @@ defmodule PscWeb.Components.MarkdownEditor do
   attr :empty_message, :string, default: "Start writing in the editor."
   attr :preview_label, :string, default: "Edit content"
   attr :placeholder, :string, default: "Start writing in Markdown..."
+  attr :auto_grow, :boolean, default: false
+  attr :body_class, :string, default: "p-6 font-mono text-sm leading-6"
+  attr :hidden_fields, :list, default: []
   attr :class, :string, default: nil
 
   def markdown_editor(assigns) do
@@ -63,32 +74,38 @@ defmodule PscWeb.Components.MarkdownEditor do
       data-render-event={@render_event}
       data-update-event={@update_event}
       data-preview-event={@preview_event}
+      data-auto-grow={to_string(@auto_grow)}
       class={
         [
-          "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200",
+          "flex flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200",
           # The focus indication belongs to the frame, not to the textarea: a
           # ring on the textarea is square, and it would cut across the frame's
           # rounded corners.
           "focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
+          not @auto_grow && "min-h-0 flex-1",
           @class
         ]
       }
     >
-      <div class="relative min-h-0 flex-1">
+      <div class={not @auto_grow && "relative min-h-0 flex-1"}>
         <.form
           for={%{}}
           id={@form_id}
           phx-change={@change_event}
           phx-debounce="300"
-          class="absolute inset-0 hidden h-full"
+          class={[not @auto_grow && "absolute inset-0 h-full", "hidden"]}
           data-editor-form
         >
-          <textarea
+          <input :for={{name, value} <- @hidden_fields} type="hidden" name={name} value={value} /> <textarea
             name="content"
             id={@input_id}
             data-editor-input
             data-current-user-id={@current_user_id}
-            class="h-full w-full resize-none border-0 bg-base-100 p-6 font-mono text-sm leading-6 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-0"
+            class={[
+              "w-full resize-none border-0 bg-base-100 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-0",
+              not @auto_grow && "h-full",
+              @body_class
+            ]}
             placeholder={@placeholder}
             value={@content}
           ></textarea>
@@ -99,7 +116,11 @@ defmodule PscWeb.Components.MarkdownEditor do
           role="button"
           tabindex="0"
           aria-label={@preview_label}
-          class="absolute inset-0 cursor-text overflow-y-auto bg-base-100 p-6 transition-colors hover:bg-base-200/30"
+          class={[
+            "cursor-text bg-base-100 transition-colors hover:bg-base-200/30",
+            not @auto_grow && "absolute inset-0 overflow-y-auto",
+            @body_class
+          ]}
           data-editor-preview
         >
           <article

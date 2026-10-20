@@ -24,6 +24,7 @@ export default {
     this.renderEvent = this.el.dataset.renderEvent || 'document_rendered'
     this.updateEvent = this.el.dataset.updateEvent || 'content_updated'
     this.previewEvent = this.el.dataset.previewEvent || 'render_document'
+    this.autoGrow = this.el.dataset.autoGrow === 'true'
 
     if (!this.input || !this.form || !this.preview || !this.previewContent) return
 
@@ -32,6 +33,7 @@ export default {
 
     this.input.addEventListener('focus', () => this.showEditor())
     this.input.addEventListener('blur', () => this.requestPreview())
+    this.input.addEventListener('input', () => this.resize())
     this.preview.addEventListener('click', () => this.edit())
     this.preview.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -68,6 +70,8 @@ export default {
       if (cursorPos <= this.input.value.length) {
         this.input.setSelectionRange(cursorPos, cursorPos)
       }
+
+      this.resize()
     })
 
     this.showPreview()
@@ -81,13 +85,34 @@ export default {
   requestPreview() {
     const content = this.input.value
     this.pendingPreviewContent = content
-    this.pushEvent(this.previewEvent, { content })
+
+    // The change event carries the form's hidden fields, so the preview
+    // request carries them too — the server needs the same context to know
+    // which editor is asking.
+    const payload = { content }
+
+    this.form.querySelectorAll('input[type="hidden"]').forEach((el) => {
+      if (el.name) payload[el.name] = el.value
+    })
+
+    this.pushEvent(this.previewEvent, payload)
+  },
+
+  // An auto-growing editor sizes itself to its text, so the card around it
+  // grows instead of scrolling. A hidden element reports no height, so this
+  // only runs while the textarea is on screen.
+  resize() {
+    if (!this.autoGrow) return
+
+    this.input.style.height = 'auto'
+    this.input.style.height = `${this.input.scrollHeight}px`
   },
 
   showEditor() {
     this.form.classList.remove('hidden')
     this.preview.classList.add('hidden')
     this.preview.setAttribute('aria-hidden', 'true')
+    this.resize()
   },
 
   showPreview() {
