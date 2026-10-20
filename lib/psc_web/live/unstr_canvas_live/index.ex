@@ -116,10 +116,6 @@ defmodule PscWeb.UnstrCanvasLive.Index do
       container_class="w-full mx-auto max-w-screen-xl"
     >
       <div class="mx-auto w-full max-w-6xl">
-        <div class="mb-6">
-          <h1 class="text-2xl font-semibold text-base-content">Canvases</h1>
-        </div>
-
         <%!-- Start a canvas: templates first, so the structure is chosen before naming --%>
         <div class="mb-6 rounded-xl border border-base-content/10 bg-base-200 p-4 sm:p-6">
           <h2 class="mb-4 text-lg font-medium text-base-content">Start a canvas</h2>

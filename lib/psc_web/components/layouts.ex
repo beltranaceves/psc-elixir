@@ -78,13 +78,13 @@ defmodule PscWeb.Layouts do
           <span class="hidden text-sm font-semibold tracking-tight sm:inline">PSC</span>
         </.link>
 
-        <span
+        <h1
           :if={@header_title}
           id="header-page-title"
-          class="min-w-0 flex-1 truncate text-sm font-medium text-base-content/70 md:flex-none"
+          class="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-base-content sm:text-lg md:flex-none"
         >
           {@header_title}
-        </span>
+        </h1>
 
         <%!-- The slot holds the free space between the page title and the
         section navigation. It is a container so that its content can react to

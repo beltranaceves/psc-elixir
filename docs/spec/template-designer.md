@@ -225,7 +225,15 @@ instantiate_template(template, user_id) :: {:ok, UnstrCanvas} | {:error, Changes
 
 ## UI Behavior
 
-### Template library (`/canvas-layouts`)
+### Template library (`/templates`)
+
+The shared app header is the single page-level heading (`Templates`). The library
+does not repeat that heading in the main body; its content begins with the New
+Template action and the available-template section.
+
+The **New Template** action is rendered in the app header, next to the page title
+(the shell's `:header_actions` slot). On phones it collapses to the plus icon so
+the route title keeps the room in the header row.
 
 **Index page** shows two sections:
 - **My templates** — templates where `author_id == current_user.id`

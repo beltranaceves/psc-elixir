@@ -143,6 +143,12 @@ These follow the same pattern as `apply_unstr_canvas_operation/4`: insert event,
 
 ## UI Behavior
 
+### Canvas library
+
+The canvas library at `/canvas` uses the shared app header as its single page-level
+heading (`Canvases`); the main content begins with the canvas creation form and does
+not repeat that heading.
+
 ### Grid rendering
 
 The editor renders a CSS grid based on `cells.rows` and `cells.columns`:

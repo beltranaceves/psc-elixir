@@ -34,6 +34,7 @@ it costs, and the evidence it was verified against.
 | [ADR-022](#adr-022--ui-consolidation-one-canvas-model-one-creation-path) | UI consolidation: one canvas model, one creation path | Accepted | 2026-10-19 |
 | [ADR-023](#adr-023--the-canvas-tabs-follow-the-space-they-have) | The canvas tabs follow the space they have | Accepted | 2026-10-20 |
 | [ADR-024](#adr-024--mobile-feedback-and-dialogs-stay-in-the-visible-viewport) | Mobile feedback and dialogs stay in the visible viewport | Accepted | 2026-10-20 |
+| [ADR-025](#adr-025--the-app-header-owns-index-page-titles) | The app header owns index page titles | Accepted | 2026-10-20 |
 
 ---
 
@@ -973,6 +974,35 @@ policy shared by all dialogs, and mobile feedback cards use the bottom safe-area
 offset. Canvas tabs still update the URL and invoke `handle_params/3`, but do not
 create browser-history entries. Existing canvases remain unchanged when a template
 accent is later edited.
+
+## ADR-025 — The app header owns index page titles
+
+**Context.** The shared app header already identifies the current route, but the
+Canvases and Templates index pages repeated the same label as a large `h1` in the
+main body. That duplicate hierarchy consumed vertical space and made the page
+content feel like it had two competing titles.
+
+**Decision.** Render the shared route title as the single semantic `h1` in the app
+header, with a stronger responsive treatment (`text-base` on phones and `text-lg`
+from `sm` upward). Remove the duplicate body heading from the Canvases and
+Templates index pages; keep their page-specific controls and section headings.
+
+A page's primary action belongs to the header too. The Templates library renders
+**New Template** through the shell's `:header_actions` slot, next to the title it
+belongs to, instead of leaving a button stranded above the library section. On
+phones the action collapses to its plus icon so the route title keeps the room.
+
+**Alternatives considered.** Keeping both headings (redundant and less space for
+the actual library/forms), removing the header title (loses the persistent route
+context), hiding the body heading visually while leaving it in the accessibility
+tree (preserves duplicate semantics), and keeping the action in the body (a
+right-aligned button with no title to align to reads as detached).
+
+**Consequences.** The shell owns the page-level heading for routes that provide
+`header_title`, and the page-level action for routes that fill `:header_actions`.
+Index pages start directly with their primary content, and browser and LiveView
+tests assert the header heading, the action's placement, and the absence of a
+`main h1`.
 
 ---
 

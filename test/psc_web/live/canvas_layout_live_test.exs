@@ -10,10 +10,13 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
   describe "index (template library)" do
     test "renders the template library page", %{conn: conn} do
-      {:ok, _lv, html} = live(conn, ~p"/templates")
+      {:ok, lv, html} = live(conn, ~p"/templates")
 
       assert html =~ "Templates"
       assert html =~ "New Template"
+      assert has_element?(lv, "header h1#header-page-title", "Templates")
+      assert has_element?(lv, "header #new-template-button")
+      refute has_element?(lv, "main h1")
       # Creating happens in the designer only — no duplicate inline form.
       refute html =~ "Create New Template"
       refute html =~ ~s(id="new-template-form")
@@ -319,8 +322,8 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert has_element?(lv, "#header-page-title", "Designer")
       # …while the route highlight stays on the Templates section.
       assert has_element?(lv, ~s|a[href="/templates"][aria-current="page"]|)
-      # No in-page title block.
-      refute has_element?(lv, "h1")
+      # No in-page title block; the shared header owns the page heading.
+      refute has_element?(lv, "main h1")
 
       lv |> form("#template-form", %{"name" => "Rationale map"}) |> render_change()
 

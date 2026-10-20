@@ -124,17 +124,25 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       header_title="Templates"
       container_class="w-full"
     >
-      <div class="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-4">
-        <div class="flex items-center justify-between gap-3">
-          <h1 class="text-2xl font-semibold text-base-content">Templates</h1>
-          <.link
-            navigate={~p"/templates/new"}
-            class={[UIHelpers.button_variant(%{variant: "default", size: "sm"}), "gap-1.5"]}
-          >
-            <.icon name="hero-plus" class="size-4" /> New Template
-          </.link>
-        </div>
+      <:header_actions>
+        <%!-- The page's primary action belongs to the header, next to the title
+        it belongs to. On phones it collapses to the plus icon so the route
+        title keeps the room. --%>
+        <.link
+          id="new-template-button"
+          navigate={~p"/templates/new"}
+          aria-label="New Template"
+          class={[
+            UIHelpers.button_variant(%{variant: "default", size: "icon"}),
+            "gap-1.5 sm:h-8 sm:w-auto sm:px-3 sm:text-xs"
+          ]}
+        >
+          <.icon name="hero-plus" class="size-4" />
+          <span class="hidden sm:inline">New Template</span>
+        </.link>
+      </:header_actions>
 
+      <div class="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-4">
         <div>
           <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-base-content/50">
             Available templates

@@ -340,6 +340,12 @@ editor for the canvas library. Rendered Markdown cells use tighter line height a
 margins. Template accent coverage now saves, reloads, and renders the persisted row/column
 tokens; no data-model change was needed because accents already belong in `layout_map`.
 
+**Follow-up (2026-10-20): header-owned index titles.** The shared route title is now the
+single semantic page heading and uses larger typography. The Canvases and Templates index
+pages no longer repeat that title in the main body, leaving the available space for their
+forms, actions, and library sections. The **New Template** action moved into the app
+header's action slot next to the title, collapsing to its plus icon on phones.
+
 ---
 
 ## Notes / incidental findings

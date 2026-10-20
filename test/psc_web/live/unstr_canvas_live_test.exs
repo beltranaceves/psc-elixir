@@ -10,6 +10,13 @@ defmodule PscWeb.UnstrCanvasLiveTest do
   setup :register_and_log_in_user
 
   describe "index (canvases)" do
+    test "uses the header for the page title without a duplicate body heading", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      assert has_element?(lv, "header h1#header-page-title", "Canvases")
+      refute has_element?(lv, "main h1")
+    end
+
     test "marks the Canvases nav item as the current page", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
