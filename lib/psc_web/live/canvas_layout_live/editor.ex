@@ -36,7 +36,8 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
          |> assign(:share_open, false)
          |> assign(:accent_picker, nil)
          |> assign(:confirm_leave?, false)
-         |> assign(:dirty?, false)}
+         |> assign(:dirty?, false)
+         |> assign(:public_draft, false)}
 
       id ->
         case Canvas.get_template_with_author(id) do
@@ -56,7 +57,8 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                |> assign(:share_open, false)
                |> assign(:accent_picker, nil)
                |> assign(:confirm_leave?, false)
-               |> assign(:dirty?, false)}
+               |> assign(:dirty?, false)
+               |> assign(:public_draft, template.public)}
             else
               {:ok,
                socket
@@ -323,10 +325,16 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   # The template name/description live in the save form and are not persisted
-  # until submit, so any keystroke marks the draft as dirty.
+  # until submit, so any keystroke marks the draft as dirty. The publish toggle
+  # is tracked too: LiveView re-derives a checkbox's `checked` from the server's
+  # render on every patch, so a toggle the server does not know about would be
+  # undone the moment it fired a change event.
   @impl true
-  def handle_event("mark_dirty", _params, socket) do
-    {:noreply, assign(socket, :dirty?, true)}
+  def handle_event("mark_dirty", params, socket) do
+    {:noreply,
+     socket
+     |> assign(:dirty?, true)
+     |> assign(:public_draft, public?(params))}
   end
 
   # Templates are saved explicitly (no autosave), so Cancel discards the
@@ -658,7 +666,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 <UICheckbox.checkbox
                   id="template-public"
                   name="public"
-                  value={@editing_layout && @editing_layout.public}
+                  value={@public_draft}
                   class="mt-0.5"
                 />
                 <span class="min-w-0">
