@@ -147,6 +147,151 @@ defmodule Psc.Canvas do
     end
   end
 
+  ## Catalog functions
+
+  @catalog_limit 200
+
+  @doc """
+  List the public templates, ranked by how many times they have been used.
+
+  `query` narrows the ranking with a case-insensitive match on the name and the
+  description. The result is capped: the catalog is a ranking, not an index, and
+  the free tier caps the table at 10 000 rows (ADR-006).
+  """
+  def list_public_templates(query \\ nil) do
+    Layout
+    |> where([l], l.public == true)
+    |> maybe_search(query)
+    |> order_by([l], desc: l.use_count, desc: l.updated_at)
+    |> limit(^@catalog_limit)
+    |> preload(:author)
+    |> Repo.all()
+  end
+
+  defp maybe_search(queryable, nil), do: queryable
+
+  defp maybe_search(queryable, query) when is_binary(query) do
+    pattern = "%#{escape_like(query)}%"
+
+    where(queryable, [l], ilike(l.name, ^pattern) or ilike(l.description, ^pattern))
+  end
+
+  # ILIKE treats % and _ as wildcards, so a user searching for one should find
+  # the templates that contain it rather than every template.
+  defp escape_like(value) do
+    value
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
+
+  @doc """
+  Get a public template with its author, or nil.
+
+  The fetch behind the catalog's modal and both of its actions: a template that
+  is not public is not found here, so the catalog cannot be used to reach a
+  private one.
+  """
+  def get_public_template(id) do
+    Layout
+    |> where([l], l.public == true)
+    |> preload(:author)
+    |> Repo.get(id)
+  end
+
+  @doc """
+  Mark a template public, so it is listed in the catalog.
+  """
+  def publish_template(template), do: update_template(template, %{"public" => true})
+
+  @doc """
+  Mark a template private again.
+
+  Canvases and forks already made are copies and keep working; the template
+  just leaves the catalog.
+  """
+  def unpublish_template(template), do: update_template(template, %{"public" => false})
+
+  @doc """
+  Fork a template: a copy the caller owns, independent of its source (ADR-009).
+
+  The copy carries the source's name, description and definition, and records
+  the lineage. The source's fork count goes up by one in the same transaction,
+  so a fork is never made without being counted.
+  """
+  # Template names are unique, so forking the same source twice needs two
+  # names: the first fork is "Name (fork)", the ones after it number
+  # themselves.
+  @fork_attempts 5
+
+  def fork_template(template, user_id) do
+    Enum.reduce_while(1..@fork_attempts, {:error, :name_taken}, fn attempt, acc ->
+      case fork_once(template, user_id, attempt) do
+        {:ok, fork} ->
+          {:halt, {:ok, fork}}
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          if name_taken?(changeset), do: {:cont, acc}, else: {:halt, {:error, changeset}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  # Template names are unique, so forking the same source twice needs two
+  # names: the first fork is "Name (fork)", the ones after it number
+  # themselves. Each attempt is its own transaction, because a name that is
+  # already taken aborts the transaction it was tried in — retrying inside one
+  # transaction would only meet "transaction is aborted" for the rest of it.
+  defp fork_once(template, user_id, attempt) do
+    Repo.transaction(fn ->
+      with {:ok, fork} <- create_template(user_id, fork_attrs(template, attempt)),
+           {:ok, fork} <- record_lineage(fork, template.id),
+           {:ok, _template} <- bump_count(template, :fork_count) do
+        fork
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp fork_attrs(template, attempt) do
+    %{
+      "name" => fork_name(template.name, attempt),
+      "description" => template.description || "",
+      "layout_map" => template.layout_map || %{}
+    }
+  end
+
+  defp fork_name(name, 1), do: "#{name} (fork)"
+  defp fork_name(name, attempt), do: "#{name} (fork #{attempt})"
+
+  defp record_lineage(fork, source_id) do
+    fork
+    |> Ecto.Changeset.change(forked_from_id: source_id)
+    |> Repo.update()
+  end
+
+  defp name_taken?(%Ecto.Changeset{} = changeset) do
+    case Keyword.fetch(changeset.errors, :name) do
+      {:ok, {_message, constraints}} when is_list(constraints) ->
+        Keyword.get(constraints, :constraint) == :unique
+
+      _ ->
+        false
+    end
+  end
+
+  # A counter moves with a single `inc`, never a read-modify-write: two
+  # simultaneous uses would otherwise lose one.
+  defp bump_count(template, counter) do
+    query = from(l in Layout, where: l.id == ^template.id)
+    {count, _} = Repo.update_all(query, inc: [{counter, 1}])
+
+    if count == 1, do: {:ok, template}, else: {:error, :not_found}
+  end
+
   @doc """
   Instantiate a canvas from a template.
 
@@ -162,6 +307,11 @@ defmodule Psc.Canvas do
 
   `overrides` lets the caller supply a user-chosen name/description; anything
   not given falls back to the template's own values.
+
+  The canvas, its notes and the template's `use_count` are written in one
+  transaction: a canvas is never created without its use being counted, and a
+  count is never bumped without a canvas. Every instantiation counts, from the
+  library as well as the catalog.
   """
   def instantiate_template(template, user_id, overrides \\ %{}) do
     lm = template.layout_map || %{}
@@ -184,10 +334,15 @@ defmodule Psc.Canvas do
       }
       |> Map.merge(Map.reject(overrides || %{}, fn {_k, v} -> is_nil(v) or v == "" end))
 
-    with {:ok, canvas} <- create_unstr_canvas(user_id, attrs) do
-      Psc.Notes.seed_notes(canvas, lm["notes"] || [])
-      {:ok, canvas}
-    end
+    Repo.transaction(fn ->
+      with {:ok, canvas} <- create_unstr_canvas(user_id, attrs),
+           {:ok, _template} <- bump_count(template, :use_count) do
+        Psc.Notes.seed_notes(canvas, lm["notes"] || [])
+        canvas
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   defp put_instantiated_cells(cells, template_cells, layout, rows, columns) do

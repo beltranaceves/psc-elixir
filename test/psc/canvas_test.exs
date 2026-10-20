@@ -102,6 +102,198 @@ defmodule Psc.CanvasTest do
     end
   end
 
+  describe "catalog" do
+    defp set_count(template, changes) do
+      template |> change(changes) |> Repo.update!()
+    end
+
+    test "list_public_templates/1 lists only public templates, ranked by use" do
+      author = Psc.AccountsFixtures.user_fixture()
+
+      low = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id, name: "Low"})
+      high = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id, name: "High"})
+      private = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id, name: "Private"})
+
+      {:ok, _} = Canvas.publish_template(low)
+      {:ok, _} = Canvas.publish_template(high)
+
+      high = set_count(high, use_count: 3)
+      low = set_count(low, use_count: 1)
+
+      assert [%{id: high_id}, %{id: low_id}] = Canvas.list_public_templates()
+      assert high_id == high.id
+      assert low_id == low.id
+      refute Enum.any?(Canvas.list_public_templates(), &(&1.id == private.id))
+    end
+
+    test "list_public_templates/1 preloads the author" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+      {:ok, _} = Canvas.publish_template(template)
+
+      assert [%{author: %Psc.Accounts.User{email: email}}] = Canvas.list_public_templates()
+      assert email == author.email
+    end
+
+    test "list_public_templates/1 narrows by name and description" do
+      author = Psc.AccountsFixtures.user_fixture()
+
+      named =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: author.id, name: "Rationale map"})
+
+      described =
+        CanvasFixtures.canvas_layout_fixture(%{
+          author_id: author.id,
+          name: "Something else",
+          description: "for the framing questions"
+        })
+
+      other = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id, name: "Unrelated"})
+
+      for template <- [named, described, other],
+          do: {:ok, _} = Canvas.publish_template(template)
+
+      assert Canvas.list_public_templates("rationale") |> Enum.map(& &1.name) == [
+               "Rationale map"
+             ]
+
+      assert Canvas.list_public_templates("framing questions") |> Enum.map(& &1.name) == [
+               "Something else"
+             ]
+
+      # An empty query is no filter.
+      assert length(Canvas.list_public_templates("")) == 3
+      assert length(Canvas.list_public_templates()) == 3
+    end
+
+    test "list_public_templates/1 escapes the search wildcards" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id, name: "100%"})
+      {:ok, _} = Canvas.publish_template(template)
+
+      assert [%{name: "100%"}] = Canvas.list_public_templates("100%")
+      # Unescaped, "10%" would match "100%" as a wildcard pattern.
+      assert Canvas.list_public_templates("10%") == []
+    end
+
+    test "get_public_template/1 finds a public template and hides a private one" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      assert Canvas.get_public_template(template.id) == nil
+
+      {:ok, _} = Canvas.publish_template(template)
+      assert %{id: id} = Canvas.get_public_template(template.id)
+      assert id == template.id
+    end
+
+    test "publish_template/1 and unpublish_template/1 flip the flag" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, published} = Canvas.publish_template(template)
+      assert published.public
+
+      {:ok, unpublished} = Canvas.unpublish_template(published)
+      refute unpublished.public
+    end
+
+    test "instantiate_template/3 counts the use" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, _canvas} = Canvas.instantiate_template(template, author.id)
+      assert Canvas.get_canvas_layout(template.id).use_count == 1
+
+      {:ok, _canvas} = Canvas.instantiate_template(template, author.id)
+      assert Canvas.get_canvas_layout(template.id).use_count == 2
+    end
+
+    test "a failed instantiation leaves the count alone" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      assert {:error, _changeset} =
+               Canvas.instantiate_template(template, author.id, %{"notes_mode" => "bogus"})
+
+      assert Canvas.get_canvas_layout(template.id).use_count == 0
+    end
+
+    test "fork_template/2 copies the definition and counts the fork" do
+      author = Psc.AccountsFixtures.user_fixture()
+      source = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, fork} = Canvas.fork_template(source, author.id)
+
+      assert fork.author_id == author.id
+      assert fork.name == "#{source.name} (fork)"
+      assert fork.forked_from_id == source.id
+      assert fork.layout_map["cells"] == source.layout_map["cells"]
+      assert Canvas.get_canvas_layout(source.id).fork_count == 1
+    end
+
+    test "forking the same source twice gives the forks different names" do
+      author = Psc.AccountsFixtures.user_fixture()
+      source = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, first} = Canvas.fork_template(source, author.id)
+      {:ok, second} = Canvas.fork_template(source, author.id)
+
+      assert first.name == "#{source.name} (fork)"
+      assert second.name == "#{source.name} (fork 2)"
+      assert Canvas.get_canvas_layout(source.id).fork_count == 2
+    end
+
+    test "a fork that cannot be created leaves the source's count alone" do
+      author = Psc.AccountsFixtures.user_fixture()
+      source = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      # A template the changeset rejects: no rows.
+      broken =
+        source
+        |> change(layout_map: %{"rows" => []})
+        |> Repo.update!()
+
+      assert {:error, _changeset} = Canvas.fork_template(broken, author.id)
+      assert Canvas.get_canvas_layout(source.id).fork_count == 0
+    end
+
+    test "a fork is independent of its source, and survives it" do
+      author = Psc.AccountsFixtures.user_fixture()
+      source = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, fork} = Canvas.fork_template(source, author.id)
+
+      {:ok, _} = Canvas.update_template(fork, %{"name" => "Renamed fork"})
+      assert Canvas.get_canvas_layout(source.id).name == source.name
+
+      {:ok, _} = Canvas.delete_template(source)
+      fork = Canvas.get_canvas_layout(fork.id)
+      assert fork.name == "Renamed fork"
+      assert fork.forked_from_id == nil
+    end
+
+    test "deleting a fork does not decrease the source's count" do
+      author = Psc.AccountsFixtures.user_fixture()
+      source = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, fork} = Canvas.fork_template(source, author.id)
+      {:ok, _} = Canvas.delete_template(fork)
+
+      assert Canvas.get_canvas_layout(source.id).fork_count == 1
+    end
+
+    test "deleting a canvas does not decrease the template's count" do
+      author = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: author.id})
+
+      {:ok, canvas} = Canvas.instantiate_template(template, author.id)
+      {:ok, _} = Canvas.delete_unstr_canvas(canvas)
+
+      assert Canvas.get_canvas_layout(template.id).use_count == 1
+    end
+  end
+
   describe "template sharing" do
     test "share_template_with/2 is idempotent" do
       user = Psc.AccountsFixtures.user_fixture()

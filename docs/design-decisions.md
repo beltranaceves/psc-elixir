@@ -40,6 +40,7 @@ it costs, and the evidence it was verified against.
 | [ADR-028](#adr-028--the-status-pill-is-a-shared-component) | The status pill is a shared component | Accepted | 2026-10-20 |
 | [ADR-029](#adr-029--a-template-picks-its-note-mode) | A template picks its note mode | Accepted | 2026-10-20 |
 | [ADR-030](#adr-030--the-designer-is-collapsible-sections-with-a-shared-note-editor) | The designer is collapsible sections, with a shared note editor | Accepted | 2026-10-20 |
+| [ADR-031](#adr-031--a-template-can-be-public-and-its-use-is-counted) | A template can be public, and its use is counted | Accepted | 2026-10-20 |
 
 ---
 
@@ -1288,6 +1289,60 @@ settings they have already made fold away. The cost is one more component
 (`Section`) and one more empty state to remove when Analysis and Agent are built;
 the note editor is now one code path for the canvas and the designer, so a fix to
 the preview behaviour lands in both.
+
+---
+
+## ADR-031 — A template can be public, and its use is counted
+
+**Context.** Templates were private by construction: the library at `/templates`
+listed what you own or what was shared with you, and nothing else existed. There was
+no way to find a template someone else made unless they shared it with you by email,
+and no way to know whether a template was worth starting from.
+
+**Decision.**
+
+- A template's owner can mark it **public**. It then appears in the catalog at
+  `/catalog`, ranked by how many times it has been used. The flag is a column on
+  `canvas_layouts`, set from the designer's form like any other field — there is no
+  separate publish action and no second save button.
+- The catalog tracks **two counters**: `use_count` (canvases created from the
+  template) and `fork_count` (templates forked from it). The ranking is by
+  `use_count`; the fork count is reported beside it. *Used* and *forked* are
+  different signals — a use is a canvas someone wants to fill, a fork is a copy
+  someone wants to edit.
+- **No usage event log.** The free tier caps every table at 10 000 rows (ADR-006),
+  and a row per use would grow without bound while buying nothing the counters do
+  not already say. The counters are columns, moved with a single `inc` inside the
+  same transaction as the action that causes them.
+- **Every use counts, including the author's**, and **counts never decrease**:
+  deleting a canvas or a fork does not undo the fact that the use happened. The
+  count is a historical fact, which is also what keeps it a single `inc` with no
+  read-modify-write.
+- **Public is not shared.** `shared_with` still governs who may open a template in
+  the designer. A public template is usable and forkable by anyone signed in, but
+  not editable by them; `can_access_template?/2` is unchanged.
+- **A fork is a copy, not a link** — the same rule as ADR-009. It carries the
+  source's name (suffixed), description and definition, records the lineage in
+  `forked_from_id`, and is independent of its source from then on. Deleting the
+  source nilifies the lineage and leaves the fork standing.
+- The catalog is a **ranking, not an index**: it is capped at 200 templates, so a
+  page never renders the whole table.
+
+**Alternatives considered.** One combined counter (a fork and a use would weigh the
+same, and the modal could not tell them apart); a per-use event table (the row
+ceiling, and nothing to show for it but a number); excluding the author's own uses
+(a per-user ledger, which the row ceiling forbids); decrementing on delete (a
+read-modify-write that two simultaneous uses would race on, for a number that stops
+being a historical fact); making the catalog public without a login (every other
+non-auth route in this app is an auth page).
+
+**Consequences.** A template's worth is now visible, and the cheapest way to make a
+template worth using is to make it good. The cost is four columns and one rule to
+keep: the counters and the lineage are set by the context, never by a request, so
+they stay out of the changeset's cast list. And a fork that cannot be named —
+template names are unique — retries with a numbered suffix, one transaction per
+attempt, because a name that is already taken aborts the transaction it was tried
+in.
 
 ## Measurement summary
 

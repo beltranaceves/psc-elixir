@@ -69,7 +69,7 @@ is the right value here because the only foreign key into `canvas_layouts` is th
 
 ## Task 2 — The catalog context
 
-**Status: pending.**
+**Status: done.**
 
 In `Psc.Canvas`, beside the existing template functions:
 
@@ -105,6 +105,13 @@ In `Psc.Canvas`, beside the existing template functions:
 **Watch out** — the counter must be `Repo.update_all(inc:)`, never a changeset
 read-modify-write: two simultaneous uses would otherwise lose one. And `ILIKE` treats
 `%` and `_` as wildcards, so escape them out of the user's query before interpolating it.
+
+**Found while building it** — the fork's name retry cannot live inside one
+transaction. Template names are unique, so the second fork of a source needs a
+different name, but a unique violation aborts the Postgres transaction it happened
+in and every later statement in it fails with `25P02 in_failed_sql_transaction`.
+Each attempt is therefore its own transaction (`fork_once/3`), and only a
+name-taken error is retried.
 
 ---
 
