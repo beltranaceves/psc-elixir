@@ -791,10 +791,10 @@ height (phones add ~54 px to the header). The account actions exist in two rende
 **Addendum (2026-10-20): the bottom app bar owns the space below the grid.** The
 canvas editor's bottom app bar has a known height (`--canvas-tab-bar-height`,
 3.75 rem) plus the phone's safe-area inset, and the editor reserves exactly the
-same amount below the grid. The table therefore ends where the bar starts: no dead
-band under it, and the last row is never hidden behind the bar, so the grid does not
-need scrolling to reach it. The bar's own padding keeps the tab labels clear of the
-home indicator.
+same amount below the grid. The table therefore ends just above the bar: a
+6 px sliver (`--canvas-tab-bar-gap`) to breathe, not a dead band, and the last row
+is never hidden behind the bar, so the grid does not need scrolling to reach it.
+The bar's own padding keeps the tab labels clear of the home indicator.
 
 ---
 
