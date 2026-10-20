@@ -10,8 +10,12 @@ defmodule PscWeb.CatalogLive.Index do
   use PscWeb, :live_view
 
   alias Psc.Canvas
+  alias Psc.Canvas.NotesMode
+  alias PscWeb.Markdown
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Dialog, as: UIDialog
+
+  import PscWeb.Components.EmptySection
 
   @impl true
   def mount(_params, _session, socket) do
@@ -119,6 +123,7 @@ defmodule PscWeb.CatalogLive.Index do
             type="search"
             placeholder="Search templates…"
             aria-label="Search templates"
+            class="w-full rounded-lg border border-base-content/10 bg-base-200 px-3.5 py-2.5 text-sm text-base-content placeholder-base-content/40 transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/35 focus:ring-inset focus:outline-none"
           />
         </.form>
 
@@ -141,19 +146,19 @@ defmodule PscWeb.CatalogLive.Index do
           <div
             :for={{id, template} <- @streams.templates}
             id={id}
-            class="flex flex-col rounded-xl border border-base-content/10 bg-base-200 p-4 text-left transition-colors hover:border-base-content/25 hover:bg-base-content/5"
+            class="flex min-w-0 flex-col rounded-xl border border-base-content/10 bg-base-200 p-4 text-left transition-colors hover:border-base-content/25 hover:bg-base-content/5"
           >
             <button
               type="button"
               phx-click="open_template"
               phx-value-id={template.id}
-              class="flex min-w-0 flex-1 flex-col items-start gap-2 text-left"
+              class="flex min-w-0 flex-1 flex-col gap-2 text-left"
               aria-label={"Details for #{template.name}"}
             >
               <span class="break-words font-medium text-base-content">{template.name}</span>
               <span
                 :if={template.description not in [nil, ""]}
-                class="line-clamp-2 break-words text-sm text-base-content/60"
+                class="break-words line-clamp-2 text-sm text-base-content/60"
               >
                 {template.description}
               </span>
@@ -185,7 +190,7 @@ defmodule PscWeb.CatalogLive.Index do
         open
         on-close="close_template"
       >
-        <UIDialog.dialog_content class="sm:max-w-lg">
+        <UIDialog.dialog_content class="sm:max-w-2xl">
           <UIDialog.dialog_header class="min-w-0">
             <UIDialog.dialog_title class="break-words">{@open_template.name}</UIDialog.dialog_title>
 
@@ -197,7 +202,7 @@ defmodule PscWeb.CatalogLive.Index do
             </UIDialog.dialog_description>
           </UIDialog.dialog_header>
 
-          <dl class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <dl class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
             <div>
               <dt class="text-xs uppercase tracking-wide text-base-content/45">By</dt>
 
@@ -242,7 +247,53 @@ defmodule PscWeb.CatalogLive.Index do
           <p :if={@forked_from_name} class="min-w-0 break-words text-xs text-base-content/50">
             Forked from {@forked_from_name}
           </p>
-          <.grid_preview template={@open_template} />
+
+          <%!-- The preview: what a canvas from this template will look like. The
+          designer's sections, in the designer's order, so the modal and the
+          designer tell the same story about the same template. --%>
+          <div class="flex min-w-0 flex-col gap-5">
+            <.preview_section title="Grid">
+              <.grid_preview template={@open_template} />
+            </.preview_section>
+
+            <.preview_section
+              :if={template_notes(@open_template) != []}
+              title={notes_title(@open_template)}
+            >
+              <div class="flex min-w-0 flex-col gap-2">
+                <div
+                  :for={note <- template_notes(@open_template)}
+                  class="min-w-0 rounded-lg border border-base-content/10 bg-base-200/60 p-3"
+                >
+                  <p class="break-words text-sm font-medium text-base-content">
+                    {note_title(note)}
+                  </p>
+                  <article class="markdown-preview prose dark:prose-invert mt-1 max-w-none break-words">
+                    {raw(Markdown.render(note["content"], empty_message: "The note is empty."))}
+                  </article>
+                </div>
+              </div>
+            </.preview_section>
+
+            <.preview_section title="Analysis">
+              <.empty_section
+                id="catalog-analysis-placeholder"
+                icon="hero-chart-bar"
+                title="Nothing here yet"
+                description="Analysis settings for this template are coming soon."
+              />
+            </.preview_section>
+
+            <.preview_section title="Agent">
+              <.empty_section
+                id="catalog-agent-placeholder"
+                icon="hero-cpu-chip"
+                title="Nothing here yet"
+                description="Agent settings for this template are coming soon."
+              />
+            </.preview_section>
+          </div>
+
           <UIDialog.dialog_footer class="flex flex-row justify-end gap-2">
             <UIButton.button
               type="button"
@@ -308,29 +359,26 @@ defmodule PscWeb.CatalogLive.Index do
   defp grid_preview(assigns) do
     ~H"""
     <div class="min-w-0 overflow-auto rounded-lg border border-base-content/10 bg-base-200/60">
-      <table class="w-full table-fixed border-collapse text-xs">
+      <table class="w-full table-fixed border-collapse text-xs sm:text-sm">
         <thead>
           <tr>
-            <th class="w-16 border border-base-content/10 p-1"></th>
-
+            <th class="w-16 border border-base-content/10 p-1 sm:w-24 sm:p-2"></th>
             <th
               :for={column <- @template.layout_map["columns"] || []}
-              class="border border-base-content/10 bg-base-content/5 p-1 font-medium text-base-content/70"
+              class="border border-base-content/10 bg-base-content/5 p-1 font-medium text-base-content/70 sm:p-2"
             >
               {column["label"]}
             </th>
           </tr>
         </thead>
-
         <tbody>
           <tr :for={{row, ri} <- Enum.with_index(@template.layout_map["rows"] || [])}>
-            <th class="border border-base-content/10 bg-base-content/5 p-1 text-left font-medium text-base-content/70">
+            <th class="border border-base-content/10 bg-base-content/5 p-1 text-left font-medium text-base-content/70 sm:p-2">
               {row["label"]}
             </th>
-
             <td
               :for={cell_key <- cell_keys(@template, ri)}
-              class="border border-base-content/10 p-1 text-base-content/80"
+              class="border border-base-content/10 p-1 align-top text-base-content/80 sm:p-2"
             >
               {cell_label(@template, cell_key)}
             </td>
@@ -340,6 +388,38 @@ defmodule PscWeb.CatalogLive.Index do
     </div>
     """
   end
+
+  # A section of the preview, headed the way the designer heads it, so the
+  # modal and the designer read as the same template.
+  attr :title, :string, required: true
+  slot :inner_block, required: true
+
+  defp preview_section(assigns) do
+    ~H"""
+    <section class="flex min-w-0 flex-col gap-2">
+      <h4 class="text-xs font-medium uppercase tracking-wide text-base-content/50">{@title}</h4>
+      {render_slot(@inner_block)}
+    </section>
+    """
+  end
+
+  # The template's notes, normalized: a template saved before notes existed has
+  # none, and a note always has a title and a body to render.
+  defp template_notes(template) do
+    template.layout_map
+    |> Map.get("notes", [])
+    |> List.wrap()
+    |> Enum.map(fn note ->
+      %{"title" => note["title"] || "", "content" => note["content"] || ""}
+    end)
+  end
+
+  defp notes_title(template) do
+    if NotesMode.single?(template.layout_map["notes_mode"]), do: "Scratchpad", else: "Notes"
+  end
+
+  defp note_title(%{"title" => title}) when is_binary(title) and title != "", do: title
+  defp note_title(_note), do: "Untitled note"
 
   defp cell_keys(template, row_index) do
     template.layout_map |> Map.get("layout", []) |> Enum.at(row_index, [])

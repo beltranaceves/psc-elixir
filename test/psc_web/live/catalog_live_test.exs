@@ -94,6 +94,52 @@ defmodule PscWeb.CatalogLiveTest do
       assert html =~ "Used 0"
     end
 
+    test "the modal previews the template's notes and its empty sections", %{
+      conn: conn,
+      user: user
+    } do
+      layout_map =
+        CanvasFixtures.template_layout_map_fixture()
+        |> Map.put("notes", [%{"title" => "Framing", "content" => "# Framing questions"}])
+        |> Map.put("notes_mode", "single")
+
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{
+          author_id: user.id,
+          name: "Full Tpl",
+          layout_map: layout_map
+        })
+
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      open_modal(lv, template)
+
+      # The sections the designer has, in the designer's order.
+      assert has_element?(lv, "#catalog-template-dialog section h4", "Grid")
+      assert has_element?(lv, "#catalog-template-dialog section h4", "Scratchpad")
+      assert has_element?(lv, "#catalog-template-dialog section h4", "Analysis")
+      assert has_element?(lv, "#catalog-template-dialog section h4", "Agent")
+
+      # The note is rendered, not shown as raw Markdown.
+      assert has_element?(lv, "#catalog-template-dialog article h1")
+      refute has_element?(lv, "#catalog-template-dialog article", "# Framing")
+    end
+
+    test "the modal hides the notes section when the template has none", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Bare Tpl"})
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      open_modal(lv, template)
+
+      assert has_element?(lv, "#catalog-template-dialog section h4", "Grid")
+      refute has_element?(lv, "#catalog-template-dialog section h4", "Notes")
+      refute has_element?(lv, "#catalog-template-dialog section h4", "Scratchpad")
+    end
+
     test "a fork shows its lineage", %{conn: conn, user: user} do
       source = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Source Tpl"})
       {:ok, fork} = Canvas.fork_template(source, user.id)
