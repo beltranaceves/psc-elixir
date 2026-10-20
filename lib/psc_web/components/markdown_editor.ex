@@ -65,13 +65,6 @@ defmodule PscWeb.Components.MarkdownEditor do
       data-preview-event={@preview_event}
       class={["flex min-h-0 flex-1 flex-col", @class]}
     >
-      <div class="flex items-center justify-between border-b border-base-content/10 bg-base-200/40 px-6 py-3">
-        <span class="text-sm font-medium text-base-content" data-editor-mode>
-          Markdown preview
-        </span>
-        <span class="text-xs text-base-content/50" data-editor-hint>Click to edit</span>
-      </div>
-
       <div class="relative min-h-0 flex-1">
         <.form
           for={%{}}

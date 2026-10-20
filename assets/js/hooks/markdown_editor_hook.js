@@ -18,8 +18,6 @@ export default {
     this.input = this.el.querySelector('[data-editor-input]')
     this.preview = this.el.querySelector('[data-editor-preview]')
     this.previewContent = this.el.querySelector('[data-editor-content]')
-    this.mode = this.el.querySelector('[data-editor-mode]')
-    this.hint = this.el.querySelector('[data-editor-hint]')
     this.currentUserId = this.input?.dataset.currentUserId
     this.pendingPreviewContent = null
 
@@ -89,16 +87,12 @@ export default {
   showEditor() {
     this.form.classList.remove('hidden')
     this.preview.classList.add('hidden')
-    this.mode.textContent = 'Editing Markdown'
-    this.hint.textContent = 'Click outside to preview'
     this.preview.setAttribute('aria-hidden', 'true')
   },
 
   showPreview() {
     this.form.classList.add('hidden')
     this.preview.classList.remove('hidden')
-    this.mode.textContent = 'Markdown preview'
-    this.hint.textContent = 'Click to edit'
     this.preview.removeAttribute('aria-hidden')
   },
 }
