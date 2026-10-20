@@ -44,4 +44,7 @@ npm-debug.log
 /test/e2e/test-results/
 /test/e2e/playwright-report/
 /test/e2e/.auth/
+# Playwright also drops a last-run cache next to the repo root when it is
+# invoked from there.
+/test-results/
 

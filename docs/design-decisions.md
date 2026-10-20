@@ -39,6 +39,7 @@ it costs, and the evidence it was verified against.
 | [ADR-027](#adr-027--a-note-is-a-child-of-its-canvas) | A note is a child of its canvas | Accepted | 2026-10-20 |
 | [ADR-028](#adr-028--the-status-pill-is-a-shared-component) | The status pill is a shared component | Accepted | 2026-10-20 |
 | [ADR-029](#adr-029--a-template-picks-its-note-mode) | A template picks its note mode | Accepted | 2026-10-20 |
+| [ADR-030](#adr-030--the-designer-is-collapsible-sections-with-a-shared-note-editor) | The designer is collapsible sections, with a shared note editor | Accepted | 2026-10-20 |
 
 ---
 
@@ -1237,6 +1238,56 @@ The copy is independent, exactly as the cell copy is (ADR-009): editing a note
 in the canvas never touches the template. The scratchpad mode holds one note, so
 switching a template that carries several notes to that mode keeps the first and
 drops the rest.
+
+---
+
+## ADR-030 — The designer is collapsible sections, with a shared note editor
+
+**Context.** The template designer had grown into one long page: the name and
+description, the note mode, the notes the template carries, and the grid all in a
+single scroll. Nothing was wrong with any one part, but together they buried the
+grid — the part a template is actually about — under settings the user has
+usually already made. And the note body was a bare `<textarea>`: three rows tall,
+a scrollbar as soon as the note grew, and no way to see what the Markdown would
+look like.
+
+**Decision.**
+
+- The designer's settings become **collapsible sections**: **Notes**, **Grid**,
+  **Analysis** and **Agent**. The name, description and the Save/Cancel actions
+  stay outside them — they are the page's identity and its escape hatch, and
+  hiding either would strand the user.
+- A section is a **native `<details>`** (`PscWeb.Components.Section`), not a
+  server-driven component. The open state belongs to the browser: the section
+  marks its `open` attribute as ignored (`JS.ignore_attributes/2`), so a
+  LiveView patch — which the form fires on every keystroke — never snaps a
+  section the user closed back open. No round-trip, no server assign, no state
+  to reset.
+- Each section's header carries a **summary** of its content (the note count, the
+  grid dimensions), so a collapsed section still says what it holds. A collapsed
+  section that says nothing is a drawer the user has to open to check.
+- **Analysis** and **Agent** render now as **dashed empty states**
+  (`PscWeb.Components.EmptySection`) rather than being added later. A section
+  that appears later moves everything below it; a placeholder holds the layout
+  steady and tells the user the section exists and is not configured.
+- The note body is the **shared `PscWeb.Components.MarkdownEditor`** — the same
+  component the canvas's Notes view uses — so a template's note previews exactly
+  as a canvas's note will. The component gained an `:auto_grow` mode for it: the
+  editor sizes itself to its text, so a long note makes the card taller instead
+  of hiding text behind a scrollbar.
+
+**Alternatives considered.** A daisyUI `collapse` driven from the server (a
+round-trip per toggle, and server state that a patch would reset); keeping the
+name and description collapsible too (the Save button would disappear with them);
+a fixed-height editor with a scrollbar (the complaint this replaces); building a
+second, designer-only Markdown editor (two implementations of the same
+preview/focus dance to keep in step).
+
+**Consequences.** The grid is the first thing a user sees after the name, and the
+settings they have already made fold away. The cost is one more component
+(`Section`) and one more empty state to remove when Analysis and Agent are built;
+the note editor is now one code path for the canvas and the designer, so a fix to
+the preview behaviour lands in both.
 
 ## Measurement summary
 

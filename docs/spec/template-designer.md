@@ -249,10 +249,17 @@ Each template card shows: name, description, grid dimensions (e.g., "3 × 4"), c
 
 Two levels of context, deliberately separate. The **app header** shows “Designer” next to
 the PSC mark while the **Templates** nav item stays current (highlighted,
-`aria-current="page"`). The page has **no title block**: the first card is the form, whose
-**Name** row holds the input plus the **Share** combo button and the **← Templates** back
-link on the same line (they stack under the input on narrow screens), followed by
-**Description** and the Cancel / Save Template actions.
+`aria-current="page"`). The page has **no title block**: a slim action row holds the
+**← Templates** back link and the **Share** combo button, and below it the form's
+**Name** and **Description** fields, followed by the Cancel / Save Template actions.
+
+The rest of the designer is **collapsible sections** (`PscWeb.Components.Section`, a
+native `<details>`): **Notes**, **Grid**, **Analysis** and **Agent**. Each section's
+header carries a summary of what is inside it, so a collapsed section still says what it
+holds. The open state belongs to the browser, not the server — a LiveView patch (every
+keystroke in the form) does not snap a section the user closed back open. **Analysis**
+and **Agent** are placeholders: dashed empty states that hold the section's place until
+their content is built.
 
 The existing `CanvasLayoutLive.Editor` already supports add/remove rows and columns. The designer is extended with:
 
@@ -269,9 +276,9 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
 
 4. **Share** — a **Share** combo button in the header (share icon + label) opens a modal containing the email invite form, the list of people with access (each with a remove ×), and a Done action. The dialog is the shared `PscWeb.Components.ShareDialog` used by the canvas and document editors too.
 
-5. **Note mode** — a section above the grid that picks how the canvases made from
-   this template handle notes: **Multiple notes** (a list) or **Single note
-   (scratchpad)** (one note for the whole canvas). The setting is stored in the
+5. **Note mode** — the **Notes** section picks how the canvases made from this
+   template handle notes: **Multiple notes** (a list) or **Single note** (a
+   scratchpad — one note for the whole canvas). The setting is stored in the
    template's `layout_map` as `"notes_mode"` and copied onto the canvas as
    `notes_mode` when it is instantiated. Only the owner may change it. See
    [ADR-029](../design-decisions.md#adr-029--a-template-picks-its-note-mode) and
@@ -283,8 +290,17 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
    template's `layout_map` under `"notes"` and copied onto the canvas when it is
    instantiated. In the scratchpad mode there is only one, so switching a
    template that carries several notes to that mode keeps the first and drops
-   the rest. The copy is independent: editing a note in the canvas never
-   touches the template.
+   the rest — and a template that has none gets one, because the scratchpad has
+   no *Add note* action and the designer still needs somewhere to write the
+   scratchpad's starting content. The copy is independent: editing a note in the
+   canvas never touches the template.
+
+   Each note's body is the shared `PscWeb.Components.MarkdownEditor`: it shows
+   the **rendered Markdown** while it is not in focus, opens the textarea on a
+   click, and re-renders the preview when the textarea loses focus — the same
+   editor the canvas's Notes view uses. In the designer it **grows with its
+   content** instead of scrolling, so a long note makes the card taller rather
+   than hiding text behind a scrollbar.
 
 ### Validation rules
 
