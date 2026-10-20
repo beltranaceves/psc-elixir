@@ -269,6 +269,14 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
 
 4. **Share** — a **Share** combo button in the header (share icon + label) opens a modal containing the email invite form, the list of people with access (each with a remove ×), and a Done action. The dialog is the shared `PscWeb.Components.ShareDialog` used by the canvas and document editors too.
 
+5. **Note mode** — a section above the grid that picks how the canvases made from
+   this template handle notes: **Multiple notes** (a list) or **Single note
+   (scratchpad)** (one note for the whole canvas). The setting is stored in the
+   template's `layout_map` as `"notes_mode"` and copied onto the canvas as
+   `notes_mode` when it is instantiated. Only the owner may change it. See
+   [ADR-029](../design-decisions.md#adr-029--a-template-picks-its-note-mode) and
+   [canvas-notes.md](canvas-notes.md).
+
 ### Validation rules
 
 - At least 1 row and 1 column.

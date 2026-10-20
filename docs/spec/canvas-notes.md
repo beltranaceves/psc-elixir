@@ -154,6 +154,36 @@ applies:
 
 ## Behaviour
 
+### The note mode
+
+A template decides how its canvases behave, and the canvas inherits it:
+
+- **`multi`** — a list of notes. The canvas can hold as many as the work needs.
+- **`single`** — one scratchpad for the whole canvas.
+
+The single-note mode is deliberately restrictive. For a framework like the
+Problem–Solution Canvas, limiting how much can be written down is the point: one
+page of thinking, not five.
+
+The mode lives in the template's `layout_map` (`"notes_mode"`), is chosen in the
+**template designer**, and is copied onto the canvas as `unstr_canvases.notes_mode`
+when the canvas is instantiated. A canvas made before this setting existed gets
+`multi`.
+
+**What changes in the single-note mode:**
+
+- The Notes view has **no list** — it is not rendered at all. The editor takes
+  the whole view.
+- The scratchpad is created the first time the Notes view is opened, so a canvas
+  that is never written in costs no rows.
+- There is no "New note" action: there is only the one note.
+- The note cannot be deleted. Deleting it would simply bring it back on the
+  next visit.
+- The URL cannot choose a note: a scratchpad canvas ignores a note id.
+
+Everything else is the same — the note is still collaborative Markdown, it still
+inherits the canvas's access, and the canvas owner can still rename it.
+
 ### The Notes view
 
 The canvas editor's tab strip already has a **Notes** tab, currently a
@@ -182,13 +212,18 @@ The editor is the document editor's mechanics, rebuilt as a reusable component
 rather than a copy:
 
 - A **title** input at the top.
-- The **status pill** (the same one the canvas header uses — see
-  [ADR-028](../design-decisions.md#adr-028--the-status-pill-is-a-shared-component)),
-  reporting the note's own save state: last saved, writes this session, failed
-  writes, how long the last write took.
 - A **Markdown editor** with the same inline preview behaviour as the document
   editor: a click on the rendered Markdown opens the textarea, blurring it
-  re-renders the preview.
+  re-renders the preview. There is no "Markdown preview / Editing Markdown"
+  banner above it — the state is obvious from what is on screen.
+
+**There is no status pill of its own.** The canvas editor has **one** status
+pill, in its header (and in the app header on phones), and it reports whichever
+surface the user is on: the canvas's cells on the Editor tab, the open note on
+the Notes tab. The other surface's figures are listed in the same tooltip, under
+a heading, so nothing is lost — the tooltip on the Notes tab shows a **Note**
+section and a **Canvas** section, and on the Editor tab it shows just the
+canvas's rows, without a heading.
 
 The document editor's hook addresses its parts by **hardcoded ids** (`#editor`,
 `#editor-form`, `#document-markdown-preview`), so it can only exist once per

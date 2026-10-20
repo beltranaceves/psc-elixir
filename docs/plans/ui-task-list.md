@@ -405,6 +405,20 @@ the table dropped from 30 px to 14 px. Two causes: the share dialog's root was a
 flex item between the header and the grid, so it opened a gap of its own on each side (it is
 now rendered out of the flow), and the workspace gap went from 12 px to 8 px.
 
+**Follow-up (2026-10-20): two note modes, and a quieter editor.** A template now
+picks how its canvases' notes behave: **multi** (a list of notes, as before) or
+**single** (one scratchpad for the canvas). The single-note mode is deliberately
+restrictive — for a framework like the Problem–Solution Canvas, limiting how much
+can be written down is the point. The setting is chosen in the template designer,
+lives in the template's `layout_map`, and is copied onto the canvas as
+`notes_mode` when the canvas is instantiated. In a scratchpad the Notes view has
+no list at all, the note is created on first visit, and it cannot be deleted.
+The Markdown editor also lost its "Markdown preview / Editing Markdown" banner:
+it said what was already obvious. The canvas editor's status pill and the note
+editor's status pill were merged into **one**: the pill in the editor's header
+reports whichever surface the user is on — the canvas's cells, or the open note
+— and the other surface's figures are listed in the same tooltip.
+
 **Follow-up (2026-10-20): view state in the URL.** The phone fullscreen cell is now a URL
 state (`#cell-<key>`): entering it pushes a history entry, so Back collapses the cell and
 returns to the canvas grid instead of leaving the canvas, and the view can be linked and

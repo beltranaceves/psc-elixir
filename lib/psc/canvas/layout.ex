@@ -57,8 +57,19 @@ defmodule Psc.Canvas.Layout do
       invalid_accents?(rows, columns) ->
         add_error(changeset, :layout_map, "accents must be known color tokens")
 
+      invalid_notes_mode?(lm) ->
+        add_error(changeset, :layout_map, "notes mode must be known")
+
       true ->
         changeset
+    end
+  end
+
+  # The note mode is optional: an older template without one keeps the default.
+  defp invalid_notes_mode?(lm) do
+    case lm["notes_mode"] do
+      nil -> false
+      mode -> mode not in Psc.Canvas.NotesMode.modes()
     end
   end
 

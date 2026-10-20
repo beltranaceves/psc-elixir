@@ -82,6 +82,7 @@ erDiagram
         string name
         string description
         string_array shared_with
+        string notes_mode
         map cells
         int snapshot_seq
         int author_id FK

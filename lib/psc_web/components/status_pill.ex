@@ -31,9 +31,13 @@ defmodule PscWeb.Components.StatusPill do
   attr :id, :string, required: true
   attr :save_state, :atom, required: true
   attr :save_stats, :map, required: true
+  attr :label, :string, default: nil
+  attr :others, :list, default: []
   attr :compact, :boolean, default: false
 
   def status_pill(assigns) do
+    assigns = assign(assigns, :sections, sections(assigns))
+
     ~H"""
     <UITooltip.tooltip id={"#{@id}-tooltip"}>
       <UITooltip.tooltip_trigger>
@@ -60,34 +64,60 @@ defmodule PscWeb.Components.StatusPill do
           )}
         </p>
 
-        <dl class="space-y-1 text-xs text-base-content/70">
-          <div class="flex items-baseline justify-between gap-3">
-            <dt>Last saved</dt>
+        <%= for {section, index} <- Enum.with_index(@sections) do %>
+          <dl class={[
+            "space-y-1 text-xs text-base-content/70",
+            index > 0 && "mt-2 border-t border-base-content/10 pt-2"
+          ]}>
+            <p
+              :if={length(@sections) > 1}
+              class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50"
+            >
+              {section.label}
+            </p>
 
-            <dd class="text-right text-base-content">{last_saved_label(@save_stats)}</dd>
-          </div>
+            <div class="flex items-baseline justify-between gap-3">
+              <dt>Last saved</dt>
 
-          <div class="flex items-baseline justify-between gap-3">
-            <dt>Writes this session</dt>
+              <dd class="text-right text-base-content">
+                {last_saved_label(section.stats)}
+              </dd>
+            </div>
 
-            <dd class="text-right text-base-content">{@save_stats.writes}</dd>
-          </div>
+            <div class="flex items-baseline justify-between gap-3">
+              <dt>Writes this session</dt>
 
-          <div :if={@save_stats.failures > 0} class="flex items-baseline justify-between gap-3">
-            <dt class="text-error">Failed writes</dt>
+              <dd class="text-right text-base-content">{section.stats.writes}</dd>
+            </div>
 
-            <dd class="text-right text-error">{@save_stats.failures}</dd>
-          </div>
+            <div :if={section.stats.failures > 0} class="flex items-baseline justify-between gap-3">
+              <dt class="text-error">Failed writes</dt>
 
-          <div :if={@save_stats.last_write_ms} class="flex items-baseline justify-between gap-3">
-            <dt>Last write took</dt>
+              <dd class="text-right text-error">{section.stats.failures}</dd>
+            </div>
 
-            <dd class="text-right text-base-content">{@save_stats.last_write_ms} ms</dd>
-          </div>
-        </dl>
+            <div :if={section.stats.last_write_ms} class="flex items-baseline justify-between gap-3">
+              <dt>Last write took</dt>
+
+              <dd class="text-right text-base-content">{section.stats.last_write_ms} ms</dd>
+            </div>
+          </dl>
+        <% end %>
       </UITooltip.tooltip_content>
     </UITooltip.tooltip>
     """
+  end
+
+  # The primary source, plus any other surface whose figures are reported
+  # alongside it. A section is `%{label: ..., state: ..., stats: ...}`.
+  defp sections(assigns) do
+    primary = %{
+      label: assigns.label,
+      state: assigns.save_state,
+      stats: assigns.save_stats
+    }
+
+    [primary | assigns.others]
   end
 
   # The terse label for the pill itself; the descriptive one is for the

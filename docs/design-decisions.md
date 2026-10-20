@@ -38,6 +38,7 @@ it costs, and the evidence it was verified against.
 | [ADR-026](#adr-026--view-state-lives-in-the-url-not-in-the-page) | View state lives in the URL, not in the page | Accepted | 2026-10-20 |
 | [ADR-027](#adr-027--a-note-is-a-child-of-its-canvas) | A note is a child of its canvas | Accepted | 2026-10-20 |
 | [ADR-028](#adr-028--the-status-pill-is-a-shared-component) | The status pill is a shared component | Accepted | 2026-10-20 |
+| [ADR-029](#adr-029--a-template-picks-its-note-mode) | A template picks its note mode | Accepted | 2026-10-20 |
 
 ---
 
@@ -1175,6 +1176,56 @@ for two independent save cycles, which cannot be honest about either).
 **Consequences.** The pill's markup and colours have one home. The statistics it
 reports are the caller's, so a note's pill counts the note's writes, not the
 canvas's.
+
+**Addendum (2026-10-20): one pill, not one per surface.** The canvas editor
+showed a pill for the canvas *and* a second one for the open note — two
+indicators, in two places, for one editor. There is now **one** pill, in the
+editor's header (and in the app header on phones). It reports whichever surface
+the user is on: the canvas's cells on the Editor tab, the open note on the Notes
+tab. The other surface's figures are listed in the same tooltip, under a
+heading, so nothing is lost. The note editor has no pill of its own.
+
+**Consequences.** The pill's markup and colours have one home. The statistics it
+reports are the caller's, so the note's figures are the note's, not the canvas's.
+
+## ADR-029 — A template picks its note mode
+
+**Context.** Notes were always a list: a canvas could hold as many as the work
+needed. That is right for a blank canvas, and wrong for a framework like the
+Problem–Solution Canvas, where the value is in *restricting* how much can be
+written down. One page of thinking, not five.
+
+**Decision.**
+
+- A template chooses the note mode of its canvases: **`multi`** (a list of
+  notes) or **`single`** (one scratchpad). The mode is part of the template's
+  definition — it lives in the template's `layout_map` and is chosen in the
+  template designer — and it is copied onto the canvas as `notes_mode` when the
+  canvas is instantiated. A canvas inherits its template's mode; it does not
+  choose its own.
+- In `single` mode the Notes view has **no list**: it is not rendered. The
+  editor takes the whole view. There is no "New note" action, and the note
+  cannot be deleted — deleting it would only bring it back on the next visit.
+  A scratchpad canvas also ignores a note id in the URL: it has one note.
+- The scratchpad is created the first time the Notes view is opened, so a canvas
+  that is never written in costs no rows. The free tier caps every table at
+  10 000 rows, and a canvas should not pay for a note nobody wrote.
+- A canvas that predates the setting gets `multi`, so nothing changes for
+  existing canvases.
+
+**Alternatives considered.** Letting each canvas choose its own mode (the
+template and the canvas could disagree, and a canvas would carry a setting the
+template does not know about); storing the mode on the canvas only (the
+template designer could not express the intent, and every new canvas would have
+to be configured by hand); and keeping the list but disabling the create action
+(the user would still see a list of one, which reads as a mistake rather than as
+a decision).
+
+**Consequences.** The template is the place a framework's character is expressed:
+the same template that says "four columns, three rows" can also say "one
+scratchpad, and nothing else". A scratchpad canvas is still a normal canvas
+otherwise — the note is still collaborative Markdown, still inherits the canvas's
+access, and the canvas owner can still rename it.
 
 ## Measurement summary
 

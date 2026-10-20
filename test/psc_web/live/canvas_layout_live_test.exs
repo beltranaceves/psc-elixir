@@ -117,6 +117,47 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert html =~ "Row 1"
     end
 
+    test "picks the note mode and keeps it in the template", %{conn: conn, user: user} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      # A new template starts with a list of notes.
+      assert has_element?(lv, "#notes-mode-multi[aria-pressed='true']")
+      assert has_element?(lv, "#notes-mode-single[aria-pressed='false']")
+
+      lv |> element("#notes-mode-single") |> render_click()
+
+      assert has_element?(lv, "#notes-mode-single[aria-pressed='true']")
+      assert has_element?(lv, "#notes-mode-multi[aria-pressed='false']")
+
+      # The mode is saved with the template.
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      lv
+      |> form("#template-form", %{"name" => "Scratchpad Tpl", "description" => ""})
+      |> render_submit()
+
+      assert [template] = Canvas.list_templates(user)
+      assert template.layout_map["notes_mode"] == "single"
+
+      # And it comes back when the template is opened again.
+      {:ok, lv, _html} = live(conn, ~p"/templates/#{template.id}")
+      assert has_element?(lv, "#notes-mode-single[aria-pressed='true']")
+    end
+
+    test "a canvas made from a scratchpad template is a scratchpad", %{user: user} do
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{
+          author_id: user.id,
+          layout_map:
+            Map.put(CanvasFixtures.template_layout_map_fixture(), "notes_mode", "single")
+        })
+
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      assert canvas.notes_mode == "single"
+    end
+
     test "edits cell details directly in the grid", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates/new")
 

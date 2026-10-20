@@ -110,4 +110,80 @@ test.describe('canvas notes', () => {
     await page.locator('#canvas-note-delete').click();
     await expect(page.locator('#canvas-notes-empty')).toBeVisible();
   });
+
+  test('one status pill reports the note and the canvas', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('One Pill'));
+
+    await page.locator('#canvas-tab-notes').click();
+    await page.locator('#new-note-button').click();
+    await expect(page.locator('#canvas-note-title-form')).toBeVisible();
+
+    // There is one pill, not one per surface: the note editor has none of its
+    // own.
+    await expect(page.locator('#canvas-save-state-pill')).toHaveCount(1);
+    await expect(page.locator('#canvas-note-status')).toHaveCount(0);
+
+    // It reports the note, and lists the canvas alongside it.
+    const tip = page.locator('#canvas-save-state-pill-tooltip [data-part="content"]');
+    await page.locator('#canvas-save-state-pill').hover();
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText('Note');
+    await expect(tip).toContainText('Canvas');
+    await expect(tip).toContainText('Writes this session');
+  });
+
+  test('the pill reports the canvas when no note is open', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Canvas Pill'));
+
+    await page.locator('#canvas-tab-editor').click();
+    await expect(page.locator('#canvas-grid')).toBeVisible();
+
+    const tip = page.locator('#canvas-save-state-pill-tooltip [data-part="content"]');
+    await page.locator('#canvas-save-state-pill').hover();
+    await expect(tip).toBeVisible();
+    // One surface, so no section heading.
+    await expect(tip).not.toContainText('Canvas');
+    await expect(tip).toContainText('Writes this session');
+  });
+
+  test('a scratchpad template gives a canvas one note and no list', async ({ page }) => {
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+
+    const templateName = uniqueName('Scratchpad Tpl');
+
+    // The designer picks the note mode.
+    await page.locator('#notes-mode-single').click();
+    await expect(page.locator('#notes-mode-single')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await page.getByRole('button', { name: 'Add Row' }).click();
+    await page.locator('#template-form input[name="name"]').fill(templateName);
+    await page.getByRole('button', { name: 'Save Template' }).click();
+    await page.waitForURL(/\/templates$/);
+
+    // A canvas made from it is a scratchpad.
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+    const canvasName = uniqueName('Scratchpad Canvas');
+    await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
+    await page.getByLabel('Start from').selectOption({ label: templateName });
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
+
+    const card = page
+      .getByRole('heading', { name: canvasName })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    await card.getByRole('link', { name: 'Edit' }).click();
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+
+    await page.locator('#canvas-tab-notes').click();
+    await expect(page.locator('#canvas-note-title-form')).toBeVisible();
+
+    // One note, no list, no way to create another.
+    await expect(page.locator('#canvas-notes-list')).toHaveCount(0);
+    await expect(page.locator('#new-note-button')).toHaveCount(0);
+    await expect(page.locator('#canvas-note-delete')).toHaveCount(0);
+    await expect(page.locator('#canvas-notes-back')).toHaveCount(0);
+  });
 });

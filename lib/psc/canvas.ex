@@ -8,6 +8,7 @@ defmodule Psc.Canvas do
   alias Psc.Repo
   alias Psc.Canvas.UnstrCanvas
   alias Psc.Canvas.Layout
+  alias Psc.Canvas.NotesMode
 
   @doc """
   Returns the display title for a cell field.
@@ -172,7 +173,9 @@ defmodule Psc.Canvas do
       %{
         "name" => template.name,
         "description" => template.description || "",
-        "cells" => cells
+        "cells" => cells,
+        # The note mode is a property of the template, not of the canvas.
+        "notes_mode" => NotesMode.normalize(lm["notes_mode"])
       }
       |> Map.merge(Map.reject(overrides || %{}, fn {_k, v} -> is_nil(v) or v == "" end))
 

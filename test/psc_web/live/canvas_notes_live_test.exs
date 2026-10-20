@@ -23,6 +23,17 @@ defmodule PscWeb.CanvasNotesLiveTest do
     canvas
   end
 
+  defp canvas_with_mode(user, mode) do
+    template =
+      CanvasFixtures.canvas_layout_fixture(%{
+        author_id: user.id,
+        layout_map: Map.put(CanvasFixtures.template_layout_map_fixture(), "notes_mode", mode)
+      })
+
+    {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+    canvas
+  end
+
   describe "the notes view" do
     test "shows an empty state when the canvas has no notes", %{conn: conn, user: user} do
       canvas = canvas_for(user)
@@ -160,6 +171,102 @@ defmodule PscWeb.CanvasNotesLiveTest do
       assert has_element?(lv, "#canvas-note-title-form")
       # …but there is no delete action.
       refute has_element?(lv, "#canvas-note-delete")
+    end
+  end
+
+  describe "the scratchpad mode" do
+    test "a scratchpad canvas has one note and no list", %{conn: conn, user: user} do
+      canvas = canvas_with_mode(user, "single")
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes")
+
+      # The note is created the first time the view is opened.
+      assert [note] = Notes.list_notes(canvas.id)
+      assert note.title == "Scratchpad"
+
+      # There is no list, and no way to create a second note.
+      refute has_element?(lv, "#canvas-notes-list")
+      refute has_element?(lv, "#new-note-button")
+
+      # There is no list to go back to either.
+      refute has_element?(lv, "#canvas-notes-back")
+
+      # The editor takes the whole view.
+      assert has_element?(lv, "#canvas-note-title-form")
+      assert has_element?(lv, "#canvas-note-preview")
+
+      # And the scratchpad is not deletable: it would come straight back.
+      refute has_element?(lv, "#canvas-note-delete")
+    end
+
+    test "opening the view again does not create a second note", %{conn: conn, user: user} do
+      canvas = canvas_with_mode(user, "single")
+
+      {:ok, _lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes")
+      {:ok, _lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes")
+
+      assert length(Notes.list_notes(canvas.id)) == 1
+    end
+
+    test "a scratchpad canvas keeps what is written in it", %{conn: conn, user: user} do
+      canvas = canvas_with_mode(user, "single")
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes")
+
+      lv
+      |> form("#canvas-note-form", %{"content" => "A thought"})
+      |> render_change()
+
+      assert [note] = Notes.list_notes(canvas.id)
+      assert Notes.get_note_content(note.id) == "A thought"
+    end
+
+    test "a multi-note canvas still lists its notes", %{conn: conn, user: user} do
+      canvas = canvas_for(user)
+      NotesFixtures.note_fixture(%{canvas: canvas, user: user, title: "One"})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes")
+
+      assert has_element?(lv, "#canvas-notes-list")
+      assert has_element?(lv, "#new-note-button")
+      assert has_element?(lv, "#canvas-notes-items", "One")
+    end
+  end
+
+  describe "the status pill" do
+    test "there is one pill, and the note editor has none of its own", %{conn: conn, user: user} do
+      canvas = canvas_for(user)
+      note = NotesFixtures.note_fixture(%{canvas: canvas, user: user})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}")
+
+      assert has_element?(lv, "#canvas-save-state-pill")
+      refute has_element?(lv, "#canvas-note-status")
+    end
+
+    test "it reports the note and lists the canvas alongside it", %{conn: conn, user: user} do
+      canvas = canvas_for(user)
+      note = NotesFixtures.note_fixture(%{canvas: canvas, user: user})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}")
+
+      html = lv |> element("#canvas-save-state-pill-tooltip") |> render()
+
+      assert html =~ "Note"
+      assert html =~ "Canvas"
+      assert html =~ "Writes this session"
+    end
+
+    test "it reports the canvas alone when no note is open", %{conn: conn, user: user} do
+      canvas = canvas_for(user)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=editor")
+
+      html = lv |> element("#canvas-save-state-pill-tooltip") |> render()
+
+      # One surface, so no section heading.
+      refute html =~ "Canvas"
+      assert html =~ "Writes this session"
     end
   end
 

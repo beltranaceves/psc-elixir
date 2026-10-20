@@ -9,6 +9,10 @@ defmodule Psc.Canvas.UnstrCanvas do
 
     field :shared_with, {:array, :string}, default: []
 
+    # How the canvas's Notes view behaves: "multi" (a list of notes) or
+    # "single" (one scratchpad). Copied from the template.
+    field :notes_mode, :string, default: "multi"
+
     belongs_to :author, Psc.Accounts.User, type: :id
 
     field :snapshot_seq, :integer, default: 0
@@ -114,8 +118,17 @@ defmodule Psc.Canvas.UnstrCanvas do
   def changeset(unstr_canvas, attrs) do
     # Add a step to validate that cells has the correct structure
     unstr_canvas
-    |> cast(attrs, [:name, :description, :author_id, :shared_with, :cells, :snapshot_seq])
+    |> cast(attrs, [
+      :name,
+      :description,
+      :author_id,
+      :shared_with,
+      :cells,
+      :snapshot_seq,
+      :notes_mode
+    ])
     |> validate_required([:name, :author_id, :cells])
+    |> validate_inclusion(:notes_mode, Psc.Canvas.NotesMode.modes())
     |> validate_cells_structure()
   end
 

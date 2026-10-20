@@ -14,6 +14,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   alias Psc.Canvas
   alias Psc.Canvas.Accent
+  alias Psc.Canvas.NotesMode
 
   @impl true
   def mount(params, _session, socket) do
@@ -72,6 +73,16 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   @impl true
   def handle_event("add_column", _params, socket) do
     {:noreply, update_layout(socket, &add_column/1)}
+  end
+
+  # The note mode is a property of the template, and it decides how the
+  # canvases made from it behave. Only the owner may change it.
+  def handle_event("set_notes_mode", %{"mode" => mode}, socket) do
+    if socket.assigns.owner? and mode in NotesMode.modes() do
+      {:noreply, update_layout(socket, &Map.put(&1, "notes_mode", mode))}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("remove_column", %{"index" => index}, socket) do
@@ -320,7 +331,13 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   defp empty_layout_map do
-    %{"rows" => [], "columns" => [], "layout" => [], "cells" => %{}}
+    %{
+      "rows" => [],
+      "columns" => [],
+      "layout" => [],
+      "cells" => %{},
+      "notes_mode" => NotesMode.default()
+    }
   end
 
   defp empty_cell_meta do
@@ -342,6 +359,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       |> Map.put_new("columns", [])
       |> Map.put_new("layout", [])
       |> Map.put_new("cells", %{})
+      |> Map.put("notes_mode", NotesMode.normalize(lm["notes_mode"]))
 
     rows = lm["rows"]
     columns = lm["columns"]
@@ -516,6 +534,36 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           </.form>
 
           <div class="overflow-hidden rounded-xl border border-base-content/10 bg-base-200 p-0 sm:p-6">
+            <%!-- The note mode decides how the canvases made from this template
+            behave: a list of notes, or one scratchpad. --%>
+            <div class="border-b border-base-content/10 px-4 py-4 sm:px-6">
+              <h2 class="text-sm font-medium text-base-content">Notes</h2>
+              <p class="mt-1 max-w-lg text-sm text-base-content/60">
+                {NotesMode.blurb(@layout_map["notes_mode"])}
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <%= for mode <- NotesMode.modes() do %>
+                  <button
+                    type="button"
+                    id={"notes-mode-" <> mode}
+                    phx-click="set_notes_mode"
+                    phx-value-mode={mode}
+                    disabled={not @owner?}
+                    aria-pressed={to_string(@layout_map["notes_mode"] == mode)}
+                    class={[
+                      "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
+                      @layout_map["notes_mode"] == mode &&
+                        "border-primary/50 bg-primary/10 text-base-content",
+                      @layout_map["notes_mode"] != mode &&
+                        "border-base-content/15 bg-base-200 text-base-content/60 hover:border-base-content/30 hover:text-base-content"
+                    ]}
+                  >
+                    {NotesMode.label(mode)}
+                  </button>
+                <% end %>
+              </div>
+            </div>
+
             <div class="mb-2 flex items-center justify-between gap-2 px-2 pt-2 sm:mb-4 sm:px-0 sm:pt-0">
               <h2 class="text-sm font-medium text-base-content">Grid</h2>
               <%= if @owner? do %>

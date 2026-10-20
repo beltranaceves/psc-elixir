@@ -13,6 +13,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   import PscWeb.Components.StatusPill
 
   alias Psc.Canvas
+  alias Psc.Canvas.NotesMode
   alias Psc.Notes
   alias PscWeb.Markdown
   alias PscWeb.Presence
@@ -176,20 +177,26 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   @impl true
   def handle_event("create_note", _params, socket) do
-    case Notes.create_note(socket.assigns.canvas_id, socket.assigns.user_id, %{
-           title: "Untitled note"
-         }) do
-      {:ok, note} ->
-        {:noreply,
-         socket
-         |> load_notes()
-         |> push_patch(
-           to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes&note=#{note.id}",
-           replace: true
-         )}
+    if NotesMode.single?(socket.assigns.canvas.notes_mode) do
+      # A scratchpad has one note. Opening the view created it already, so
+      # there is nothing to create.
+      {:noreply, socket}
+    else
+      case Notes.create_note(socket.assigns.canvas_id, socket.assigns.user_id, %{
+             title: "Untitled note"
+           }) do
+        {:ok, note} ->
+          {:noreply,
+           socket
+           |> reload_notes()
+           |> push_patch(
+             to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes&note=#{note.id}",
+             replace: true
+           )}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not create the note")}
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Could not create the note")}
+      end
     end
   end
 
@@ -204,7 +211,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
           {:noreply,
            socket
-           |> load_notes()
+           |> reload_notes()
            |> push_patch(to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes", replace: true)
            |> put_flash(:success, "Note deleted")}
 
@@ -228,7 +235,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         {:noreply,
          socket
          |> assign(:note, updated)
-         |> load_notes()}
+         |> reload_notes()}
     end
   end
 
@@ -392,13 +399,65 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   # The notes of the canvas, most recently touched first.
-  defp load_notes(socket) do
+  defp reload_notes(socket) do
     assign(socket, :notes, Notes.list_notes(socket.assigns.canvas_id))
   end
 
+  # A scratchpad canvas has exactly one note, and no list. It is created the
+  # first time the Notes view is opened, so a canvas that is never written in
+  # costs no rows.
+  defp load_notes(socket) do
+    if NotesMode.single?(socket.assigns.canvas.notes_mode) do
+      socket
+      |> reload_notes()
+      |> ensure_scratchpad()
+    else
+      reload_notes(socket)
+    end
+  end
+
+  defp ensure_scratchpad(socket) do
+    case socket.assigns.notes do
+      [note | _] ->
+        socket
+        |> assign(:note, note)
+        |> assign(:note_content, Notes.get_note_content(note.id))
+        |> assign(:note_last_saved_content, Notes.get_note_content(note.id))
+
+      [] ->
+        case Notes.create_note(
+               socket.assigns.canvas_id,
+               socket.assigns.user_id,
+               %{title: "Scratchpad"}
+             ) do
+          {:ok, note} ->
+            socket
+            |> assign(:notes, [note])
+            |> assign(:note, note)
+            |> assign(:note_content, "")
+            |> assign(:note_last_saved_content, "")
+            |> assign(:note_save_state, :saved)
+            |> assign(:note_save_stats, @initial_save_stats)
+            |> subscribe_to_note(note.id)
+
+          {:error, _changeset} ->
+            socket
+        end
+    end
+  end
+
   # Open a note, if it belongs to this canvas. A note id from another canvas is
-  # ignored: the canvas is the only thing that grants access.
-  defp load_note(socket, note_id) when note_id in [nil, ""] do
+  # ignored: the canvas is the only thing that grants access. A scratchpad
+  # canvas has one note and cannot choose another.
+  defp load_note(socket, note_id) do
+    if NotesMode.single?(socket.assigns.canvas.notes_mode) do
+      socket
+    else
+      load_note_by_id(socket, note_id)
+    end
+  end
+
+  defp load_note_by_id(socket, note_id) when note_id in [nil, ""] do
     socket
     |> leave_note()
     |> assign(:note, nil)
@@ -406,7 +465,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> assign(:note_last_saved_content, "")
   end
 
-  defp load_note(socket, note_id) do
+  defp load_note_by_id(socket, note_id) do
     case Notes.get_note(note_id) do
       %{canvas_id: canvas_id} = note when canvas_id == socket.assigns.canvas_id ->
         content = Notes.get_note_content(note.id)
@@ -585,7 +644,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
            |> assign(:note_save_state, :saved)
            # The list shows a snippet of the note's content, so it has to be
            # re-read now that the content has been folded.
-           |> load_notes()}
+           |> reload_notes()}
         else
           {:noreply, assign(socket, note_idle_timer_ref: nil)}
         end
@@ -747,6 +806,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   @impl true
   def render(assigns) do
+    assigns = assign(assigns, :status, status_source(assigns))
+
     ~H"""
     <Layouts.app
       flash={@flash}
@@ -762,8 +823,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <:header_actions>
         <.header_actions
           presence={@presence}
-          save_state={@save_state}
-          save_stats={@save_stats}
+          status={@status}
           can_share?={@canvas.author_id == @user_id}
         />
       </:header_actions>
@@ -797,8 +857,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <div id="canvas-save-state" class="order-2 hidden shrink-0 sm:order-4 sm:block">
               <.status_pill
                 id="canvas-save-state-pill"
-                save_state={@save_state}
-                save_stats={@save_stats}
+                save_state={@status.state}
+                save_stats={@status.stats}
+                label={@status.label}
+                others={@status.others}
               />
             </div>
 
@@ -1053,6 +1115,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               note_save_stats={@note_save_stats}
               user_id={@user_id}
               is_owner={@canvas.author_id == @user_id}
+              scratchpad?={NotesMode.single?(@canvas.notes_mode)}
             />
           </div>
 
@@ -1095,11 +1158,34 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     """
   end
 
+  # One status pill reports whichever surface the user is on: the canvas's cells
+  # on the Editor tab, the open note on the Notes tab. The other surface's
+  # figures are listed alongside, so nothing is lost.
+  defp status_source(assigns) do
+    note_open? = assigns.active_tab == "notes" and assigns.note
+
+    canvas = %{label: "Canvas", state: assigns.save_state, stats: assigns.save_stats}
+
+    if note_open? do
+      %{
+        label: "Note",
+        state: assigns.note_save_state,
+        stats: assigns.note_save_stats,
+        others: [canvas]
+      }
+    else
+      %{label: "Canvas", state: canvas.state, stats: canvas.stats, others: []}
+    end
+  end
+
   # The Notes view: the canvas's notes, and the one that is open.
   #
   # On a wide screen the list sits beside the editor. On a phone they are one
   # pane at a time: the list, and — once a note is open — the editor with a
   # back action.
+  #
+  # A scratchpad canvas has one note and no list: the editor takes the whole
+  # view, with no way to pick another note.
   attr :notes, :list, required: true
   attr :note, :map, default: nil
   attr :note_content, :string, default: ""
@@ -1107,63 +1193,67 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   attr :note_save_stats, :map, required: true
   attr :user_id, :integer, required: true
   attr :is_owner, :boolean, required: true
+  attr :scratchpad?, :boolean, default: false
 
   defp notes_view(assigns) do
     ~H"""
     <div id="canvas-notes" class="flex min-h-0 w-full flex-1 flex-col lg:flex-row lg:gap-4">
-      <%!-- The list. On a phone it is hidden while a note is open. --%>
-      <div
-        id="canvas-notes-list"
-        class={[
-          "flex min-h-0 w-full flex-col lg:w-64 lg:shrink-0",
-          @note && "hidden lg:flex"
-        ]}
-      >
-        <div class="mb-3 flex items-center justify-between gap-3">
-          <h2 class="text-sm font-medium uppercase tracking-wide text-base-content/50">
-            Notes
-          </h2>
-          <UIButton.button type="button" id="new-note-button" phx-click="create_note" size="sm">
-            <.icon name="hero-plus" class="size-4" /> New note
-          </UIButton.button>
-        </div>
-
-        <%= if @notes == [] do %>
-          <div
-            id="canvas-notes-empty"
-            class="rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-6 text-center"
-          >
-            <p class="text-sm text-base-content/60">No notes yet.</p>
-            <p class="mt-1 text-xs text-base-content/45">
-              Notes are shared Markdown attached to this canvas.
-            </p>
+      <%!-- The list. On a phone it is hidden while a note is open. A
+      scratchpad has no list at all: it is not rendered. --%>
+      <%= if not @scratchpad? do %>
+        <div
+          id="canvas-notes-list"
+          class={[
+            "flex min-h-0 w-full flex-col lg:w-64 lg:shrink-0",
+            @note && "hidden lg:flex"
+          ]}
+        >
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <h2 class="text-sm font-medium uppercase tracking-wide text-base-content/50">
+              Notes
+            </h2>
+            <UIButton.button type="button" id="new-note-button" phx-click="create_note" size="sm">
+              <.icon name="hero-plus" class="size-4" /> New note
+            </UIButton.button>
           </div>
-        <% else %>
-          <ul id="canvas-notes-items" class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-            <li :for={note <- @notes} id={"canvas-note-" <> note.id}>
-              <button
-                type="button"
-                phx-click="select_note"
-                phx-value-note={note.id}
-                aria-current={to_string(@note && @note.id == note.id)}
-                class={[
-                  "w-full rounded-lg border p-3 text-left transition-colors",
-                  @note && @note.id == note.id && "border-primary/40 bg-primary/10",
-                  !(@note && @note.id == note.id) &&
-                    "border-base-content/10 bg-base-200 hover:border-base-content/25"
-                ]}
-              >
-                <span class="block truncate text-sm font-medium text-base-content">
-                  {note.title || "Untitled note"}
-                </span>
-                <span class="mt-1 block truncate text-xs text-base-content/50">
-                  {note_snippet(note.content)}
-                </span>
-              </button>
-            </li>
-          </ul>
-        <% end %>
-      </div>
+
+          <%= if @notes == [] do %>
+            <div
+              id="canvas-notes-empty"
+              class="rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-6 text-center"
+            >
+              <p class="text-sm text-base-content/60">No notes yet.</p>
+              <p class="mt-1 text-xs text-base-content/45">
+                Notes are shared Markdown attached to this canvas.
+              </p>
+            </div>
+          <% else %>
+            <ul id="canvas-notes-items" class="min-h-0 flex-1 space-y-2 overflow-y-auto">
+              <li :for={note <- @notes} id={"canvas-note-" <> note.id}>
+                <button
+                  type="button"
+                  phx-click="select_note"
+                  phx-value-note={note.id}
+                  aria-current={to_string(@note && @note.id == note.id)}
+                  class={[
+                    "w-full rounded-lg border p-3 text-left transition-colors",
+                    @note && @note.id == note.id && "border-primary/40 bg-primary/10",
+                    !(@note && @note.id == note.id) &&
+                      "border-base-content/10 bg-base-200 hover:border-base-content/25"
+                  ]}
+                >
+                  <span class="block truncate text-sm font-medium text-base-content">
+                    {note.title || "Untitled note"}
+                  </span>
+                  <span class="mt-1 block truncate text-xs text-base-content/50">
+                    {note_snippet(note.content)}
+                  </span>
+                </button>
+              </li>
+            </ul>
+          <% end %>
+        </div>
+      <% end %>
 
       <%!-- The editor. On a phone it takes over the pane. --%>
       <div
@@ -1175,7 +1265,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       >
         <%= if @note do %>
           <div class="mb-3 flex flex-wrap items-center gap-3">
+            <%!-- There is no list to go back to in a scratchpad. --%>
             <button
+              :if={!@scratchpad?}
               type="button"
               id="canvas-notes-back"
               phx-click="select_note"
@@ -1202,13 +1294,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               />
             </.form>
 
-            <.status_pill
-              id="canvas-note-status"
-              save_state={@note_save_state}
-              save_stats={@note_save_stats}
-            />
-
-            <%= if @is_owner do %>
+            <%= if @is_owner and not @scratchpad? do %>
               <UIButton.button
                 type="button"
                 id="canvas-note-delete"
@@ -1243,7 +1329,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <% else %>
           <div class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center">
             <p class="max-w-sm text-sm text-base-content/50">
-              Select a note, or create one, to start writing.
+              <%= if @scratchpad? do %>
+                The scratchpad is on its way. Reload the view to write in it.
+              <% else %>
+                Select a note, or create one, to start writing.
+              <% end %>
             </p>
           </div>
         <% end %>
@@ -1267,8 +1357,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # On phones the canvas header gives its vertical space back to the grid: the
   # presence, the save state and Share move into the app header as icons.
   attr :presence, :map, required: true
-  attr :save_state, :atom, required: true
-  attr :save_stats, :map, required: true
+  attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
 
   defp header_actions(assigns) do
@@ -1296,8 +1385,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
       <.status_pill
         id="canvas-save-state-compact"
-        save_state={@save_state}
-        save_stats={@save_stats}
+        save_state={@status.state}
+        save_stats={@status.stats}
+        label={@status.label}
+        others={@status.others}
         compact
       />
 
