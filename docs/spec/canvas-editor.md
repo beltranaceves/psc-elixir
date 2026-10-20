@@ -149,6 +149,11 @@ The canvas library at `/canvas` uses the shared app header as its single page-le
 heading (`Canvases`); the main content begins with the canvas creation form and does
 not repeat that heading.
 
+Each canvas card shows the name and description inside the card. Long text never
+paints outside it: names break on word boundaries, and descriptions break long
+tokens and are clamped to two lines so the grid rows stay even. The same rule
+applies to the template cards in the template library.
+
 ### Grid rendering
 
 The editor renders a CSS grid based on `cells.rows` and `cells.columns`:

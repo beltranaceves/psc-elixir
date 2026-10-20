@@ -712,3 +712,36 @@ test.describe('mobile flash placement', () => {
     expect(box!.y + box!.height).toBeLessThan(844 - 56);
   });
 });
+
+test.describe('canvas library', () => {
+  test('keeps a long description inside its card', async ({ page }) => {
+    const name = uniqueName('Long Description');
+    const longWord = 'SupercalifragilisticexpialidociousWithoutAnySpacesAtAll';
+
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    await page.getByPlaceholder('Enter canvas name...').fill(name);
+    await page.getByPlaceholder('Enter canvas description...').fill(longWord);
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
+    await dismissFlash(page);
+
+    const card = page.getByRole('heading', { name }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    const description = card.locator('p').first();
+
+    // The text must not paint outside the card it belongs to.
+    const cardBox = await card.boundingBox();
+    const descriptionBox = await description.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(descriptionBox).not.toBeNull();
+    expect(descriptionBox!.x).toBeGreaterThanOrEqual(cardBox!.x - 1);
+    expect(descriptionBox!.x + descriptionBox!.width).toBeLessThanOrEqual(
+      cardBox!.x + cardBox!.width + 1,
+    );
+
+    // The card itself must not grow past its column.
+    const overflow = await card.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+});

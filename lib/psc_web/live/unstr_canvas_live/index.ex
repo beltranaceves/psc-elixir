@@ -158,13 +158,13 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               <p class="text-base-content/60">No canvases yet. Create one to get started!</p>
             </div>
           <% else %>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div id="my-canvases-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for canvas <- @my_canvases do %>
                 <div class="rounded-xl border border-base-content/10 bg-base-200 p-6 hover:border-base-content/25 transition-colors">
-                  <h3 class="font-medium text-base-content">{canvas.name}</h3>
+                  <h3 class="font-medium text-base-content break-words">{canvas.name}</h3>
                   <p
                     :if={canvas.description not in [nil, ""]}
-                    class="mt-2 text-sm text-base-content/60"
+                    class="mt-2 text-sm text-base-content/60 break-words line-clamp-2"
                   >
                     {canvas.description}
                   </p>

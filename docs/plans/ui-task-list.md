@@ -347,6 +347,11 @@ forms, actions, and library sections. The **New Template** action is the first t
 library grid — the same size as a template card, with a dashed border marking it as the
 create action — so the header keeps only the route title.
 
+**Follow-up (2026-10-20): card text stays inside its card.** A canvas description with a
+long unbreakable token used to paint past the card's border (measured: 596 px of overflow
+on a 373 px card). Card names now break on word boundaries and descriptions both break
+long tokens and clamp to two lines, in the canvas list and the template library.
+
 ---
 
 ## Notes / incidental findings

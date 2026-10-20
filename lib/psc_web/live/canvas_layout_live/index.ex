@@ -192,7 +192,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       class="rounded-xl border border-base-content/10 bg-base-200 p-4 flex flex-col"
     >
       <div class="flex items-start justify-between gap-2 mb-2">
-        <h3 class="font-medium text-base-content">{@template.name}</h3>
+        <h3 class="font-medium text-base-content break-words">{@template.name}</h3>
         <%= if @template.author_id == @current_user.id do %>
           <UIBadge.badge variant="outline" class="shrink-0 text-xs">Owner</UIBadge.badge>
         <% else %>
@@ -202,7 +202,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
 
       <p
         :if={@template.description not in [nil, ""]}
-        class="mb-3 text-sm text-base-content/60 line-clamp-2"
+        class="mb-3 text-sm text-base-content/60 break-words line-clamp-2"
       >
         {@template.description}
       </p>
