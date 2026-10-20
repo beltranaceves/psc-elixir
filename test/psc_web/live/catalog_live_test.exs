@@ -152,6 +152,24 @@ defmodule PscWeb.CatalogLiveTest do
       assert has_element?(lv, "#catalog-template-dialog", "Forked from Source Tpl")
     end
 
+    test "the whole card opens the modal", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Whole Card"})
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      # The card is one button, footer and all: a card that is only partly
+      # clickable reads as broken.
+      assert has_element?(
+               lv,
+               ~s|button[phx-click='open_template'][phx-value-id='#{template.id}']|,
+               "Used 0 · Forked 0"
+             )
+
+      open_modal(lv, template)
+      assert has_element?(lv, "#catalog-template-dialog")
+    end
+
     test "closing the modal clears it", %{conn: conn, user: user} do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Closable"})
       {:ok, _} = Canvas.publish_template(template)
@@ -161,7 +179,10 @@ defmodule PscWeb.CatalogLiveTest do
       open_modal(lv, template)
       assert has_element?(lv, "#catalog-template-dialog")
 
-      lv |> render_click("close_template", %{})
+      # The footer's Close, not only the dialog's ×.
+      lv
+      |> element(~s|#catalog-template-dialog button[phx-click='close_template']|)
+      |> render_click()
 
       refute has_element?(lv, "#catalog-template-dialog")
     end

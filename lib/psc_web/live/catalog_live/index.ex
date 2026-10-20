@@ -143,39 +143,37 @@ defmodule PscWeb.CatalogLive.Index do
             </p>
           </div>
 
-          <div
+          <%!-- The whole card opens the modal: a card that is only partly
+          clickable reads as broken, and the footer is half the card. --%>
+          <button
             :for={{id, template} <- @streams.templates}
             id={id}
-            class="flex min-w-0 flex-col rounded-xl border border-base-content/10 bg-base-200 p-4 text-left transition-colors hover:border-base-content/25 hover:bg-base-content/5"
+            type="button"
+            phx-click="open_template"
+            phx-value-id={template.id}
+            class="flex min-w-0 flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200 p-4 text-left transition-colors hover:border-base-content/25 hover:bg-base-content/5"
+            aria-label={"Details for #{template.name}"}
           >
-            <button
-              type="button"
-              phx-click="open_template"
-              phx-value-id={template.id}
-              class="flex min-w-0 flex-1 flex-col gap-2 text-left"
-              aria-label={"Details for #{template.name}"}
+            <span class="break-words font-medium text-base-content">{template.name}</span>
+            <span
+              :if={template.description not in [nil, ""]}
+              class="break-words line-clamp-2 text-sm text-base-content/60"
             >
-              <span class="break-words font-medium text-base-content">{template.name}</span>
-              <span
-                :if={template.description not in [nil, ""]}
-                class="break-words line-clamp-2 text-sm text-base-content/60"
-              >
-                {template.description}
-              </span>
+              {template.description}
+            </span>
 
-              <span class="flex items-center gap-2 text-xs text-base-content/50">
-                <span>{length(template.layout_map["rows"] || [])} rows</span> <span>&times;</span>
-                <span>{length(template.layout_map["columns"] || [])} columns</span>
-              </span>
-            </button>
+            <span class="flex items-center gap-2 text-xs text-base-content/50">
+              <span>{length(template.layout_map["rows"] || [])} rows</span> <span>&times;</span>
+              <span>{length(template.layout_map["columns"] || [])} columns</span>
+            </span>
 
-            <div class="mt-3 flex items-center justify-between gap-2 border-t border-base-content/10 pt-3 text-xs text-base-content/50">
+            <span class="mt-3 flex items-center justify-between gap-2 border-t border-base-content/10 pt-3 text-xs text-base-content/50">
               <span class="truncate">{author_handle(template)}</span>
               <span class="shrink-0">
                 Used {template.use_count} · Forked {template.fork_count}
               </span>
-            </div>
-          </div>
+            </span>
+          </button>
         </div>
 
         <p :if={@truncated?} class="text-xs text-base-content/45">
@@ -294,25 +292,31 @@ defmodule PscWeb.CatalogLive.Index do
             </.preview_section>
           </div>
 
-          <UIDialog.dialog_footer class="flex flex-row justify-end gap-2">
-            <UIButton.button
-              type="button"
-              variant="outline"
-              phx-click="fork_template"
-              phx-value-id={@open_template.id}
-              phx-disable-with="Forking…"
-            >
-              Fork
+          <UIDialog.dialog_footer class="flex flex-row items-center justify-between gap-2">
+            <UIButton.button type="button" variant="ghost" phx-click="close_template">
+              Close
             </UIButton.button>
 
-            <UIButton.button
-              type="button"
-              phx-click="use_template"
-              phx-value-id={@open_template.id}
-              phx-disable-with="Creating…"
-            >
-              Use template
-            </UIButton.button>
+            <div class="flex items-center gap-2">
+              <UIButton.button
+                type="button"
+                variant="outline"
+                phx-click="fork_template"
+                phx-value-id={@open_template.id}
+                phx-disable-with="Forking…"
+              >
+                Fork
+              </UIButton.button>
+
+              <UIButton.button
+                type="button"
+                phx-click="use_template"
+                phx-value-id={@open_template.id}
+                phx-disable-with="Creating…"
+              >
+                Use template
+              </UIButton.button>
+            </div>
           </UIDialog.dialog_footer>
         </UIDialog.dialog_content>
       </UIDialog.dialog>
