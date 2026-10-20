@@ -218,7 +218,7 @@ id. The library's own `instantiate` event has that hole today; do not copy it.
 
 ## Task 6 — E2E regression
 
-**Status: pending.**
+**Status: done.**
 
 - `test/e2e/tests/catalog.spec.ts`:
   - publish a template in the designer, find it in `/catalog`, open its modal;
@@ -237,6 +237,13 @@ id. The library's own `instantiate` event has that hole today; do not copy it.
 **Watch out** — the E2E database is reset between runs (`priv/repo/e2e_reset.exs`), so the
 spec must create everything it asserts on and must not depend on templates left by
 another spec.
+
+**Found while building it** — the publish toggle could not be toggled. LiveView
+re-derives a checkbox's `checked` from the server's render on every patch
+(`DOM.syncAttrsToProps`), and `mark_dirty` ignored its params, so the server never
+learned about the toggle and undid it the moment it fired a change event. The fix
+is in Task 3: the draft's publish state is an assign, updated by `mark_dirty`
+like the name and description.
 
 ---
 
