@@ -36,6 +36,8 @@ it costs, and the evidence it was verified against.
 | [ADR-024](#adr-024--mobile-feedback-and-dialogs-stay-in-the-visible-viewport) | Mobile feedback and dialogs stay in the visible viewport | Accepted | 2026-10-20 |
 | [ADR-025](#adr-025--the-app-header-owns-index-page-titles) | The app header owns index page titles | Accepted | 2026-10-20 |
 | [ADR-026](#adr-026--view-state-lives-in-the-url-not-in-the-page) | View state lives in the URL, not in the page | Accepted | 2026-10-20 |
+| [ADR-027](#adr-027--a-note-is-a-child-of-its-canvas) | A note is a child of its canvas | Accepted | 2026-10-20 |
+| [ADR-028](#adr-028--the-status-pill-is-a-shared-component) | The status pill is a shared component | Accepted | 2026-10-20 |
 
 ---
 
@@ -1076,6 +1078,90 @@ returns to the canvas. The browser and LiveView tests assert the fragment, the
 Back behaviour, and that opening the share modal does not move the page.
 
 ---
+
+## ADR-027 — A note is a child of its canvas
+
+**Context.** The canvas editor has a **Notes** tab, and the product wants
+collaborative Markdown inside a canvas. The machinery already exists: the
+standalone Documents feature implements an append-only event log, a folded
+snapshot, monotonic sequencing, pruning of the events the snapshot covers, and a
+periodic consistency check.
+
+Two ways to use it. The obvious one is to give the Documents feature a
+`canvas_id` and call its rows "notes". The other is to make notes their own
+aggregate and copy the machinery across.
+
+Copying is the failure mode: a second copy of the sequencing, the pruning and
+the consistency check is a second place for the free-tier row ceiling to be
+busted and a second place for the same bug to be fixed. Reusing Documents as-is
+is worse — it would carry Documents' own `shared_with` list, which is exactly
+the duplicate permission system to avoid.
+
+**Decision.**
+
+- A note is a **first-class entity owned by a canvas**: `notes.canvas_id` is a
+  foreign key to `unstr_canvases` with `on_delete: :delete_all`, and the canvas
+  `has_many :notes`. A note has **no `shared_with` column and no owner column**.
+- **A note's access is exactly its canvas's access.** The only check is
+  `Canvas.can_access_unstr_canvas?/2`, performed once when the canvas editor
+  mounts. Sharing the canvas shares its notes; there is no share control on a
+  note. `created_by_id` records attribution and is never used for access.
+  Deleting a note is the canvas author's privilege alone, mirroring the
+  owner-only rule for canvas structure.
+- The collaboration algorithm is **shared, not copied**. The table-independent
+  half of `Psc.Documents.CRDT` becomes `Psc.Text`; the log-and-snapshot
+  algorithm becomes `Psc.TextStore`, parameterised by the two schema modules.
+  `Psc.Documents` becomes a thin façade over it and `Psc.Notes` is the second
+  caller, so the sequencing, the flooring at `snapshot_seq`, the
+  prune-after-durable-marker rule and the consistency check exist in one place.
+- Notes are a **view inside the canvas**, not a destination:
+  `/canvas/:id?tab=notes&note=<id>`. There is no `/notes/:id` route, which is
+  what keeps the inherited permission model airtight — a note is only ever
+  reachable through a canvas the user may open.
+- The standalone `/documents` section is retired once notes ship. It has been
+  parked and unlinked since ADR-018; the deployed database holds one document
+  row and nothing links to the section.
+
+**Alternatives considered.** Adding `canvas_id` to `documents` (keeps one
+table, but leaves the duplicated `shared_with` and an owner column that means
+two different things in one row); copying the machinery into `Psc.Notes` (fast
+to write, but two copies of the row-ceiling logic); a separate `note_permissions`
+join table (a second permission system to keep consistent); and giving notes
+their own top-level route (they would need their own access check, and the
+"notes belong to a canvas" relationship would become advisory).
+
+**Consequences.** Notes are reached through the canvas, so the Notes view never
+re-checks access and a note can never be loaded on its own. The text
+collaboration machinery has one implementation and one set of tests. The
+`document_events` pruning path gains a sibling for `note_events`, and
+`Psc.EventsSweeper` gains a third table to prune. The standalone Documents
+feature disappears from the codebase, which also removes its hardcoded-id
+Markdown editor hook.
+
+---
+
+## ADR-028 — The status pill is a shared component
+
+**Context.** The canvas editor shows a status pill reporting the save state, and
+the tooltip behind it reports the last write, the number of writes and the
+failed ones. A note needs the same indicator, and the document editor has a
+third, older copy of the same idea.
+
+**Decision.** Extract the pill into `PscWeb.Components.StatusPill`, taking the
+save state and the statistics as parameters. The canvas editor, the note editor
+and the document editor all use it, and the *colours* live in one place: the
+state is a badge variant, so **Saved** is primary, **Saving** secondary and
+**Unsaved** the warning colour. The phone rendering is the same badge with the
+label dropped, so the two cannot drift apart.
+
+**Alternatives considered.** Copying the pill into the note editor (the colours
+would drift, as they already had between the phone icon and the desktop badge);
+and a single pill that reports the canvas and its notes together (one indicator
+for two independent save cycles, which cannot be honest about either).
+
+**Consequences.** The pill's markup and colours have one home. The statistics it
+reports are the caller's, so a note's pill counts the note's writes, not the
+canvas's.
 
 ## Measurement summary
 

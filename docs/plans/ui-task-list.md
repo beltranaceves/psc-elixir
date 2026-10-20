@@ -33,6 +33,21 @@ the naming work.
 
 ---
 
+## Next feature — canvas notes
+
+The **Notes** tab of the canvas editor is the next surface to build. It is planned in
+[canvas-notes-plan.md](canvas-notes-plan.md) (six tasks, with acceptance criteria),
+specified in [canvas-notes.md](../spec/canvas-notes.md), and decided in
+[ADR-027](../design-decisions.md#adr-027--a-note-is-a-child-of-its-canvas) and
+[ADR-028](../design-decisions.md#adr-028--the-status-pill-is-a-shared-component).
+
+The short version: a note is a child of its canvas — it inherits the canvas's access
+rules instead of carrying a second `shared_with` list — and the collaborative-text
+machinery is lifted out of `Psc.Documents` into one shared store that both documents
+and notes use, rather than copied a second time.
+
+---
+
 ## 1 — Tighten top padding on most routes
 
 **Observed.** Every page except the canvas editor starts 64–80 px below the header:
