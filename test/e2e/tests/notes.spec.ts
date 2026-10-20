@@ -170,8 +170,11 @@ test.describe('canvas notes', () => {
     await page.getByRole('button', { name: 'Add note' }).click();
 
     await page.locator('#template-notes input[name="value"]').first().fill('Framing questions');
+
+    // The note editor starts as a rendered preview; click it to open the textarea.
+    await page.locator('#template-notes [data-editor-preview]').first().click();
     await page
-      .locator('#template-notes textarea[name="value"]')
+      .locator('#template-notes textarea[name="content"]')
       .first()
       .fill('What is the actual problem?');
 

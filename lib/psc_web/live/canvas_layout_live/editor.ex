@@ -10,11 +10,15 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   alias PscWeb.Components.UI.Dialog, as: UIDialog
 
   import PscWeb.Components.Accent
+  import PscWeb.Components.EmptySection
+  import PscWeb.Components.MarkdownEditor
+  import PscWeb.Components.Section
   import PscWeb.Components.ShareDialog
 
   alias Psc.Canvas
   alias Psc.Canvas.Accent
   alias Psc.Canvas.NotesMode
+  alias PscWeb.Markdown
 
   @impl true
   def mount(params, _session, socket) do
@@ -95,7 +99,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     if socket.assigns.owner? do
       {:noreply,
        update_layout(socket, fn lm ->
-         notes = Map.get(lm, "notes", []) ++ [%{"title" => "", "content" => ""}]
+         notes = Map.get(lm, "notes", []) ++ [empty_template_note()]
          Map.put(lm, "notes", notes)
        end)}
     else
@@ -119,12 +123,23 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
      update_layout(socket, &update_template_note(&1, String.to_integer(index), "title", title))}
   end
 
-  def handle_event("update_note_content", %{"index" => index, "value" => content}, socket) do
+  def handle_event("update_note_content", %{"index" => index, "content" => content}, socket) do
     {:noreply,
      update_layout(
        socket,
        &update_template_note(&1, String.to_integer(index), "content", content)
      )}
+  end
+
+  # The note editor asks for a re-render when its textarea loses focus. The
+  # reply is pushed to the one editor that asked, by index, so several note
+  # editors on the page do not cross their previews.
+  def handle_event("render_template_note", %{"index" => index, "content" => content}, socket) do
+    {:noreply,
+     push_event(socket, "template_note_#{index}_rendered", %{
+       content: content,
+       html: Markdown.render(content, empty_message: "The note is empty.")
+     })}
   end
 
   def handle_event("remove_column", %{"index" => index}, socket) do
@@ -412,11 +427,18 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   defp normalize_template_notes(_notes), do: []
 
+  defp empty_template_note, do: %{"title" => "", "content" => ""}
+
   # A scratchpad holds one note. Switching a template that carries several
-  # notes to the scratchpad mode keeps the first one and drops the rest.
+  # notes to the scratchpad mode keeps the first one and drops the rest; a
+  # template that has none gets one, so there is always something to write the
+  # scratchpad's starting content into.
   defp apply_notes_mode(lm) do
     if NotesMode.single?(lm["notes_mode"]) do
-      Map.put(lm, "notes", Enum.take(Map.get(lm, "notes", []), 1))
+      case Map.get(lm, "notes", []) do
+        [] -> Map.put(lm, "notes", [empty_template_note()])
+        notes -> Map.put(lm, "notes", Enum.take(notes, 1))
+      end
     else
       lm
     end
@@ -429,6 +451,28 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       "defaults" => %{"content" => ""}
     }
   end
+
+  # The section summaries. A collapsed section still has to say what is inside
+  # it, or collapsing it would hide information the user needs in order to
+  # decide whether to open it.
+  defp notes_hint(%{"notes_mode" => mode, "notes" => notes}) do
+    if NotesMode.single?(mode), do: "Scratchpad", else: notes_count_hint(length(notes))
+  end
+
+  defp notes_hint(_layout_map), do: "No notes yet"
+
+  defp notes_count_hint(0), do: "No notes yet"
+  defp notes_count_hint(1), do: "1 note"
+  defp notes_count_hint(count), do: "#{count} notes"
+
+  defp grid_hint(%{"rows" => rows, "columns" => columns}) do
+    case {length(columns), length(rows)} do
+      {0, 0} -> "No rows or columns yet"
+      {columns, rows} -> "#{columns} columns × #{rows} rows"
+    end
+  end
+
+  defp grid_hint(_layout_map), do: "No rows or columns yet"
 
   # Normalizes a stored layout_map into the current shape and guarantees
   # consistency: the matrix is rebuilt strictly from rows × columns,
@@ -554,8 +598,22 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           remove_event="unshare_template"
           on_close="share_closed"
         />
+        <div class="space-y-4">
+          <%!-- Page-level actions sit outside the collapsible sections: the back
+          link and Share belong to the page, not to any one section. --%>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <.link
+              navigate={~p"/templates"}
+              class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-base-content/10 px-3 text-sm text-base-content transition-colors hover:bg-base-content/5"
+            >
+              <.icon name="hero-arrow-left" class="size-4" /> Templates
+            </.link>
 
-        <div class="space-y-6">
+            <%= if @owner? and @editing_layout do %>
+              <.share_button id="share-template-button" label="Share" size="default" />
+            <% end %>
+          </div>
+
           <.form
             for={@template_form}
             id="template-form"
@@ -565,28 +623,14 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           >
             <div>
               <UILabel.label for={@template_form[:name].id}>Name</UILabel.label>
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div class="min-w-0 sm:flex-1">
-                  <UIInput.input
-                    field={@template_form[:name]}
-                    type="text"
-                    required
-                    disabled={!@owner?}
-                  />
-                </div>
-                <div class="flex shrink-0 items-center gap-2">
-                  <%= if @owner? and @editing_layout do %>
-                    <.share_button id="share-template-button" label="Share" size="default" />
-                  <% end %>
-                  <.link
-                    navigate={~p"/templates"}
-                    class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-base-content/10 px-3 text-sm text-base-content transition-colors hover:bg-base-content/5"
-                  >
-                    <.icon name="hero-arrow-left" class="size-4" /> Templates
-                  </.link>
-                </div>
-              </div>
+              <UIInput.input
+                field={@template_form[:name]}
+                type="text"
+                required
+                disabled={!@owner?}
+              />
             </div>
+
             <div>
               <UILabel.label for="template-description">Description</UILabel.label>
               <UITextarea.textarea
@@ -595,8 +639,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 disabled={!@owner?}
               />
             </div>
+
             <%= if @owner? do %>
-              <div class="flex items-center justify-end gap-3">
+              <div class="flex items-center justify-end gap-3 border-t border-base-content/10 pt-4">
                 <span
                   :if={@dirty?}
                   id="unsaved-changes-hint"
@@ -604,6 +649,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 >
                   Unsaved changes
                 </span>
+
                 <UIButton.button
                   type="button"
                   variant="outline"
@@ -617,128 +663,134 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             <% end %>
           </.form>
 
-          <div class="overflow-hidden rounded-xl border border-base-content/10 bg-base-200 p-0 sm:p-6">
+          <.section id="template-notes" title="Notes" hint={notes_hint(@layout_map)} open>
             <%!-- The note mode decides how the canvases made from this template
             behave: a list of notes, or one scratchpad. --%>
-            <div class="border-b border-base-content/10 px-4 py-4 sm:px-6">
-              <h2 class="text-sm font-medium text-base-content">Notes</h2>
-              <p class="mt-1 max-w-lg text-sm text-base-content/60">
-                {NotesMode.blurb(@layout_map["notes_mode"])}
-              </p>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <%= for mode <- NotesMode.modes() do %>
-                  <button
-                    type="button"
-                    id={"notes-mode-" <> mode}
-                    phx-click="set_notes_mode"
-                    phx-value-mode={mode}
-                    disabled={not @owner?}
-                    aria-pressed={to_string(@layout_map["notes_mode"] == mode)}
-                    class={[
-                      "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
-                      @layout_map["notes_mode"] == mode &&
-                        "border-primary/50 bg-primary/10 text-base-content",
-                      @layout_map["notes_mode"] != mode &&
-                        "border-base-content/15 bg-base-200 text-base-content/60 hover:border-base-content/30 hover:text-base-content"
-                    ]}
-                  >
-                    {NotesMode.label(mode)}
-                  </button>
+            <p class="max-w-lg text-sm text-base-content/60">
+              {NotesMode.blurb(@layout_map["notes_mode"])}
+            </p>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+              <%= for mode <- NotesMode.modes() do %>
+                <button
+                  type="button"
+                  id={"notes-mode-" <> mode}
+                  phx-click="set_notes_mode"
+                  phx-value-mode={mode}
+                  disabled={not @owner?}
+                  aria-pressed={to_string(@layout_map["notes_mode"] == mode)}
+                  class={[
+                    "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
+                    @layout_map["notes_mode"] == mode &&
+                      "border-primary/50 bg-primary/10 text-base-content",
+                    @layout_map["notes_mode"] != mode &&
+                      "border-base-content/15 bg-base-200 text-base-content/60 hover:border-base-content/30 hover:text-base-content"
+                  ]}
+                >
+                  {NotesMode.label(mode)}
+                </button>
+              <% end %>
+            </div>
+
+            <%!-- The template's notes. A canvas made from this template
+            starts with a copy of them. --%>
+            <div class="mt-4 border-t border-base-content/10 pt-4">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-xs font-medium uppercase tracking-wide text-base-content/50">
+                  <%= if @layout_map["notes_mode"] == "single" do %>
+                    Scratchpad content
+                  <% else %>
+                    Notes
+                  <% end %>
+                </h3>
+
+                <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
+                  <UIButton.button variant="outline" size="sm" phx-click="add_note">
+                    <.icon name="hero-plus" class="size-4" /> Add note
+                  </UIButton.button>
                 <% end %>
               </div>
 
-              <%!-- The template's notes. A canvas made from this template
-              starts with a copy of them. --%>
-              <div class="mt-4 border-t border-base-content/10 pt-4">
-                <div class="flex items-center justify-between gap-2">
-                  <h3 class="text-xs font-medium uppercase tracking-wide text-base-content/50">
-                    <%= if @layout_map["notes_mode"] == "single" do %>
-                      Scratchpad content
-                    <% else %>
-                      Notes
-                    <% end %>
-                  </h3>
-                  <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
-                    <UIButton.button variant="outline" size="sm" phx-click="add_note">
-                      <.icon name="hero-plus" class="size-4" /> Add note
-                    </UIButton.button>
-                  <% end %>
-                </div>
+              <p class="mt-1 text-xs text-base-content/45">
+                <%= if @layout_map["notes_mode"] == "single" do %>
+                  The scratchpad every canvas from this template starts with.
+                <% else %>
+                  Canvases made from this template start with these notes.
+                <% end %>
+              </p>
 
-                <p class="mt-1 text-xs text-base-content/45">
-                  <%= if @layout_map["notes_mode"] == "single" do %>
-                    The scratchpad every canvas from this template starts with.
-                  <% else %>
-                    Canvases made from this template start with these notes.
-                  <% end %>
-                </p>
-
-                <div id="template-notes" class="mt-3 space-y-3">
-                  <%= for {note, index} <- Enum.with_index(@layout_map["notes"] || []) do %>
-                    <div
-                      id={"template-note-#{index}"}
-                      class="rounded-lg border border-base-content/10 bg-base-200/60 p-3"
-                    >
-                      <div class="flex items-start gap-2">
-                        <form
-                          id={"template-note-#{index}-title-form"}
-                          phx-change="update_note_title"
-                          class="min-w-0 flex-1"
-                        >
-                          <input type="hidden" name="index" value={index} />
-                          <input
-                            type="text"
-                            name="value"
-                            value={note["title"]}
-                            phx-debounce="300"
-                            placeholder="Note title"
-                            class="w-full border-b border-transparent bg-transparent text-sm font-medium text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary focus:outline-none"
-                          />
-                        </form>
-                        <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
-                          <button
-                            type="button"
-                            phx-click="remove_note"
-                            phx-value-index={index}
-                            class="shrink-0 rounded-md p-1 text-base-content/40 transition-colors hover:bg-base-content/5 hover:text-error"
-                            aria-label="Remove note"
-                          >
-                            <.icon name="hero-x-mark" class="size-4" />
-                          </button>
-                        <% end %>
-                      </div>
+              <div id="template-notes-list" class="mt-3 space-y-3">
+                <%= for {note, index} <- Enum.with_index(@layout_map["notes"] || []) do %>
+                  <div
+                    id={"template-note-#{index}"}
+                    class="rounded-lg border border-base-content/10 bg-base-200/60 p-3"
+                  >
+                    <div class="flex items-start gap-2">
                       <form
-                        id={"template-note-#{index}-content-form"}
-                        phx-change="update_note_content"
-                        class="mt-2"
+                        id={"template-note-#{index}-title-form"}
+                        phx-change="update_note_title"
+                        class="min-w-0 flex-1"
                       >
                         <input type="hidden" name="index" value={index} />
-                        <textarea
+                        <input
+                          type="text"
                           name="value"
-                          placeholder="The note's Markdown…"
-                          rows="3"
-                          class="w-full resize-y rounded-md border border-base-content/10 bg-base-100 p-2 font-mono text-xs leading-5 text-base-content placeholder-base-content/40 focus:border-primary focus:outline-none"
-                        >{note["content"]}</textarea>
+                          value={note["title"]}
+                          phx-debounce="300"
+                          placeholder="Note title"
+                          class="w-full border-b border-transparent bg-transparent text-sm font-medium text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary focus:outline-none"
+                        />
                       </form>
+
+                      <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
+                        <button
+                          type="button"
+                          phx-click="remove_note"
+                          phx-value-index={index}
+                          class="shrink-0 rounded-md p-1 text-base-content/40 transition-colors hover:bg-base-content/5 hover:text-error"
+                          aria-label="Remove note"
+                        >
+                          <.icon name="hero-x-mark" class="size-4" />
+                        </button>
+                      <% end %>
                     </div>
-                  <% end %>
-                </div>
+
+                    <.markdown_editor
+                      id={"template-note-#{index}-editor"}
+                      input_id={"template-note-#{index}-input"}
+                      form_id={"template-note-#{index}-content-form"}
+                      preview_id={"template-note-#{index}-preview"}
+                      content={note["content"]}
+                      html={Markdown.render(note["content"], empty_message: "The note is empty.")}
+                      hidden_fields={[{"index", index}]}
+                      change_event="update_note_content"
+                      preview_event="render_template_note"
+                      render_event={"template_note_#{index}_rendered"}
+                      update_event="template_note_content_updated"
+                      preview_label="Edit note content"
+                      placeholder="The note's Markdown…"
+                      auto_grow
+                      body_class="min-h-36 p-3 font-mono text-xs leading-5"
+                      class="mt-2"
+                    />
+                  </div>
+                <% end %>
               </div>
             </div>
+          </.section>
 
-            <div class="mb-2 flex items-center justify-between gap-2 px-2 pt-2 sm:mb-4 sm:px-0 sm:pt-0">
-              <h2 class="text-sm font-medium text-base-content">Grid</h2>
-              <%= if @owner? do %>
-                <div class="flex flex-wrap gap-2">
-                  <UIButton.button variant="outline" size="sm" phx-click="add_column">
-                    Add Column
-                  </UIButton.button>
-                  <UIButton.button variant="outline" size="sm" phx-click="add_row">
-                    Add Row
-                  </UIButton.button>
-                </div>
-              <% end %>
-            </div>
+          <.section id="template-grid" title="Grid" hint={grid_hint(@layout_map)} open>
+            <%= if @owner? do %>
+              <div class="mb-3 flex flex-wrap justify-end gap-2">
+                <UIButton.button variant="outline" size="sm" phx-click="add_column">
+                  Add Column
+                </UIButton.button>
+
+                <UIButton.button variant="outline" size="sm" phx-click="add_row">
+                  Add Row
+                </UIButton.button>
+              </div>
+            <% end %>
 
             <%= if Enum.empty?(@layout_map["rows"]) or Enum.empty?(@layout_map["columns"]) do %>
               <p class="px-2 pb-2 text-sm text-base-content/50 sm:px-0 sm:pb-0">
@@ -753,6 +805,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                   <thead>
                     <tr>
                       <th class="w-40 p-2 border border-base-content/10"></th>
+
                       <%= for {col, ci} <- Enum.with_index(@layout_map["columns"]) do %>
                         <th class="border border-base-content/10 bg-base-content/5 p-0 text-base-content/70 align-bottom">
                           <div class="flex flex-col">
@@ -778,6 +831,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                     class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
                                   />
                                 </form>
+
                                 <%= if @owner? do %>
                                   <button
                                     type="button"
@@ -843,6 +897,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                       <% end %>
                     </tr>
                   </thead>
+
                   <tbody>
                     <%= for {row_meta, ri} <- Enum.with_index(@layout_map["rows"]) do %>
                       <tr>
@@ -870,6 +925,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                   class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
                                 />
                               </form>
+
                               <%= if @owner? do %>
                                 <button
                                   type="button"
@@ -931,6 +987,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                             </div>
                           </div>
                         </td>
+
                         <%= for cell_key <- Enum.at(@layout_map["layout"], ri, []) do %>
                           <td class="p-2 border border-base-content/10 align-top">
                             <div id={"cell-#{cell_key}"} class="rounded-lg bg-base-300/50 p-2">
@@ -979,6 +1036,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                         class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                                       />
                                     </form>
+
                                     <form
                                       id={"cell-#{cell_key}-field-#{field}-form"}
                                       phx-change="update_cell_field_default"
@@ -1004,6 +1062,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                         class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                                       />
                                     </form>
+
                                     <button
                                       :if={@owner?}
                                       type="button"
@@ -1050,7 +1109,28 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 </table>
               </div>
             <% end %>
-          </div>
+          </.section>
+
+          <%!-- Analysis and Agent are planned parts of a template. They are
+          rendered now so the designer's shape does not change when they land,
+          and so a user can see that they exist and are not configured. --%>
+          <.section id="template-analysis" title="Analysis" hint="Not configured" open>
+            <.empty_section
+              id="template-analysis-placeholder"
+              icon="hero-chart-bar"
+              title="Nothing here yet"
+              description="Analysis settings for templates are coming soon."
+            />
+          </.section>
+
+          <.section id="template-agent" title="Agent" hint="Not configured" open>
+            <.empty_section
+              id="template-agent-placeholder"
+              icon="hero-cpu-chip"
+              title="Nothing here yet"
+              description="Agent settings for templates are coming soon."
+            />
+          </.section>
         </div>
 
         <UIDialog.dialog
@@ -1062,11 +1142,13 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           <UIDialog.dialog_content class="sm:max-w-md">
             <UIDialog.dialog_header>
               <UIDialog.dialog_title>Discard unsaved changes?</UIDialog.dialog_title>
+
               <UIDialog.dialog_description>
                 This template has edits that have not been saved. Leaving now discards the
                 grid, cell and accent changes made in this session.
               </UIDialog.dialog_description>
             </UIDialog.dialog_header>
+
             <UIDialog.dialog_footer>
               <UIButton.button
                 type="button"
@@ -1076,6 +1158,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
               >
                 Keep editing
               </UIButton.button>
+
               <UIButton.button
                 type="button"
                 variant="destructive"

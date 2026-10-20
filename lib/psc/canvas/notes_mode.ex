@@ -40,7 +40,7 @@ defmodule Psc.Canvas.NotesMode do
   @doc """
   The label shown in the template designer.
   """
-  def label("single"), do: "Single note (scratchpad)"
+  def label("single"), do: "Single note"
   def label(_multi), do: "Multiple notes"
 
   @doc """

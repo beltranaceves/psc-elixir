@@ -101,8 +101,8 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert has_element?(lv, "#header-page-title", "Designer")
       assert has_element?(lv, ~s|a[href="/templates"][aria-current="page"]|)
       assert html =~ "Name"
-      # The back link shares the Name row inside the form.
-      assert has_element?(lv, ~s|#template-form a[href="/templates"]|)
+      # The back link is page chrome, above the collapsible sections.
+      assert has_element?(lv, ~s|a[href="/templates"]|)
       assert html =~ "Add Column"
       assert html =~ "Add Row"
     end
@@ -165,7 +165,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       lv |> element("button[phx-click='add_row']") |> render_click()
       lv |> element("button[phx-click='add_note']") |> render_click()
 
-      assert has_element?(lv, "#template-notes")
+      assert has_element?(lv, "#template-notes-list")
 
       lv
       |> form("#template-note-0-title-form", %{"index" => "0", "value" => "Framing questions"})
@@ -174,7 +174,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       lv
       |> form("#template-note-0-content-form", %{
         "index" => "0",
-        "value" => "What is the actual problem?"
+        "content" => "What is the actual problem?"
       })
       |> render_change()
 
@@ -219,6 +219,64 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
       assert has_element?(lv, "#template-note-0")
       refute has_element?(lv, "#template-note-1")
+    end
+
+    test "a scratchpad always has one note to write its starting content into", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      # A fresh template has no notes, and the scratchpad mode has no
+      # "Add note" action — so switching modes has to make the note itself.
+      refute has_element?(lv, "#template-note-0")
+
+      lv |> element("#notes-mode-single") |> render_click()
+
+      assert has_element?(lv, "#template-note-0")
+      assert has_element?(lv, "#template-note-0-input")
+
+      lv
+      |> form("#template-note-0-content-form", %{"index" => "0", "content" => "Start here."})
+      |> render_change()
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      lv
+      |> form("#template-form", %{"name" => "Scratchpad Tpl", "description" => ""})
+      |> render_submit()
+
+      assert [template] = Canvas.list_templates(user)
+      assert template.layout_map["notes_mode"] == "single"
+
+      assert template.layout_map["notes"] == [
+               %{"title" => "", "content" => "Start here."}
+             ]
+    end
+
+    test "the note editor previews its Markdown while it is not in focus", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv |> element("button[phx-click='add_note']") |> render_click()
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      lv
+      |> form("#template-note-0-content-form", %{"index" => "0", "content" => "# Framing"})
+      |> render_change()
+
+      # The editor starts as a preview: the rendered Markdown, not the text.
+      assert has_element?(lv, "#template-note-0-preview")
+      assert has_element?(lv, "#template-note-0-input")
+      assert has_element?(lv, "#template-note-0-preview", "The note is empty.")
+
+      # Blurring the textarea asks the server to re-render, and the reply is
+      # pushed back to that one editor.
+      lv |> render_click("render_template_note", %{"index" => "0", "content" => "# Framing"})
+
+      assert_push_event(lv, "template_note_0_rendered", %{content: "# Framing", html: html})
+      assert html =~ "<h1"
     end
 
     test "edits cell details directly in the grid", %{conn: conn} do
@@ -443,8 +501,8 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       {:ok, lv, html} = live(conn, ~p"/templates/#{template.id}")
 
       assert has_element?(lv, "#header-page-title", "Designer")
-      # Share sits inline with the Name field.
-      assert has_element?(lv, "#template-form #share-template-button .hero-share")
+      # Share is page chrome, above the collapsible sections.
+      assert has_element?(lv, "#share-template-button .hero-share")
       assert html =~ "Loaded Tpl"
       assert html =~ "Row 1"
       assert html =~ "Column 1"
