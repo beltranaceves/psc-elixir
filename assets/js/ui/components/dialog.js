@@ -17,7 +17,6 @@ class DialogComponent extends Component {
     this.contentPanel = this.getPart("content-panel");
     this.config.preventDefaultKeys = ["Escape"];
     this.visualViewport = null;
-    this.panelVisibilityTimer = null;
     this.handleViewportChange = this.handleViewportChange.bind(this);
     this.handlePanelFocusIn = this.handlePanelFocusIn.bind(this);
   }
@@ -144,8 +143,6 @@ class DialogComponent extends Component {
 
     this.contentPanel?.removeEventListener("focusin", this.handlePanelFocusIn);
     this.unbindVisualViewport();
-    clearTimeout(this.panelVisibilityTimer);
-    this.panelVisibilityTimer = null;
 
     // Clean up click outside monitor
     this.clickOutsideMonitor?.destroy();
@@ -170,8 +167,6 @@ class DialogComponent extends Component {
 
   onOpenExit() {
     this.unbindVisualViewport();
-    clearTimeout(this.panelVisibilityTimer);
-    this.panelVisibilityTimer = null;
     this.resetPanelViewportStyles();
     this.focusTrap?.deactivate();
     this.clickOutsideMonitor?.stop();
@@ -196,13 +191,15 @@ class DialogComponent extends Component {
     }
 
     this.bindVisualViewport();
-    this.schedulePanelVisibility();
+    this.syncPanelToVisualViewport();
 
     // Escape handling uses the component key map.
   }
 
   handlePanelFocusIn() {
-    this.schedulePanelVisibility();
+    // Focusing the first field is what summons the keyboard; the visual
+    // viewport resize follows and keeps the panel in view.
+    this.syncPanelToVisualViewport();
   }
 
   bindVisualViewport() {
@@ -227,21 +224,6 @@ class DialogComponent extends Component {
     this.syncPanelToVisualViewport();
   }
 
-  schedulePanelVisibility() {
-    if (!this.isCompactViewport()) return;
-
-    clearTimeout(this.panelVisibilityTimer);
-    this.panelVisibilityTimer = setTimeout(() => {
-      if (this.destroyed || this.state !== "open" || !this.contentPanel) return;
-
-      // The panel is fixed and centred: it is moved with a transform, never by
-      // scrolling. `scrollIntoView` would scroll the page behind the dialog
-      // (the canvas editor scrolls its own main area), which made the grid
-      // jump around while the modal was open.
-      this.syncPanelToVisualViewport();
-    }, 75);
-  }
-
   syncPanelToVisualViewport() {
     if (
       !this.isCompactViewport() ||
@@ -253,33 +235,44 @@ class DialogComponent extends Component {
     }
 
     const margin = 16;
-    const viewportTop = this.visualViewport.offsetTop + margin;
-    const viewportBottom =
-      this.visualViewport.offsetTop + this.visualViewport.height - margin;
+    const viewport = this.visualViewport;
+
+    // The panel is centred in the *visible* area. `top: 50%` resolves against
+    // the layout viewport, which does not move when the keyboard opens — the
+    // visual viewport does — so the panel is nudged with `top`.
+    //
+    // The nudge must never be a transform: Tailwind centres the panel with
+    // the `translate` property, and a transform on top of it is a second
+    // translation, which pushed half of the panel off the screen.
+    const visibleCentre = viewport.offsetTop + viewport.height / 2;
+    const layoutCentre = window.innerHeight / 2;
+    const shift = Math.round(visibleCentre - layoutCentre);
 
     this.contentPanel.style.maxHeight = `${Math.max(
       160,
-      this.visualViewport.height - margin * 2,
+      viewport.height - margin * 2,
     )}px`;
 
-    const rect = this.contentPanel.getBoundingClientRect();
-    let shift = 0;
-
-    if (rect.bottom > viewportBottom) {
-      shift = viewportBottom - rect.bottom;
-    } else if (rect.top < viewportTop) {
-      shift = viewportTop - rect.top;
+    // A visual viewport narrower than the layout viewport (rotated or zoomed)
+    // must not be overflowed by the panel.
+    if (viewport.width < window.innerWidth - 1) {
+      this.contentPanel.style.maxWidth = `${Math.max(
+        240,
+        viewport.width - margin * 2,
+      )}px`;
+    } else {
+      this.contentPanel.style.maxWidth = "";
     }
 
-    this.contentPanel.style.transform =
-      shift === 0 ? "" : `translate(-50%, calc(-50% + ${Math.round(shift)}px))`;
+    this.contentPanel.style.top = `calc(50% + ${shift}px)`;
   }
 
   resetPanelViewportStyles() {
     if (!this.contentPanel) return;
 
     this.contentPanel.style.maxHeight = "";
-    this.contentPanel.style.transform = "";
+    this.contentPanel.style.maxWidth = "";
+    this.contentPanel.style.top = "";
   }
 
   isCompactViewport() {
@@ -294,8 +287,6 @@ class DialogComponent extends Component {
     this.focusTrap?.destroy();
     this.focusTrap = null;
     this.unbindVisualViewport();
-    clearTimeout(this.panelVisibilityTimer);
-    this.panelVisibilityTimer = null;
     this.resetPanelViewportStyles();
   }
 }

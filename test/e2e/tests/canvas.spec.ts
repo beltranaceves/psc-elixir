@@ -163,9 +163,65 @@ test.describe('canvas editor mobile fullscreen cells', () => {
     await page.getByRole('button', { name: 'Share' }).click({ force: true });
     await expect(page.locator('#share-canvas-dialog [data-part="content-panel"]')).toBeVisible();
 
-    // The dialog is moved with a transform; it never scrolls the page.
+    // The dialog is moved with `top`; it never scrolls the page.
     expect(await main.evaluate(el => el.scrollTop)).toBe(before);
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  test('the share modal stays on screen when the keyboard is open', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('Keyboard Modal'));
+
+    // Stand in for the on-screen keyboard: the visible viewport is shorter
+    // than the layout viewport, which is what the dialog has to follow.
+    await page.evaluate(() => {
+      const real = window.visualViewport;
+      Object.defineProperty(window, 'visualViewport', {
+        configurable: true,
+        get: () => ({
+          get height() {
+            return 400;
+          },
+          get width() {
+            return real.width;
+          },
+          get offsetTop() {
+            return 0;
+          },
+          get offsetLeft() {
+            return 0;
+          },
+          get scale() {
+            return 1;
+          },
+          addEventListener() {},
+          removeEventListener() {},
+        }),
+      });
+    });
+
+    await page.getByRole('button', { name: 'Share' }).click({ force: true });
+    const panel = page.locator('#share-canvas-dialog [data-part="content-panel"]');
+    await expect(panel).toBeVisible();
+
+    // The open animation overrides the panel's size while it runs; wait for it
+    // to settle before measuring.
+    await expect
+      .poll(async () => panel.evaluate(el => getComputedStyle(el).maxHeight))
+      .toBe('368px');
+
+    const box = await panel.boundingBox();
+    expect(box).not.toBeNull();
+    // The whole panel is on screen, and above the keyboard.
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(400);
+
+    // The panel is centred with the `translate` property, which a transform
+    // on top of it would double up and push half the panel off the screen.
+    const transform = await panel.evaluate(el => el.style.transform);
+    expect(transform).toBe('');
   });
 
   test('a touch tap only expands the cell — no instant edit — and swipes navigate', async ({

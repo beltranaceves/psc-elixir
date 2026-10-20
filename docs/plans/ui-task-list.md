@@ -356,11 +356,13 @@ long tokens and clamp to two lines, in the canvas list and the template library.
 state (`#cell-<key>`): entering it pushes a history entry, so Back collapses the cell and
 returns to the canvas grid instead of leaving the canvas, and the view can be linked and
 reloaded. Swiping to a neighbour replaces the fragment rather than stacking entries. The
-share dialog no longer scrolls the page — it is moved with a transform to stay inside the
-visible viewport when the keyboard opens, so the grid behind it no longer jumps. The bottom
+share dialog no longer scrolls the page — it is kept inside the visible viewport by moving
+it with `top` when the keyboard opens, so the grid behind it no longer jumps. The bottom
 app bar's height is now a known value (3.75 rem plus the safe-area inset) and the editor
 reserves exactly that below the grid, so the table ends on the bar instead of leaving a
-dead band under it.
+dead band under it. The panel is never nudged with a transform: Tailwind v4 centres it
+with the `translate` property, so a transform on top of it shifted half the dialog off the
+screen.
 
 ---
 

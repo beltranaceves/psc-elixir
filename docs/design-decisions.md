@@ -960,9 +960,9 @@ canvas rather than a sequence of separate pages.
   space to sit above the bottom app bar; retain the top-right placement on large
   screens.
 - Give dialogs a viewport-relative maximum height and an internal scroll region.
-  The shared dialog component watches `visualViewport` on compact screens, scrolls
-  the panel into view after focus, and nudges it into the visible viewport when
-  the keyboard resizes or scrolls that viewport.
+  The shared dialog component watches `visualViewport` on compact screens and
+  keeps the panel inside the visible area when the keyboard resizes or scrolls
+  that viewport.
 - Change the canvas tab picker to use `push_patch(..., replace: true)`. The selected
   tab remains deep-linkable, but browser Back returns to the canvas list instead of
   replaying each tab selection.
@@ -1036,9 +1036,12 @@ landed on the canvas list, and the view could not be linked or reloaded.
 - A URL that already names a cell opens that cell full screen, so the view can
   be shared and survives a reload.
 - The shared dialog no longer calls `scrollIntoView`. The panel is fixed and
-  centred, and it is moved with a transform to stay inside the visible
-  viewport when the keyboard opens; scrolling the document made the canvas
-  editor's own scroll area jump behind the modal.
+  centred, and it is kept inside the visible viewport by moving it with `top`;
+  scrolling the document made the canvas editor's own scroll area jump behind
+  the modal. The nudge must not be a transform: Tailwind v4 centres the panel
+  with the `translate` property, so a transform on top of it is a *second*
+  translation, which pushed half of the panel off the screen whenever the
+  keyboard was open.
 
 **Alternatives considered.** Leaving the cell out of the URL (Back leaves the
 canvas); a query parameter such as `?cell=` (every expand becomes a LiveView
