@@ -63,7 +63,16 @@ defmodule PscWeb.Components.MarkdownEditor do
       data-render-event={@render_event}
       data-update-event={@update_event}
       data-preview-event={@preview_event}
-      class={["flex min-h-0 flex-1 flex-col", @class]}
+      class={
+        [
+          "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200",
+          # The focus indication belongs to the frame, not to the textarea: a
+          # ring on the textarea is square, and it would cut across the frame's
+          # rounded corners.
+          "focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
+          @class
+        ]
+      }
     >
       <div class="relative min-h-0 flex-1">
         <.form
@@ -79,7 +88,7 @@ defmodule PscWeb.Components.MarkdownEditor do
             id={@input_id}
             data-editor-input
             data-current-user-id={@current_user_id}
-            class="h-full w-full resize-none border-0 bg-base-100 p-6 font-mono text-sm leading-6 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            class="h-full w-full resize-none border-0 bg-base-100 p-6 font-mono text-sm leading-6 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-0"
             placeholder={@placeholder}
             value={@content}
           ></textarea>

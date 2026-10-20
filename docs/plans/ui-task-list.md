@@ -385,6 +385,13 @@ one, label dropped — so the state colours are identical by construction: **Sav
 primary colour, **Saving** the secondary one, **Unsaved** the warning colour (the outline
 variant carries no colour of its own, so the warning token goes on top of it).
 
+**Follow-up (2026-10-20): the editor's focus ring follows its rounded frame.** The
+Markdown editor's textarea is square-cornered, so the focus ring it painted for
+itself cut across the rounded frame around it. The editor now draws the frame —
+rounded, bordered, and carrying the focus indication — and the textarea paints
+no ring of its own. The same pattern the canvas cell fields already use: the
+container shows the focus, the inner control does not.
+
 **Follow-up (2026-10-20): the page no longer scrolls on a phone.** The body was
 `min-h-screen` (100vh) while the app is sized in `dvh` (100dvh). On a phone 100vh is the
 *large* viewport — taller than the app by the height of the browser toolbar — so the page

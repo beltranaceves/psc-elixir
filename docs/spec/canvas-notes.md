@@ -217,6 +217,11 @@ rather than a copy:
   re-renders the preview. There is no "Markdown preview / Editing Markdown"
   banner above it — the state is obvious from what is on screen.
 
+  The editor draws its own frame — rounded, bordered, and the focus
+  indication. The textarea inside it has square corners, so a focus ring on
+  the *textarea* would cut across the frame's rounded corners; the ring
+  belongs to the frame.
+
 **There is no status pill of its own.** The canvas editor has **one** status
 pill, in its header (and in the app header on phones), and it reports whichever
 surface the user is on: the canvas's cells on the Editor tab, the open note on

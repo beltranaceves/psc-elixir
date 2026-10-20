@@ -1309,23 +1309,21 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <% end %>
           </div>
 
-          <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200">
-            <.markdown_editor
-              id="canvas-note-markdown"
-              input_id="canvas-note-input"
-              form_id="canvas-note-form"
-              preview_id="canvas-note-preview"
-              content={@note_content}
-              html={Markdown.render(@note_content, empty_message: "Start writing in the editor.")}
-              current_user_id={@user_id}
-              change_event="update_note_content"
-              preview_event="render_note"
-              render_event="note_rendered"
-              update_event="note_content_updated"
-              empty_message="Start writing in the editor."
-              preview_label="Edit note content"
-            />
-          </div>
+          <.markdown_editor
+            id="canvas-note-markdown"
+            input_id="canvas-note-input"
+            form_id="canvas-note-form"
+            preview_id="canvas-note-preview"
+            content={@note_content}
+            html={Markdown.render(@note_content, empty_message: "Start writing in the editor.")}
+            current_user_id={@user_id}
+            change_event="update_note_content"
+            preview_event="render_note"
+            render_event="note_rendered"
+            update_event="note_content_updated"
+            empty_message="Start writing in the editor."
+            preview_label="Edit note content"
+          />
         <% else %>
           <div class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center">
             <p class="max-w-sm text-sm text-base-content/50">
