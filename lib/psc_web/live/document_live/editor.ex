@@ -354,7 +354,7 @@ defmodule PscWeb.DocumentLive.Editor do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} header_title="Documents">
-      <div class="flex h-screen flex-col bg-base-100">
+      <div class="flex h-dvh flex-col bg-base-100">
         <%!-- Header --%>
         <div class="border-b border-base-content/10 bg-base-200/60 px-6 py-4">
           <div class="flex items-center justify-between">

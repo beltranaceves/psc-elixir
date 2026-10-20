@@ -31,7 +31,12 @@
       })();
     </script>
   </head>
-  <body class="min-h-screen flex flex-col bg-base-100 text-base-content">
+  <%!-- `min-h-dvh`, not `min-h-screen`: on a phone `100vh` is the *large*
+  viewport (browser toolbars hidden) while the app is sized in `dvh` (the
+  viewport as it is now). With `min-h-screen` the body was taller than the app
+  by the height of the toolbar, so the page scrolled vertically and showed an
+  empty strip under the app. --%>
+  <body class="min-h-dvh flex flex-col bg-base-100 text-base-content">
     {@inner_content}
   </body>
 </html>

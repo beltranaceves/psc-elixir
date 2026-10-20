@@ -940,6 +940,15 @@ containing block and broke the fixed positioning); guessing the breakpoints with
 viewport widths only (the icons-only state appeared far too late); keeping the e-mail
 address in the presence pill (it ate a third of a phone's header row).
 
+**Addendum (2026-10-20): the app is sized in the dynamic viewport.** The page body was
+`min-h-screen` (100vh) while the app shell is sized in `dvh` (100dvh). On a phone those
+are different units: 100vh is the *large* viewport — the height the browser would have
+with its toolbars hidden — and 100dvh is the viewport as it is right now. The body was
+therefore taller than the app by the height of the browser's toolbar, so the page scrolled
+vertically and showed an empty strip under the app; on a desktop, where `vh` and `dvh`
+are the same, there was nothing to see. The body now uses `min-h-dvh`, and the document
+editor's own `h-screen` frame became `h-dvh`.
+
 **Consequences.** The tab strip is rendered twice in the DOM, so the two sets of buttons
 need distinct ids (`canvas-tab-*` in the header, `canvas-tab-bar-*` in the app bar); the
 tab panel's `aria-labelledby` points at the header button, whose text still names the

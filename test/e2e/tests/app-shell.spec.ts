@@ -9,6 +9,19 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('app shell', () => {
+  test('the shell is sized with the dynamic viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    // `min-h-screen` is 100vh: the *large* viewport, which on a phone is
+    // taller than the app (sized in dvh) by the height of the browser
+    // toolbar. The page then scrolls vertically and shows an empty strip
+    // under the app. The body must follow the dynamic viewport instead.
+    await expect(page.locator('body')).toHaveClass(/min-h-dvh/);
+    await expect(page.locator('body')).not.toHaveClass(/min-h-screen|h-screen/);
+  });
+
   test('the theme picker in the menu can pick the theme that is already on', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/canvas');

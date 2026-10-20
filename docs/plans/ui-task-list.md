@@ -352,6 +352,13 @@ long unbreakable token used to paint past the card's border (measured: 596 px of
 on a 373 px card). Card names now break on word boundaries and descriptions both break
 long tokens and clamp to two lines, in the canvas list and the template library.
 
+**Follow-up (2026-10-20): the page no longer scrolls on a phone.** The body was
+`min-h-screen` (100vh) while the app is sized in `dvh` (100dvh). On a phone 100vh is the
+*large* viewport — taller than the app by the height of the browser toolbar — so the page
+scrolled vertically and left an empty strip under the app. On a desktop, where `vh` and
+`dvh` are identical, this was invisible, which is why it only showed on the phone. The
+body now uses `min-h-dvh`, and the document editor's `h-screen` frame became `h-dvh`.
+
 **Follow-up (2026-10-20): instant tab switching.** Clicking a tab used to wait for the
 server: the click pushed a patch and the server re-rendered the whole view, grid and
 Markdown included — a network round trip on the critical path, which read as a lag on a

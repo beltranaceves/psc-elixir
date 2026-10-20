@@ -580,8 +580,10 @@ test.describe('canvas editor layout', () => {
     // The table ends exactly where the app bar starts.
     expect(Math.abs(bar!.y - (grid!.y + grid!.height))).toBeLessThanOrEqual(1);
 
-    // The page itself does not scroll.
-    const overflow = await page.evaluate(() => document.body.scrollHeight - document.body.clientHeight);
+    // The page itself does not scroll: the editor fills the viewport.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    );
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
