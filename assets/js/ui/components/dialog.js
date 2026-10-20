@@ -16,6 +16,10 @@ class DialogComponent extends Component {
     this.content = this.getPart("content");
     this.contentPanel = this.getPart("content-panel");
     this.config.preventDefaultKeys = ["Escape"];
+    this.visualViewport = null;
+    this.panelVisibilityTimer = null;
+    this.handleViewportChange = this.handleViewportChange.bind(this);
+    this.handlePanelFocusIn = this.handlePanelFocusIn.bind(this);
   }
 
   afterMount() {
@@ -111,6 +115,8 @@ class DialogComponent extends Component {
   setupComponentEvents() {
     super.setupComponentEvents();
 
+    this.contentPanel?.addEventListener("focusin", this.handlePanelFocusIn);
+
     // Only setup click handler if closeOnOutsideClick is enabled
     if (this.options.closeOnOutsideClick) {
       this.setupOutsideClickDetection();
@@ -136,6 +142,11 @@ class DialogComponent extends Component {
   teardownComponentEvents() {
     super.teardownComponentEvents();
 
+    this.contentPanel?.removeEventListener("focusin", this.handlePanelFocusIn);
+    this.unbindVisualViewport();
+    clearTimeout(this.panelVisibilityTimer);
+    this.panelVisibilityTimer = null;
+
     // Clean up click outside monitor
     this.clickOutsideMonitor?.destroy();
     this.clickOutsideMonitor = null;
@@ -158,6 +169,10 @@ class DialogComponent extends Component {
   }
 
   onOpenExit() {
+    this.unbindVisualViewport();
+    clearTimeout(this.panelVisibilityTimer);
+    this.panelVisibilityTimer = null;
+    this.resetPanelViewportStyles();
     this.focusTrap?.deactivate();
     this.clickOutsideMonitor?.stop();
 
@@ -180,13 +195,105 @@ class DialogComponent extends Component {
       this.clickOutsideMonitor.start();
     }
 
+    this.bindVisualViewport();
+    this.schedulePanelVisibility();
+
     // Escape handling uses the component key map.
+  }
+
+  handlePanelFocusIn() {
+    this.schedulePanelVisibility();
+  }
+
+  bindVisualViewport() {
+    if (!this.isCompactViewport() || !window.visualViewport || this.visualViewport) {
+      return;
+    }
+
+    this.visualViewport = window.visualViewport;
+    this.visualViewport.addEventListener("resize", this.handleViewportChange);
+    this.visualViewport.addEventListener("scroll", this.handleViewportChange);
+  }
+
+  unbindVisualViewport() {
+    if (!this.visualViewport) return;
+
+    this.visualViewport.removeEventListener("resize", this.handleViewportChange);
+    this.visualViewport.removeEventListener("scroll", this.handleViewportChange);
+    this.visualViewport = null;
+  }
+
+  handleViewportChange() {
+    this.syncPanelToVisualViewport();
+  }
+
+  schedulePanelVisibility() {
+    if (!this.isCompactViewport()) return;
+
+    clearTimeout(this.panelVisibilityTimer);
+    this.panelVisibilityTimer = setTimeout(() => {
+      if (this.destroyed || this.state !== "open" || !this.contentPanel) return;
+
+      this.contentPanel.scrollIntoView({ block: "center", inline: "nearest" });
+      this.syncPanelToVisualViewport();
+    }, 75);
+  }
+
+  syncPanelToVisualViewport() {
+    if (
+      !this.isCompactViewport() ||
+      !this.visualViewport ||
+      !this.contentPanel ||
+      this.state !== "open"
+    ) {
+      return;
+    }
+
+    const margin = 16;
+    const viewportTop = this.visualViewport.offsetTop + margin;
+    const viewportBottom =
+      this.visualViewport.offsetTop + this.visualViewport.height - margin;
+
+    this.contentPanel.style.maxHeight = `${Math.max(
+      160,
+      this.visualViewport.height - margin * 2,
+    )}px`;
+
+    const rect = this.contentPanel.getBoundingClientRect();
+    let shift = 0;
+
+    if (rect.bottom > viewportBottom) {
+      shift = viewportBottom - rect.bottom;
+    } else if (rect.top < viewportTop) {
+      shift = viewportTop - rect.top;
+    }
+
+    this.contentPanel.style.transform =
+      shift === 0 ? "" : `translate(-50%, calc(-50% + ${Math.round(shift)}px))`;
+  }
+
+  resetPanelViewportStyles() {
+    if (!this.contentPanel) return;
+
+    this.contentPanel.style.maxHeight = "";
+    this.contentPanel.style.transform = "";
+  }
+
+  isCompactViewport() {
+    return (
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(max-width: 640px)").matches
+    );
   }
 
   beforeDestroy() {
     // Clean up focus trap
     this.focusTrap?.destroy();
     this.focusTrap = null;
+    this.unbindVisualViewport();
+    clearTimeout(this.panelVisibilityTimer);
+    this.panelVisibilityTimer = null;
+    this.resetPanelViewportStyles();
   }
 }
 

@@ -596,20 +596,29 @@
      words wrap normally instead of breaking mid-word. */
   .canvas-cell .md-render :is(h1, h2) {
     font-size: 1.25rem;
-    line-height: 1.5;
-    margin-block: 0.35em;
+    line-height: 1.3;
+    margin-block: 0.25em;
   }
 
   .canvas-cell .md-render h3 {
     font-size: 1.05rem;
-    line-height: 1.4;
-    margin-block: 0.35em;
+    line-height: 1.25;
+    margin-block: 0.25em;
   }
 
   /* Dense cells: trim prose margins so text fills the cell instead of
      leaving gaps at the top, bottom and between blocks. */
+  .canvas-cell .md-render {
+    line-height: 1.3;
+  }
+
   .canvas-cell .md-render :is(p, ul, ol, blockquote, pre) {
-    margin-block: 0.3em;
+    line-height: 1.3;
+    margin-block: 0.15em;
+  }
+
+  .canvas-cell .md-render :is(li, code) {
+    line-height: 1.3;
   }
 
   .canvas-cell .md-render > :first-child {

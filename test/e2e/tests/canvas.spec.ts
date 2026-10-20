@@ -254,6 +254,12 @@ test.describe('canvas editor tabs', () => {
 
     await page.locator('#canvas-tab-editor').click();
     await expect(page.locator('#canvas-grid')).toBeVisible();
+
+    // Tab changes replace the current canvas URL instead of adding entries.
+    // Back therefore leaves the editor rather than walking through each tab.
+    await page.goBack();
+    await page.waitForURL(/\/canvas$/);
+    await expect(page.locator('#canvas-name-form')).toHaveCount(0);
   });
 });
 
@@ -471,6 +477,13 @@ test.describe('canvas editor layout', () => {
     await page.locator('#share-canvas-button-compact').click();
     await expect(page.locator('#share-canvas-dialog [data-part="content-panel"]')).toBeVisible();
     await expect(page.locator('#canvas-grid')).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 480 });
+    const panel = page.locator('#share-canvas-dialog [data-part="content-panel"]');
+    const panelBox = await panel.boundingBox();
+    expect(panelBox).not.toBeNull();
+    expect(panelBox!.y).toBeGreaterThanOrEqual(8);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(472);
   });
 });
 
@@ -679,5 +692,23 @@ test.describe('template designer accents', () => {
     const canvasBar = await page.locator('#accent-bar-row-r1').boundingBox();
     const canvasRow = await page.locator('tbody tr').first().boundingBox();
     expect(canvasBar!.height).toBeGreaterThan(canvasRow!.height - 6);
+  });
+});
+
+test.describe('mobile flash placement', () => {
+  test('places feedback cards above the mobile tab bar', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    await page.getByPlaceholder('Enter canvas name...').fill(uniqueName('Mobile Toast'));
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+
+    const flash = page.locator('#flash-group');
+    await expect(flash).toContainText('Canvas created successfully');
+    const box = await flash.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y).toBeGreaterThan(844 / 2);
+    expect(box!.y + box!.height).toBeLessThan(844 - 56);
   });
 });

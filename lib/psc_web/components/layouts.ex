@@ -267,7 +267,7 @@ defmodule PscWeb.Layouts do
     <div
       id={@id}
       aria-live="polite"
-      class="pointer-events-none fixed inset-x-3 top-16 z-50 flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:w-96 sm:items-end"
+      class="pointer-events-none fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:w-96 sm:items-end lg:top-16 lg:bottom-auto"
     >
       <.flash kind={:success} flash={@flash} />
       <.flash kind={:info} flash={@flash} />

@@ -374,6 +374,12 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       template = Canvas.list_templates(user) |> Enum.find(&(&1.name == "Accented Tpl"))
       assert hd(template.layout_map["columns"])["accent"] == "sky"
       assert hd(template.layout_map["rows"])["accent"] == "amber"
+
+      {:ok, lv, html} = live(conn, ~p"/templates/#{template.id}")
+      assert html =~ ~s(id="accent-bar-column-c1")
+      assert html =~ ~s(id="accent-bar-row-r1")
+      assert has_element?(lv, "#accent-bar-column-c1.bg-sky-400")
+      assert has_element?(lv, "#accent-bar-row-r1.bg-amber-400")
     end
 
     test "clearing an accent removes the bar", %{conn: conn, user: user} do
@@ -400,6 +406,14 @@ defmodule PscWeb.CanvasLayoutLiveTest do
         |> element("button[phx-click='set_column_accent'][phx-value-accent='']")
         |> render_click()
 
+      refute html =~ ~s(id="accent-bar-column-c1")
+
+      assert {:error, {:redirect, %{to: "/templates"}}} =
+               lv
+               |> form("#template-form", %{"name" => "Clearing Tpl"})
+               |> render_submit()
+
+      {:ok, _lv, html} = live(conn, ~p"/templates/#{template.id}")
       refute html =~ ~s(id="accent-bar-column-c1")
     end
 

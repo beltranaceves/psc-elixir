@@ -332,6 +332,14 @@ before the markdown display's own click listener, so a tap never drops straight 
 (the bug found on a real phone). Desktop still opens the field on the first click. Covered by
 the E2E tests `canvas editor mobile fullscreen cells` (mouse and real touch events).
 
+**Follow-up (2026-10-20): visible mobile feedback and view state.** Share dialogs now cap
+their height, scroll internally, and follow the visual viewport while the mobile keyboard is
+open. Feedback cards move above the bottom app bar below `lg`, while desktop keeps the
+top-right placement. Canvas tab patches replace the current history entry, so Back leaves the
+editor for the canvas library. Rendered Markdown cells use tighter line height and block
+margins. Template accent coverage now saves, reloads, and renders the persisted row/column
+tokens; no data-model change was needed because accents already belong in `layout_map`.
+
 ---
 
 ## Notes / incidental findings

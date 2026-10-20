@@ -23,6 +23,13 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **The sidebar** (presence + sharing) is fixed at 280px on the right, collapsible via a button in the header. On mobile, it becomes a slide-over panel.
 - **The editor header** contains: canvas name (editable inline), description (editable inline, below name), Structure toggle, Share button, and presence avatars.
 - **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
+- **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
+  `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
+  leaves the canvas editor instead of stepping through view selections.
+- **Mobile feedback** appears above the fixed bottom app bar. The shared dialog panel scrolls
+  within the visible viewport when the virtual keyboard is open.
+- **Rendered Markdown** is intentionally denser than the editing controls: line height and block
+  margins are reduced only inside `.md-render` cells.
 
 ### Screenshot Review Loop
 

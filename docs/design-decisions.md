@@ -33,6 +33,7 @@ it costs, and the evidence it was verified against.
 | [ADR-021](#adr-021--mobile-top-bars-one-menu-and-a-stacked-canvas-header) | Mobile top bars: one menu and a stacked canvas header | Accepted | 2026-10-19 |
 | [ADR-022](#adr-022--ui-consolidation-one-canvas-model-one-creation-path) | UI consolidation: one canvas model, one creation path | Accepted | 2026-10-19 |
 | [ADR-023](#adr-023--the-canvas-tabs-follow-the-space-they-have) | The canvas tabs follow the space they have | Accepted | 2026-10-20 |
+| [ADR-024](#adr-024--mobile-feedback-and-dialogs-stay-in-the-visible-viewport) | Mobile feedback and dialogs stay in the visible viewport | Accepted | 2026-10-20 |
 
 ---
 
@@ -934,6 +935,44 @@ need distinct ids (`canvas-tab-*` in the header, `canvas-tab-bar-*` in the app b
 tab panel's `aria-labelledby` points at the header button, whose text still names the
 panel when it is off screen. The E2E suite drives the header strip (its viewport is
 1280 px), and the LiveView test asserts that both sets exist and switch tabs.
+
+## ADR-024 — Mobile feedback and dialogs stay in the visible viewport
+
+**Context.** The canvas editor uses a fixed bottom app bar below the large-screen
+breakpoint. Feedback cards rendered at the top of the viewport steal space from the
+grid on phones, while a share dialog can be covered by the virtual keyboard after
+its first input receives focus. Tab changes also represent view state inside one
+canvas rather than a sequence of separate pages.
+
+**Decision.**
+
+- Render feedback cards at the bottom on phones and tablets, with enough safe-area
+  space to sit above the bottom app bar; retain the top-right placement on large
+  screens.
+- Give dialogs a viewport-relative maximum height and an internal scroll region.
+  The shared dialog component watches `visualViewport` on compact screens, scrolls
+  the panel into view after focus, and nudges it into the visible viewport when
+  the keyboard resizes or scrolls that viewport.
+- Change the canvas tab picker to use `push_patch(..., replace: true)`. The selected
+  tab remains deep-linkable, but browser Back returns to the canvas list instead of
+  replaying each tab selection.
+- Keep Markdown density changes scoped to `.canvas-cell .md-render`; reduce line
+  height and block margins without changing the editor input styles.
+- Row and column accents remain tokens in the template `layout_map`. Save/reopen
+  coverage verifies that selected and cleared accents survive an explicit template
+  save and are still available for canvas instantiation.
+
+**Alternatives considered.** Keeping feedback at the top on all screens (it competes
+with the grid and the bottom app bar); relying only on `scrollIntoView` once (the
+keyboard changes the visual viewport after focus); pushing every tab into history
+(Back becomes a tab undo stack rather than leaving the editor); and applying a
+global typography reset (it would alter documents and form controls).
+
+**Consequences.** Dialog positioning now has a small client-side visual-viewport
+policy shared by all dialogs, and mobile feedback cards use the bottom safe-area
+offset. Canvas tabs still update the URL and invoke `handle_params/3`, but do not
+create browser-history entries. Existing canvases remain unchanged when a template
+accent is later edited.
 
 ---
 

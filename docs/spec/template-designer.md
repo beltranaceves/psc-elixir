@@ -149,7 +149,7 @@ palette in `Psc.Canvas.Accent` (`sky`, `violet`, `emerald`, `amber`, `rose`, `te
 are authored: the designer draws a 4 px bar on the top edge of a column header and the
 left edge of a row header, and the swatch next to each label opens an inline palette.
 Accents are stored in `layout_map` (the JSON map on the Ecto entity, no migration),
-validated by `Layout.changeset/2`, and copied into canvases by
+validated by `Layout.changeset/2`, survive an explicit save/reopen cycle, and are copied into canvases by
 `Canvas.instantiate_template/3`, where the canvas editor renders them read-only. See
 ADR-011.
 

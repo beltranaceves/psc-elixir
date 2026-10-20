@@ -140,7 +140,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   @impl true
   def handle_event("select_tab", %{"tab" => tab}, socket) do
-    {:noreply, push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}")}
+    {:noreply,
+     push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}", replace: true)}
   end
 
   @impl true
