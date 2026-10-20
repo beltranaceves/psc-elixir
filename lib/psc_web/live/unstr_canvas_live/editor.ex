@@ -454,7 +454,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       current_scope={@current_scope}
       header_title="Canvas Editor"
       fill_height
-      main_class="px-2 py-2 sm:px-6 lg:px-8"
+      main_class="px-2 pt-2 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8"
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <:header_nav>
@@ -467,7 +467,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           can_share?={@canvas.author_id == @user_id}
         />
       </:header_actions>
-      <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col gap-3 pb-16 lg:pb-0">
+      <div
+        id="canvas-workspace"
+        class="flex min-h-0 w-full flex-1 flex-col gap-3 pb-[calc(var(--canvas-tab-bar-height)+env(safe-area-inset-bottom))] lg:pb-2"
+      >
         <%!-- Header: title, description, presence and actions --%>
         <div id="canvas-header" class="flex shrink-0 flex-col gap-2 px-2 sm:px-0">
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:items-start">
@@ -898,7 +901,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       id="canvas-tabs-bar"
       role="tablist"
       aria-label="Canvas views"
-      class="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around gap-1 border-t border-base-content/10 bg-base-200/95 px-1 py-1 backdrop-blur lg:hidden"
+      class="fixed inset-x-0 bottom-0 z-40 flex h-[calc(var(--canvas-tab-bar-height)+env(safe-area-inset-bottom))] items-stretch justify-around gap-1 border-t border-base-content/10 bg-base-200/95 px-1 py-1 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
     >
       <button
         :for={{tab_id, label, icon, _blurb} <- @tabs}

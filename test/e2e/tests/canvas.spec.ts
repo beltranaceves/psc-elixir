@@ -478,6 +478,25 @@ test.describe('canvas editor layout', () => {
     expect(ratio).toBeLessThan(0.97);
   });
 
+  test('ends the grid on the app bar, without a dead band or a page scroll', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('No Dead Band'));
+
+    const grid = await page.locator('#canvas-grid').boundingBox();
+    const bar = await page.locator('#canvas-tabs-bar').boundingBox();
+    expect(grid).not.toBeNull();
+    expect(bar).not.toBeNull();
+
+    // The table ends exactly where the app bar starts.
+    expect(Math.abs(bar!.y - (grid!.y + grid!.height))).toBeLessThanOrEqual(1);
+
+    // The page itself does not scroll.
+    const overflow = await page.evaluate(() => document.body.scrollHeight - document.body.clientHeight);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
   test('moves presence, save state and Share into the app header on phones', async ({
     page,
   }) => {

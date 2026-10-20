@@ -101,6 +101,14 @@
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
 @custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
 
+/* The height of the canvas editor's bottom app bar. The editor reserves the
+   same amount below the grid, so the table ends exactly where the bar starts
+   instead of leaving a dead band. The phone's safe-area inset is added on top
+   of it by both the bar and the reservation. */
+:root {
+  --canvas-tab-bar-height: 3.75rem;
+}
+
 /* Dark mode follows the data-theme attribute set by the root layout, and the OS
    preference when the user keeps the "system" setting (which removes it). */
 @custom-variant dark {

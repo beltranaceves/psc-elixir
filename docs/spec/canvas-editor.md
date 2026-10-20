@@ -34,6 +34,9 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **Mobile feedback** appears above the fixed bottom app bar. The shared dialog panel is
   moved with a transform to stay inside the visible viewport when the virtual keyboard is
   open; it never scrolls the page behind it.
+- **The grid meets the bottom app bar.** Below `lg` the app bar's height (3.75 rem plus the
+  phone's safe-area inset) is reserved below the grid, so the table ends exactly where the
+  bar starts: no dead band, and the last row is never hidden behind the bar.
 - **Rendered Markdown** is intentionally denser than the editing controls: line height and block
   margins are reduced only inside `.md-render` cells.
 
