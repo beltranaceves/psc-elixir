@@ -12,6 +12,7 @@ defmodule PscWeb.DocumentLive.Editor do
   alias PscWeb.Markdown
   alias PscWeb.Presence
 
+  import PscWeb.Components.MarkdownEditor
   import PscWeb.Components.ShareDialog
 
   # Check every 5 seconds
@@ -399,51 +400,21 @@ defmodule PscWeb.DocumentLive.Editor do
 
         <div class="flex min-h-0 flex-1 overflow-hidden bg-base-100">
           <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div
+            <.markdown_editor
               id="document-editor"
-              phx-hook="DocumentEditorHook"
-              phx-update="ignore"
-              class="flex min-h-0 flex-1 flex-col"
-            >
-              <div class="flex items-center justify-between border-b border-base-content/10 bg-base-200/40 px-6 py-3">
-                <span class="text-sm font-medium text-base-content" data-editor-mode>
-                  Markdown preview
-                </span>
-                <span class="text-xs text-base-content/50" data-editor-hint>Click to edit</span>
-              </div>
-              <div class="relative min-h-0 flex-1">
-                <.form
-                  for={%{}}
-                  id="editor-form"
-                  phx-change="update_content"
-                  phx-debounce="300"
-                  class="absolute inset-0 hidden h-full"
-                >
-                  <textarea
-                    name="content"
-                    id="editor"
-                    data-current-user-id={@user_id}
-                    class="h-full w-full resize-none border-0 bg-base-100 p-6 font-mono text-sm leading-6 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
-                    placeholder="Start writing in Markdown..."
-                    value={@content}
-                  ></textarea>
-                </.form>
-
-                <div
-                  id="document-markdown-preview"
-                  role="button"
-                  tabindex="0"
-                  aria-label="Edit document content"
-                  class="absolute inset-0 cursor-text overflow-y-auto bg-base-100 p-6 transition-colors hover:bg-base-200/30"
-                >
-                  <article class="markdown-preview prose dark:prose-invert max-w-none break-words">
-                    {Phoenix.HTML.raw(
-                      Markdown.render(@content, empty_message: "Start writing in the editor.")
-                    )}
-                  </article>
-                </div>
-              </div>
-            </div>
+              input_id="editor"
+              form_id="editor-form"
+              preview_id="document-markdown-preview"
+              content={@content}
+              html={Markdown.render(@content, empty_message: "Start writing in the editor.")}
+              current_user_id={@user_id}
+              change_event="update_content"
+              preview_event="render_document"
+              render_event="document_rendered"
+              update_event="content_updated"
+              empty_message="Start writing in the editor."
+              preview_label="Edit document content"
+            />
           </div>
 
           <%!-- Presence Sidebar --%>

@@ -23,7 +23,7 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/psc"
-import DocumentEditorHook from "./hooks/document_editor_hook"
+import MarkdownEditorHook from "./hooks/markdown_editor_hook"
 import CellHook from "./hooks/cell_hook"
 import MarkdownField from "./hooks/markdown_field"
 import CellFocus from "./hooks/cell_focus"
@@ -49,7 +49,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, DocumentEditorHook, CellHook, MarkdownField, CellFocus, CanvasTabs, SaladUI: SaladUI.SaladUIHook},
+  hooks: {...colocatedHooks, CellHook, MarkdownField, CellFocus, CanvasTabs, MarkdownEditorHook, SaladUI: SaladUI.SaladUIHook},
 })
 
 // Close native <details> menus when clicking outside or pressing Escape.

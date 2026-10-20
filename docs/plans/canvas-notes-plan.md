@@ -128,6 +128,8 @@ Extract `PscWeb.Components.StatusPill` from the canvas editor's private
 
 ## Task 4 — A reusable Markdown editor
 
+**Status: done.**
+
 The document editor's hook addresses its parts by hardcoded ids (`#editor`,
 `#editor-form`, `#document-markdown-preview`), so it can only exist once per
 page — it cannot be reused for a note inside the canvas editor.

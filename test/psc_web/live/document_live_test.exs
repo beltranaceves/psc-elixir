@@ -74,7 +74,7 @@ defmodule PscWeb.DocumentLiveTest do
 
       {:ok, lv, html} = live(conn, ~p"/documents/#{document.id}")
 
-      assert has_element?(lv, "#document-editor[phx-hook='DocumentEditorHook']")
+      assert has_element?(lv, "#document-editor[phx-hook='MarkdownEditorHook']")
       assert has_element?(lv, "#document-markdown-preview")
       assert has_element?(lv, "#editor-form")
       assert html =~ "<h1>\nProject notes</h1>"

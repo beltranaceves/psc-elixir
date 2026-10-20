@@ -1,13 +1,31 @@
+// The reusable Markdown editor.
+//
+// The parts are found through data attributes, not hardcoded ids, so more
+// than one editor can live on the same page — a note inside the canvas
+// editor, for instance, next to a canvas cell.
+//
+// The two server events it listens to are configurable, because they belong
+// to the LiveView that owns the editor:
+//
+//   <render event> — { content, html }   the server re-rendered the Markdown
+//   <update event> — { newContent, fromUserId }  a remote edit
+//   <preview event> — { content }         the client asks for a re-render
+//
+// `fromUserId` of -1 means the server is resynchronising a diverged client.
 export default {
   mounted() {
-    this.input = this.el.querySelector('#editor')
-    this.form = this.el.querySelector('#editor-form')
-    this.preview = this.el.querySelector('#document-markdown-preview')
-    this.previewContent = this.preview?.querySelector('.markdown-preview')
+    this.form = this.el.querySelector('[data-editor-form]')
+    this.input = this.el.querySelector('[data-editor-input]')
+    this.preview = this.el.querySelector('[data-editor-preview]')
+    this.previewContent = this.el.querySelector('[data-editor-content]')
     this.mode = this.el.querySelector('[data-editor-mode]')
     this.hint = this.el.querySelector('[data-editor-hint]')
     this.currentUserId = this.input?.dataset.currentUserId
     this.pendingPreviewContent = null
+
+    this.renderEvent = this.el.dataset.renderEvent || 'document_rendered'
+    this.updateEvent = this.el.dataset.updateEvent || 'content_updated'
+    this.previewEvent = this.el.dataset.previewEvent || 'render_document'
 
     if (!this.input || !this.form || !this.preview || !this.previewContent) return
 
@@ -17,14 +35,14 @@ export default {
     this.input.addEventListener('focus', () => this.showEditor())
     this.input.addEventListener('blur', () => this.requestPreview())
     this.preview.addEventListener('click', () => this.edit())
-    this.preview.addEventListener('keydown', event => {
+    this.preview.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault()
         this.edit()
       }
     })
 
-    this.handleEvent('document_rendered', ({ content, html }) => {
+    this.handleEvent(this.renderEvent, ({ content, html }) => {
       if (content !== this.input.value) return
 
       this.previewContent.innerHTML = html || ''
@@ -35,7 +53,7 @@ export default {
       }
     })
 
-    this.handleEvent('content_updated', ({ newContent, fromUserId }) => {
+    this.handleEvent(this.updateEvent, ({ newContent, fromUserId }) => {
       const isServerResync = fromUserId == -1
 
       if (
@@ -65,7 +83,7 @@ export default {
   requestPreview() {
     const content = this.input.value
     this.pendingPreviewContent = content
-    this.pushEvent('render_document', { content })
+    this.pushEvent(this.previewEvent, { content })
   },
 
   showEditor() {
@@ -82,5 +100,5 @@ export default {
     this.mode.textContent = 'Markdown preview'
     this.hint.textContent = 'Click to edit'
     this.preview.removeAttribute('aria-hidden')
-  }
+  },
 }
