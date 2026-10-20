@@ -182,6 +182,7 @@ defmodule PscWeb.Components.UI.Dialog do
   end
 
   attr :class, :string, default: nil
+  attr :rest, :global
   slot :inner_block, required: true
 
   def dialog_title(assigns) do
@@ -189,6 +190,7 @@ defmodule PscWeb.Components.UI.Dialog do
     <h3
       data-part="title"
       class={classes(["text-lg font-semibold leading-none tracking-tight", @class])}
+      {@rest}
     >
       {render_slot(@inner_block)}
     </h3>

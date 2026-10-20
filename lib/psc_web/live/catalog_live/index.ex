@@ -190,7 +190,13 @@ defmodule PscWeb.CatalogLive.Index do
       >
         <UIDialog.dialog_content class="sm:max-w-2xl">
           <UIDialog.dialog_header class="min-w-0">
-            <UIDialog.dialog_title class="break-words">{@open_template.name}</UIDialog.dialog_title>
+            <%!-- The title takes the initial focus: SaladUI's focus trap would
+            otherwise land on the first button, which is in the footer, and
+            scrolling to it would open the modal on its least interesting
+            part. Focusing the title is what a screen reader wants anyway. --%>
+            <UIDialog.dialog_title class="break-words" tabindex="-1" autofocus>
+              {@open_template.name}
+            </UIDialog.dialog_title>
 
             <UIDialog.dialog_description
               :if={@open_template.description not in [nil, ""]}
