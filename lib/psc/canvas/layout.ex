@@ -11,6 +11,13 @@ defmodule Psc.Canvas.Layout do
     field :layout_map, :map, default: %{}
     field :shared_with, {:array, :string}, default: []
 
+    # The catalog. `:public` is the owner's choice; the counts and the lineage
+    # are set by the context, never by a request, so they stay out of the cast.
+    field :public, :boolean, default: false
+    field :use_count, :integer, default: 0
+    field :fork_count, :integer, default: 0
+    field :forked_from_id, :binary_id
+
     belongs_to :author, Psc.Accounts.User, type: :id
 
     timestamps()
@@ -18,7 +25,7 @@ defmodule Psc.Canvas.Layout do
 
   def changeset(layout, attrs) do
     layout
-    |> cast(attrs, [:name, :description, :layout_map, :shared_with])
+    |> cast(attrs, [:name, :description, :layout_map, :shared_with, :public])
     |> validate_required([:name])
     |> unique_constraint(:name)
     |> validate_layout_map()

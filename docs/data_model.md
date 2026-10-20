@@ -25,6 +25,7 @@ erDiagram
     users ||--o{ unstr_canvases : "author"
     users ||--o{ unstr_canvas_events : "authored"
     users ||--o{ canvas_layouts : "author"
+    canvas_layouts ||--o{ canvas_layouts : "forked from"
     unstr_canvases ||--o{ notes : "owns"
     notes ||--o{ note_events : "event log"
     unstr_canvases ||--o{ unstr_canvas_events : "event log"
@@ -100,6 +101,10 @@ erDiagram
         string description
         map layout_map
         string_array shared_with
+        boolean public
+        int use_count
+        int fork_count
+        uuid forked_from_id FK
         int author_id FK
     }
 ```

@@ -41,6 +41,49 @@ defmodule Psc.CanvasTest do
     end
   end
 
+  describe "catalog columns" do
+    test "a new template is private and uncounted" do
+      user = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+      refute template.public
+      assert template.use_count == 0
+      assert template.fork_count == 0
+      assert template.forked_from_id == nil
+    end
+
+    test "the changeset casts :public and ignores the context-owned fields" do
+      user = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+      {:ok, updated} =
+        Canvas.update_template(template, %{
+          "public" => "true",
+          "use_count" => "999",
+          "forked_from_id" => Ecto.UUID.generate()
+        })
+
+      assert updated.public == true
+      assert updated.use_count == 0
+      assert updated.forked_from_id == nil
+    end
+
+    test "deleting a source template nilifies its forks' lineage" do
+      user = Psc.AccountsFixtures.user_fixture()
+      source = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+      fork =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+        |> change(forked_from_id: source.id)
+        |> Repo.update!()
+
+      assert {:ok, _} = Canvas.delete_template(source)
+
+      fork = Repo.reload!(fork)
+      assert fork.forked_from_id == nil
+    end
+  end
+
   describe "list_templates/1" do
     test "includes own and shared templates, excludes others" do
       user = Psc.AccountsFixtures.user_fixture()
