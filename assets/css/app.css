@@ -386,6 +386,32 @@
   }
 }
 
+/* Canvas view tabs. The selected tab is styled from `aria-selected` rather
+   than from a server-rendered class, so the client can switch tabs the
+   moment they are clicked — without waiting for the server — and without
+   duplicating the utility classes in JavaScript. */
+#canvas-tabs [role="tab"][aria-selected="true"] {
+  background-color: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  color: var(--color-base-content);
+}
+
+#canvas-tabs [role="tab"][aria-selected="false"] {
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+}
+
+#canvas-tabs [role="tab"][aria-selected="false"]:hover {
+  background-color: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+  color: var(--color-base-content);
+}
+
+#canvas-tabs-bar [role="tab"][aria-selected="true"] {
+  color: var(--color-primary);
+}
+
+#canvas-tabs-bar [role="tab"][aria-selected="false"] {
+  color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+}
+
 /* Canvas grid: every cell is the same size. The page is a flex column (see
    Layouts.app), the table panel flexes into the remaining viewport height and
    the table rows share it equally. Read mode clips overflow behind a soft fade;

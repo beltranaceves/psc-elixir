@@ -338,7 +338,8 @@ test.describe('canvas editor tabs', () => {
     await page.locator('#canvas-tab-notes').click();
     await expect(page.locator('#canvas-tab-notes')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#canvas-placeholder-notes')).toBeVisible();
-    await expect(page.locator('#canvas-grid')).toHaveCount(0);
+    // The grid stays in the DOM but is hidden, so the switch is instant.
+    await expect(page.locator('#canvas-grid')).toBeHidden();
     await expect(page).toHaveURL(/tab=notes/);
 
     await page.locator('#canvas-tab-editor').click();
@@ -349,6 +350,23 @@ test.describe('canvas editor tabs', () => {
     await page.goBack();
     await page.waitForURL(/\/canvas$/);
     await expect(page.locator('#canvas-name-form')).toHaveCount(0);
+  });
+
+  test('switches tabs without waiting for the server', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Instant Tab'));
+
+    // Simulate a slow connection: the tab has to switch anyway, because the
+    // panel is swapped on the client and the server only confirms it.
+    await page.evaluate(() => window.liveSocket.enableLatencySim(1500));
+
+    const started = Date.now();
+    await page.locator('#canvas-tab-notes').click();
+    await expect(page.locator('#canvas-placeholder-notes')).toBeVisible();
+    const elapsed = Date.now() - started;
+
+    await page.evaluate(() => window.liveSocket.disableLatencySim());
+
+    expect(elapsed).toBeLessThan(1000);
   });
 });
 

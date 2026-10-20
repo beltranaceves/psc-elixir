@@ -574,11 +574,22 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
         <div
           id="canvas-tabpanel"
-          role="tabpanel"
-          aria-labelledby={"canvas-tab-#{@active_tab}"}
+          phx-hook="CanvasTabs"
+          data-active-tab={@active_tab}
           class="flex min-h-0 w-full flex-1 flex-col"
         >
-          <%= if @active_tab == "editor" do %>
+          <%!-- Every view is rendered so the client can switch instantly; the
+          inactive ones are hidden. The server confirms the choice a moment
+          later and owns the URL. --%>
+          <div
+            id="canvas-panel-editor"
+            role="tabpanel"
+            aria-labelledby="canvas-tab-editor"
+            class={[
+              "flex min-h-0 w-full flex-1 flex-col",
+              @active_tab != "editor" && "hidden"
+            ]}
+          >
             <div
               id="canvas-grid"
               class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
@@ -736,22 +747,36 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 </table>
               </div>
             </div>
-          <% else %>
-            <div
-              id={"canvas-placeholder-" <> @active_tab}
-              class="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center"
-            >
-              <span class="flex size-12 items-center justify-center rounded-full bg-base-content/5 text-base-content/40">
-                <.icon name={placeholder_icon(@active_tab)} class="size-6" />
-              </span>
-              <h2 class="text-lg font-medium text-base-content">
-                {placeholder_label(@active_tab)}
-              </h2>
-              <p class="max-w-sm text-sm text-base-content/60">
-                {placeholder_blurb(@active_tab)}
-              </p>
-              <p class="text-xs text-base-content/40">Coming soon.</p>
-            </div>
+          </div>
+
+          <%= for {tab_id, label, icon, blurb} <- @tabs do %>
+            <%= if tab_id != "editor" do %>
+              <div
+                id={"canvas-panel-" <> tab_id}
+                role="tabpanel"
+                aria-labelledby={"canvas-tab-" <> tab_id}
+                class={[
+                  "flex min-h-0 w-full flex-1 flex-col",
+                  @active_tab != tab_id && "hidden"
+                ]}
+              >
+                <div
+                  id={"canvas-placeholder-" <> tab_id}
+                  class="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center"
+                >
+                  <span class="flex size-12 items-center justify-center rounded-full bg-base-content/5 text-base-content/40">
+                    <.icon name={icon} class="size-6" />
+                  </span>
+                  <h2 class="text-lg font-medium text-base-content">
+                    {label}
+                  </h2>
+                  <p class="max-w-sm text-sm text-base-content/60">
+                    {blurb}
+                  </p>
+                  <p class="text-xs text-base-content/40">Coming soon.</p>
+                </div>
+              </div>
+            <% end %>
           <% end %>
         </div>
       </div>
@@ -761,12 +786,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <.tab_bar tabs={@tabs} active_tab={@active_tab} />
     </Layouts.app>
     """
-  end
-
-  defp placeholder_icon(tab) do
-    case find_tab(tab) do
-      {_id, _label, icon, _blurb} -> icon
-    end
   end
 
   # On phones the canvas header gives its vertical space back to the grid: the
@@ -873,18 +892,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         type="button"
         role="tab"
         id={"canvas-tab-#{tab_id}"}
+        data-tab={tab_id}
         aria-selected={to_string(@active_tab == tab_id)}
-        aria-controls="canvas-tabpanel"
+        aria-controls={"canvas-panel-#{tab_id}"}
         aria-label={label}
         title={label}
         phx-click="select_tab"
         phx-value-tab={tab_id}
-        class={[
-          "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-          @active_tab == tab_id && "bg-base-content/10 text-base-content",
-          @active_tab != tab_id &&
-            "text-base-content/60 hover:bg-base-content/5 hover:text-base-content"
-        ]}
+        class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <.icon name={icon} class="size-4" />
         <%!-- The names are dropped when the header gives the strip less room
@@ -908,34 +923,19 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         type="button"
         role="tab"
         id={"canvas-tab-bar-#{tab_id}"}
+        data-tab={tab_id}
         aria-selected={to_string(@active_tab == tab_id)}
-        aria-controls="canvas-tabpanel"
+        aria-controls={"canvas-panel-#{tab_id}"}
         aria-label={label}
         title={label}
         phx-click="select_tab"
         phx-value-tab={tab_id}
-        class={[
-          "flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-[0.7rem] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-          @active_tab == tab_id && "text-primary",
-          @active_tab != tab_id && "text-base-content/55"
-        ]}
+        class="flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-[0.7rem] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <.icon name={icon} class="size-5" />
         <span>{label}</span>
       </button>
     </nav>
     """
-  end
-
-  defp placeholder_label(tab) do
-    case find_tab(tab) do
-      {_id, label, _icon, _blurb} -> label
-    end
-  end
-
-  defp placeholder_blurb(tab) do
-    case find_tab(tab) do
-      {_id, _label, _icon, blurb} -> blurb
-    end
   end
 end

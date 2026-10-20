@@ -946,6 +946,19 @@ tab panel's `aria-labelledby` points at the header button, whose text still name
 panel when it is off screen. The E2E suite drives the header strip (its viewport is
 1280 px), and the LiveView test asserts that both sets exist and switch tabs.
 
+**Addendum (2026-10-20): the tab switch is client-side.** Clicking a tab used to wait
+for the server: the click pushed a patch, the server re-rendered the whole view
+(including the canvas grid and every cell's Markdown) and the client applied the
+result. On a phone that is a network round trip on the critical path, which read as a
+lag after every click.
+
+Now every view is rendered — the grid and the three placeholders — and the inactive
+ones are hidden. A `CanvasTabs` hook swaps the panel the moment the tab is clicked
+(measured: 0.4 ms, synchronous with the click) and the server confirms the choice and
+the URL a moment later. The selected tab is styled from `aria-selected` in CSS, so the
+client can update the highlight without knowing the utility classes. The server keeps
+the authority: it owns the state, the URL and the rendering.
+
 ## ADR-024 — Mobile feedback and dialogs stay in the visible viewport
 
 **Context.** The canvas editor uses a fixed bottom app bar below the large-screen

@@ -28,7 +28,10 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
 - **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
   `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
-  leaves the canvas editor instead of stepping through view selections.
+  leaves the canvas editor instead of stepping through view selections. The switch itself is
+  client-side: every view is rendered and the inactive ones are hidden, so the panel changes
+  the moment the tab is clicked (0.4 ms) and the server only confirms it and the URL. The
+  selected tab is styled from `aria-selected`, so the client can move the highlight too.
 - **The fullscreen cell is a URL state.** On phones the expanded cell is encoded as the
   `#cell-<key>` fragment, so Back returns to the canvas grid instead of leaving the canvas,
   and the view can be linked and reloaded. The fragment is used on purpose: LiveView compares

@@ -352,6 +352,14 @@ long unbreakable token used to paint past the card's border (measured: 596 px of
 on a 373 px card). Card names now break on word boundaries and descriptions both break
 long tokens and clamp to two lines, in the canvas list and the template library.
 
+**Follow-up (2026-10-20): instant tab switching.** Clicking a tab used to wait for the
+server: the click pushed a patch and the server re-rendered the whole view, grid and
+Markdown included — a network round trip on the critical path, which read as a lag on a
+phone. Every view is now rendered and the inactive ones hidden, and a `CanvasTabs` hook
+swaps the panel synchronously with the click (0.4 ms). The server still owns the state and
+the URL, and confirms a moment later. The selected tab is styled from `aria-selected` in
+CSS so the client can move the highlight without duplicating utility classes.
+
 **Follow-up (2026-10-20): tighter editor header.** The gap between the canvas description and
 the table dropped from 30 px to 14 px. Two causes: the share dialog's root was a zero-height
 flex item between the header and the grid, so it opened a gap of its own on each side (it is

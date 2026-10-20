@@ -192,13 +192,17 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       # The editor is the default view and shows the grid.
       assert has_element?(lv, "#canvas-tab-editor[aria-selected='true']")
       assert has_element?(lv, "#canvas-grid")
-      refute has_element?(lv, "#canvas-placeholder-notes")
+      # Every view is rendered; the inactive ones are hidden, so the client can
+      # switch tabs without waiting for the server.
+      assert has_element?(lv, "#canvas-panel-editor:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-notes.hidden")
 
-      # Switching tabs swaps the panel for the placeholder.
+      # Switching tabs shows the placeholder and hides the grid.
       lv |> element("#canvas-tab-notes") |> render_click()
       assert has_element?(lv, "#canvas-tab-notes[aria-selected='true']")
       assert has_element?(lv, "#canvas-placeholder-notes")
-      refute has_element?(lv, "#canvas-grid")
+      assert has_element?(lv, "#canvas-panel-notes:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-editor.hidden")
 
       # The bottom bar switches tabs as well.
       lv |> element("#canvas-tab-bar-agent") |> render_click()
