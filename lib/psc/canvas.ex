@@ -186,6 +186,14 @@ defmodule Psc.Canvas do
   end
 
   @doc """
+  The most templates the catalog ranks.
+
+  The catalog is a ranking, not an index, so a page never renders the whole
+  table — the free tier caps it at 10 000 rows (ADR-006).
+  """
+  def catalog_limit, do: @catalog_limit
+
+  @doc """
   Get a public template with its author, or nil.
 
   The fetch behind the catalog's modal and both of its actions: a template that

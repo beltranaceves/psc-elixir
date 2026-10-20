@@ -121,6 +121,16 @@ defmodule PscWeb.Layouts do
             >
               Templates
             </.link>
+            <.link
+              navigate={~p"/catalog"}
+              aria-current={nav_current(@header_title, @header_section, "Catalog")}
+              class={[
+                "px-3 py-1.5 rounded-lg text-sm transition-colors",
+                nav_item_class(@header_title, @header_section, "Catalog")
+              ]}
+            >
+              Catalog
+            </.link>
           </nav>
 
           <div class="flex items-center gap-3 sm:gap-4">
@@ -172,6 +182,12 @@ defmodule PscWeb.Layouts do
                     class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content md:hidden"
                   >
                     Templates
+                  </.link>
+                  <.link
+                    navigate={~p"/catalog"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content md:hidden"
+                  >
+                    Catalog
                   </.link>
                   <div class="my-1 h-px bg-base-content/10"></div>
                   <.theme_menu />

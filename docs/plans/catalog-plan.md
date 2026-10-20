@@ -144,7 +144,7 @@ a third required key would crash on any form that omits it. Read it with a defau
 
 ## Task 4 — The catalog page
 
-**Status: pending.**
+**Status: done.**
 
 - Route `live "/catalog", CatalogLive.Index, :index` inside the **existing**
   `live_session :require_authenticated_user` block — a `live_session` name may only be

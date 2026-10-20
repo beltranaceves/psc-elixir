@@ -57,6 +57,7 @@ defmodule PscWeb.Router do
       live "/templates", CanvasLayoutLive.Index, :index
       live "/templates/new", CanvasLayoutLive.Editor, :new
       live "/templates/:id", CanvasLayoutLive.Editor, :edit
+      live "/catalog", CatalogLive.Index, :index
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
