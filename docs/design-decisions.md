@@ -987,22 +987,23 @@ header, with a stronger responsive treatment (`text-base` on phones and `text-lg
 from `sm` upward). Remove the duplicate body heading from the Canvases and
 Templates index pages; keep their page-specific controls and section headings.
 
-A page's primary action belongs to the header too. The Templates library renders
-**New Template** through the shell's `:header_actions` slot, next to the title it
-belongs to, instead of leaving a button stranded above the library section. On
-phones the action collapses to its plus icon so the route title keeps the room.
+A page's primary action belongs to the list it acts on. The Templates library
+opens with a **New Template** card — the first tile of the grid, the same size as
+a template card, drawn with a dashed border to mark it as the create action. The
+header stays free of page actions, so the route title keeps the space.
 
 **Alternatives considered.** Keeping both headings (redundant and less space for
 the actual library/forms), removing the header title (loses the persistent route
 context), hiding the body heading visually while leaving it in the accessibility
-tree (preserves duplicate semantics), and keeping the action in the body (a
-right-aligned button with no title to align to reads as detached).
+tree (preserves duplicate semantics), putting the action in the header next to the
+title (the header becomes a second toolbar), and leaving a right-aligned button
+stranded above the library (it reads as detached from the content it acts on).
 
 **Consequences.** The shell owns the page-level heading for routes that provide
-`header_title`, and the page-level action for routes that fill `:header_actions`.
-Index pages start directly with their primary content, and browser and LiveView
-tests assert the header heading, the action's placement, and the absence of a
-`main h1`.
+`header_title`. Index pages start directly with their primary content, and the
+template library's create action is a grid tile, so the library reads as one
+uniform grid. Browser and LiveView tests assert the header heading, the tile's
+placement, and the absence of a `main h1`.
 
 ---
 

@@ -124,51 +124,59 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       header_title="Templates"
       container_class="w-full"
     >
-      <:header_actions>
-        <%!-- The page's primary action belongs to the header, next to the title
-        it belongs to. On phones it collapses to the plus icon so the route
-        title keeps the room. --%>
-        <.link
-          id="new-template-button"
-          navigate={~p"/templates/new"}
-          aria-label="New Template"
-          class={[
-            UIHelpers.button_variant(%{variant: "default", size: "icon"}),
-            "gap-1.5 sm:h-8 sm:w-auto sm:px-3 sm:text-xs"
-          ]}
-        >
-          <.icon name="hero-plus" class="size-4" />
-          <span class="hidden sm:inline">New Template</span>
-        </.link>
-      </:header_actions>
-
       <div class="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-4">
         <div>
           <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-base-content/50">
             Available templates
           </h2>
-          <%= if Enum.empty?(@templates) do %>
-            <div class="rounded-xl border border-dashed border-base-content/20 bg-base-200 p-8 text-center">
-              <p class="text-base-content/60">No templates yet.</p>
-              <p class="mt-1 text-sm text-base-content/45">
-                A template defines the grid and cells a canvas starts from.
-              </p>
-            </div>
-          <% else %>
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <%= for template <- @templates do %>
-                <.template_card
-                  template={template}
-                  current_user={@current_scope.user}
-                  delete_confirm_id={@delete_confirm_id}
-                  share_form_for={@share_form_for}
-                />
-              <% end %>
-            </div>
-          <% end %>
+          <div id="template-grid" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <%!-- The create action is the first tile of the library: same size
+            as a template card, so the list reads as one grid. --%>
+            <.new_template_card />
+
+            <%= for template <- @templates do %>
+              <.template_card
+                template={template}
+                current_user={@current_scope.user}
+                delete_confirm_id={@delete_confirm_id}
+                share_form_for={@share_form_for}
+              />
+            <% end %>
+
+            <%= if Enum.empty?(@templates) do %>
+              <div
+                id="template-empty-state"
+                class="rounded-xl border border-dashed border-base-content/20 bg-base-200 p-8 text-center md:col-span-2 lg:col-span-3"
+              >
+                <p class="text-base-content/60">No templates yet.</p>
+                <p class="mt-1 text-sm text-base-content/45">
+                  A template defines the grid and cells a canvas starts from.
+                </p>
+              </div>
+            <% end %>
+          </div>
         </div>
       </div>
     </Layouts.app>
+    """
+  end
+
+  # The first tile of the library: a dashed card that opens the designer.
+  defp new_template_card(assigns) do
+    ~H"""
+    <.link
+      id="new-template-card"
+      navigate={~p"/templates/new"}
+      class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-4 text-center transition-colors hover:border-base-content/45 hover:bg-base-content/5"
+    >
+      <span class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <.icon name="hero-plus" class="size-5" />
+      </span>
+      <span class="flex flex-col gap-1">
+        <span class="font-medium text-base-content">New Template</span>
+        <span class="text-sm text-base-content/50">Design a grid and its cells</span>
+      </span>
+    </.link>
     """
   end
 
@@ -179,7 +187,10 @@ defmodule PscWeb.CanvasLayoutLive.Index do
 
   defp template_card(assigns) do
     ~H"""
-    <div class="rounded-xl border border-base-content/10 bg-base-200 p-4 flex flex-col">
+    <div
+      id={"template-card-#{@template.id}"}
+      class="rounded-xl border border-base-content/10 bg-base-200 p-4 flex flex-col"
+    >
       <div class="flex items-start justify-between gap-2 mb-2">
         <h3 class="font-medium text-base-content">{@template.name}</h3>
         <%= if @template.author_id == @current_user.id do %>

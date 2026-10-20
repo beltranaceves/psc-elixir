@@ -15,7 +15,9 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert html =~ "Templates"
       assert html =~ "New Template"
       assert has_element?(lv, "header h1#header-page-title", "Templates")
-      assert has_element?(lv, "header #new-template-button")
+      # The create action is the first tile of the library, not a header button.
+      assert has_element?(lv, "#template-grid #new-template-card")
+      refute has_element?(lv, ~s|header a[href="/templates/new"]|)
       refute has_element?(lv, "main h1")
       # Creating happens in the designer only — no duplicate inline form.
       refute html =~ "Create New Template"

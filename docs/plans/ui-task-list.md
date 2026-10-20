@@ -343,8 +343,9 @@ tokens; no data-model change was needed because accents already belong in `layou
 **Follow-up (2026-10-20): header-owned index titles.** The shared route title is now the
 single semantic page heading and uses larger typography. The Canvases and Templates index
 pages no longer repeat that title in the main body, leaving the available space for their
-forms, actions, and library sections. The **New Template** action moved into the app
-header's action slot next to the title, collapsing to its plus icon on phones.
+forms, actions, and library sections. The **New Template** action is the first tile of the
+library grid — the same size as a template card, with a dashed border marking it as the
+create action — so the header keeps only the route title.
 
 ---
 
