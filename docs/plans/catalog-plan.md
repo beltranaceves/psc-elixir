@@ -185,7 +185,7 @@ before a field existed are the normal case, not the edge case.
 
 ## Task 5 — Use and Fork
 
-**Status: pending.**
+**Status: done.**
 
 - **Use template** (primary) — `Canvas.instantiate_template(get_public_template(id),
   user.id)`, then redirect to the new canvas with a flash, exactly as the library's

@@ -119,5 +119,70 @@ defmodule PscWeb.CatalogLiveTest do
 
       refute has_element?(lv, "#catalog-template-dialog")
     end
+
+    test "using a template creates a canvas and counts the use", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Usable Tpl"})
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      assert {:error, {:redirect, %{to: to}}} =
+               lv |> render_click("use_template", %{"id" => template.id})
+
+      assert to =~ "/canvas/"
+      assert [%{name: "Usable Tpl"}] = Canvas.list_user_unstr_canvases(user.id)
+      assert Canvas.get_canvas_layout(template.id).use_count == 1
+    end
+
+    test "a template I do not own can be used from the catalog", %{conn: conn, user: user} do
+      owner = Psc.AccountsFixtures.user_fixture()
+
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id, name: "Not Mine"})
+
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      assert {:error, {:redirect, %{to: to}}} =
+               lv |> render_click("use_template", %{"id" => template.id})
+
+      assert to =~ "/canvas/"
+      assert [%{name: "Not Mine"}] = Canvas.list_user_unstr_canvases(user.id)
+      assert Canvas.get_canvas_layout(template.id).use_count == 1
+    end
+
+    test "forking creates a template I own and counts the fork", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Forkable"})
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      assert {:error, {:redirect, %{to: to}}} =
+               lv |> render_click("fork_template", %{"id" => template.id})
+
+      assert to =~ "/templates/"
+
+      assert [fork] =
+               Enum.filter(Canvas.list_templates(user), &(&1.name == "Forkable (fork)"))
+
+      assert fork.forked_from_id == template.id
+      assert fork.layout_map["cells"] == template.layout_map["cells"]
+      assert Canvas.get_canvas_layout(template.id).fork_count == 1
+    end
+
+    test "a private template cannot be used or forked from the catalog", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Hidden Tpl"})
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      html = lv |> render_click("use_template", %{"id" => template.id})
+      assert html =~ "Template not found"
+      assert Canvas.list_user_unstr_canvases(user.id) == []
+
+      html = lv |> render_click("fork_template", %{"id" => template.id})
+      assert html =~ "Template not found"
+      assert Canvas.get_canvas_layout(template.id).fork_count == 0
+    end
   end
 end

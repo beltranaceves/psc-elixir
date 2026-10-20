@@ -10,6 +10,7 @@ defmodule PscWeb.CatalogLive.Index do
   use PscWeb, :live_view
 
   alias Psc.Canvas
+  alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Dialog, as: UIDialog
 
   @impl true
@@ -52,6 +53,54 @@ defmodule PscWeb.CatalogLive.Index do
 
   def handle_event("close_template", _params, socket) do
     {:noreply, assign(socket, :open_template, nil)}
+  end
+
+  # Using a template creates a canvas owned by the caller and lands them in
+  # its editor, exactly as the library's Use Template does. The fetch goes
+  # through get_public_template/1, so the catalog cannot be used to reach a
+  # private template by guessing an id.
+  def handle_event("use_template", %{"id" => id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Canvas.get_public_template(id) do
+      %{} = template ->
+        case Canvas.instantiate_template(template, user.id) do
+          {:ok, canvas} ->
+            {:noreply,
+             socket
+             |> put_flash(:success, "Canvas created from template")
+             |> redirect(to: ~p"/canvas/#{canvas.id}")}
+
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Failed to create canvas from template")}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Template not found")}
+    end
+  end
+
+  # Forking creates a template the caller owns and lands them in its designer,
+  # where a fork is meant to be edited.
+  def handle_event("fork_template", %{"id" => id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Canvas.get_public_template(id) do
+      %{} = template ->
+        case Canvas.fork_template(template, user.id) do
+          {:ok, fork} ->
+            {:noreply,
+             socket
+             |> put_flash(:success, "Template forked")
+             |> redirect(to: ~p"/templates/#{fork.id}")}
+
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Failed to fork template")}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Template not found")}
+    end
   end
 
   @impl true
@@ -139,7 +188,7 @@ defmodule PscWeb.CatalogLive.Index do
         <UIDialog.dialog_content class="sm:max-w-lg">
           <UIDialog.dialog_header class="min-w-0">
             <UIDialog.dialog_title class="break-words">{@open_template.name}</UIDialog.dialog_title>
-            
+
             <UIDialog.dialog_description
               :if={@open_template.description not in [nil, ""]}
               class="break-words"
@@ -147,7 +196,7 @@ defmodule PscWeb.CatalogLive.Index do
               {@open_template.description}
             </UIDialog.dialog_description>
           </UIDialog.dialog_header>
-          
+
           <dl class="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <div>
               <dt class="text-xs uppercase tracking-wide text-base-content/45">By</dt>
@@ -194,6 +243,26 @@ defmodule PscWeb.CatalogLive.Index do
             Forked from {@forked_from_name}
           </p>
           <.grid_preview template={@open_template} />
+          <UIDialog.dialog_footer class="flex flex-row justify-end gap-2">
+            <UIButton.button
+              type="button"
+              variant="outline"
+              phx-click="fork_template"
+              phx-value-id={@open_template.id}
+              phx-disable-with="Forking…"
+            >
+              Fork
+            </UIButton.button>
+            
+            <UIButton.button
+              type="button"
+              phx-click="use_template"
+              phx-value-id={@open_template.id}
+              phx-disable-with="Creating…"
+            >
+              Use template
+            </UIButton.button>
+          </UIDialog.dialog_footer>
         </UIDialog.dialog_content>
       </UIDialog.dialog>
     </Layouts.app>
