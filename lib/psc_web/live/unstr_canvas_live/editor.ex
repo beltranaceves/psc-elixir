@@ -582,7 +582,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
            |> save_note_content(note)
            |> assign(:note_last_saved_content, socket.assigns.note_content)
            |> assign(:note_idle_timer_ref, nil)
-           |> assign(:note_save_state, :saved)}
+           |> assign(:note_save_state, :saved)
+           # The list shows a snippet of the note's content, so it has to be
+           # re-read now that the content has been folded.
+           |> load_notes()}
         else
           {:noreply, assign(socket, note_idle_timer_ref: nil)}
         end

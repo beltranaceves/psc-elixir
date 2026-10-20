@@ -1,6 +1,6 @@
 # Canvas notes — implementation plan
 
-> **Status:** planned, not started (2026-10-20).
+> **Status:** all six tasks done (2026-10-20).
 > **Spec:** [canvas-notes.md](../spec/canvas-notes.md).
 > **Decisions:** [ADR-027](../design-decisions.md#adr-027--a-note-is-a-child-of-its-canvas),
 > [ADR-028](../design-decisions.md#adr-028--the-status-pill-is-a-shared-component).

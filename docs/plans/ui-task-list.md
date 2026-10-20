@@ -46,6 +46,11 @@ rules instead of carrying a second `shared_with` list — and the collaborative-
 machinery is lifted out of `Psc.Documents` into one shared store that both documents
 and notes use, rather than copied a second time.
 
+**Done (2026-10-20).** All six tasks are implemented: the shared text store, the
+notes aggregate, the shared status pill, the reusable Markdown editor, the Notes
+view, and the retirement of the standalone documents section that ADR-018 had
+parked.
+
 ---
 
 ## 1 — Tighten top padding on most routes
