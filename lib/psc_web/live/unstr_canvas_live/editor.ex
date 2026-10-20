@@ -19,6 +19,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @idle_save_interval 1500
   @periodic_save_interval 10000
 
+  # What the status pill reports: how many writes this session made, how many
+  # of them failed, when the last one landed and how long it took.
+  @initial_save_stats %{
+    writes: 0,
+    failures: 0,
+    last_saved_at: nil,
+    last_write_ms: nil
+  }
+
   # The canvas editor is a tabbed surface: the grid is one of several views on
   # the same canvas. Everything but the editor is a placeholder for now.
   @tabs [
@@ -62,6 +71,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:last_saved_cells, cells)
         |> assign(:idle_timer_ref, nil)
         |> assign(:save_state, :saved)
+        |> assign(:save_stats, @initial_save_stats)
         |> assign(:share_open, false)
         |> assign(:active_tab, "editor")
         |> assign(:tabs, @tabs)
@@ -359,10 +369,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         description: socket.assigns.c_desc
       })
 
-      Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
-
       {:noreply,
        socket
+       |> save_cells()
        |> assign(:last_saved_cells, socket.assigns.cells)
        |> assign(:idle_timer_ref, nil)
        |> assign(:save_state, :saved)}
@@ -382,9 +391,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           description: socket.assigns.c_desc
         })
 
-        Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
-
         socket
+        |> save_cells()
         |> assign(:last_saved_cells, socket.assigns.cells)
         |> assign(:save_state, :saved)
       else
@@ -393,6 +401,39 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
     Process.send_after(self(), :periodic_save, @periodic_save_interval)
     {:noreply, socket}
+  end
+
+  # Write the cells and record what happened, so the status pill can report
+  # it. A failed write keeps the state "unsaved": the changes are still only
+  # in the event log, and the next save will try again.
+  defp save_cells(socket) do
+    started = System.monotonic_time(:millisecond)
+
+    result =
+      Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
+
+    elapsed = System.monotonic_time(:millisecond) - started
+    stats = socket.assigns.save_stats
+
+    case result do
+      {:ok, _canvas} ->
+        assign(socket,
+          save_stats: %{
+            stats
+            | writes: stats.writes + 1,
+              last_saved_at: DateTime.utc_now(),
+              last_write_ms: elapsed
+          }
+        )
+
+      {:error, _changeset} ->
+        Logger.error("[UnstrCanvasLive] save failed: canvas_id=#{socket.assigns.canvas_id}")
+
+        assign(socket,
+          save_state: :unsaved,
+          save_stats: %{stats | failures: stats.failures + 1}
+        )
+    end
   end
 
   defp handle_presence_change(socket, canvas_id) do
@@ -442,9 +483,107 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   defp active_user_count(presence), do: length(active_usernames(presence))
 
+  # The terse label for the pill itself; the descriptive one is for the
+  # tooltip and for screen readers.
+  defp save_state_pill_label(:saving), do: "Saving..."
+  defp save_state_pill_label(:saved), do: "Saved"
+  defp save_state_pill_label(_), do: "Unsaved"
+
   defp save_state_label(:saving), do: "Saving..."
   defp save_state_label(:saved), do: "Saved"
   defp save_state_label(_), do: "Unsaved changes"
+
+  # The status pill: the current save state, with a tooltip that reports what
+  # the editor has been doing. Hovering opens it on a desktop; a tap opens it
+  # on a phone, where there is no hover.
+  attr :id, :string, required: true
+  attr :save_state, :atom, required: true
+  attr :save_stats, :map, required: true
+  attr :compact, :boolean, default: false
+
+  defp status_pill(assigns) do
+    ~H"""
+    <UITooltip.tooltip id={"#{@id}-tooltip"}>
+      <UITooltip.tooltip_trigger>
+        <%= if @compact do %>
+          <span
+            id={@id}
+            class="inline-flex size-8 items-center justify-center"
+            role="img"
+            aria-label={save_state_label(@save_state)}
+          >
+            <.icon
+              name={status_icon(@save_state)}
+              class={status_icon_class(@save_state)}
+            />
+          </span>
+        <% else %>
+          <UIBadge.badge id={@id} variant={status_variant(@save_state)} class="h-8 shrink-0">
+            <%= if @save_state == :saving do %>
+              <span class="size-3 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+            <% else %>
+              <.icon name={status_icon(@save_state)} class="size-4" />
+            <% end %>
+            <span>{save_state_pill_label(@save_state)}</span>
+          </UIBadge.badge>
+        <% end %>
+      </UITooltip.tooltip_trigger>
+
+      <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
+        <p class="mb-2 flex items-center gap-1.5 text-sm font-medium text-base-content">
+          <.icon name={status_icon(@save_state)} class={status_icon_class(@save_state)} />
+          {save_state_label(@save_state)}
+        </p>
+
+        <dl class="space-y-1 text-xs text-base-content/70">
+          <div class="flex items-baseline justify-between gap-3">
+            <dt>Last saved</dt>
+            <dd class="text-right text-base-content">{last_saved_label(@save_stats)}</dd>
+          </div>
+          <div class="flex items-baseline justify-between gap-3">
+            <dt>Writes this session</dt>
+            <dd class="text-right text-base-content">{@save_stats.writes}</dd>
+          </div>
+          <div :if={@save_stats.failures > 0} class="flex items-baseline justify-between gap-3">
+            <dt class="text-error">Failed writes</dt>
+            <dd class="text-right text-error">{@save_stats.failures}</dd>
+          </div>
+          <div :if={@save_stats.last_write_ms} class="flex items-baseline justify-between gap-3">
+            <dt>Last write took</dt>
+            <dd class="text-right text-base-content">{@save_stats.last_write_ms} ms</dd>
+          </div>
+        </dl>
+      </UITooltip.tooltip_content>
+    </UITooltip.tooltip>
+    """
+  end
+
+  defp status_icon(:saving), do: "hero-arrow-path"
+  defp status_icon(:saved), do: "hero-check-circle"
+  defp status_icon(_), do: "hero-exclamation-circle"
+
+  defp status_icon_class(:saving), do: "size-4 animate-spin text-base-content/50"
+  defp status_icon_class(:saved), do: "size-4 text-base-content/40"
+  defp status_icon_class(_), do: "size-4 text-warning"
+
+  defp status_variant(:saving), do: "secondary"
+  defp status_variant(:saved), do: "default"
+  defp status_variant(_), do: "outline"
+
+  # "just now" / "2 min ago" — how long ago the last write landed.
+  defp last_saved_label(%{last_saved_at: nil}), do: "not yet"
+
+  defp last_saved_label(%{last_saved_at: at}) do
+    seconds = DateTime.diff(DateTime.utc_now(), at, :second)
+
+    cond do
+      seconds < 5 -> "just now"
+      seconds < 60 -> "#{seconds} seconds ago"
+      seconds < 3600 -> "#{div(seconds, 60)} min ago"
+      seconds < 86_400 -> "#{div(seconds, 3600)} h ago"
+      true -> "#{div(seconds, 86_400)} d ago"
+    end
+  end
 
   @impl true
   def render(assigns) do
@@ -464,6 +603,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <.header_actions
           presence={@presence}
           save_state={@save_state}
+          save_stats={@save_stats}
           can_share?={@canvas.author_id == @user_id}
         />
       </:header_actions>
@@ -495,24 +635,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             other header controls so they line up on one line. Below `sm` the
             app header carries a minimal version instead (see header_actions). --%>
             <div id="canvas-save-state" class="order-2 hidden shrink-0 sm:order-4 sm:block">
-              <%= cond do %>
-                <% @save_state == :saving -> %>
-                  <UIBadge.badge variant="secondary" class="h-8 shrink-0">
-                    <div class="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin">
-                    </div>
-                    <span>Saving...</span>
-                  </UIBadge.badge>
-                <% @save_state == :saved -> %>
-                  <UIBadge.badge variant="default" class="h-8 shrink-0">
-                    <.icon name="hero-check-circle" class="w-4 h-4" />
-                    <span>Saved</span>
-                  </UIBadge.badge>
-                <% true -> %>
-                  <UIBadge.badge variant="outline" class="h-8 shrink-0">
-                    <.icon name="hero-exclamation-circle" class="w-4 h-4" />
-                    <span>Unsaved</span>
-                  </UIBadge.badge>
-              <% end %>
+              <.status_pill
+                id="canvas-save-state-pill"
+                save_state={@save_state}
+                save_stats={@save_stats}
+              />
             </div>
 
             <.form
@@ -792,6 +919,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # presence, the save state and Share move into the app header as icons.
   attr :presence, :map, required: true
   attr :save_state, :atom, required: true
+  attr :save_stats, :map, required: true
   attr :can_share?, :boolean, required: true
 
   defp header_actions(assigns) do
@@ -817,22 +945,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <.active_users_list presence={@presence} />
       </UITooltip.tooltip>
 
-      <span
+      <.status_pill
         id="canvas-save-state-compact"
-        class="inline-flex size-8 items-center justify-center"
-        role="img"
-        aria-label={save_state_label(@save_state)}
-        title={save_state_label(@save_state)}
-      >
-        <%= case @save_state do %>
-          <% :saving -> %>
-            <.icon name="hero-arrow-path" class="size-4 animate-spin text-base-content/50" />
-          <% :saved -> %>
-            <.icon name="hero-check-circle" class="size-4 text-base-content/40" />
-          <% _ -> %>
-            <.icon name="hero-exclamation-circle" class="size-4 text-warning" />
-        <% end %>
-      </span>
+        save_state={@save_state}
+        save_stats={@save_stats}
+        compact
+      />
 
       <%= if @can_share? do %>
         <UIButton.button

@@ -352,6 +352,13 @@ long unbreakable token used to paint past the card's border (measured: 596 px of
 on a 373 px card). Card names now break on word boundaries and descriptions both break
 long tokens and clamp to two lines, in the canvas list and the template library.
 
+**Follow-up (2026-10-20): the status pill reports what it is doing.** The pill beside the
+canvas title (an icon in the app header on phones) now opens a tooltip with the details:
+when the last write landed, how many writes this session made, how many failed, and how
+long the last write took. Hovering opens it on a desktop, a tap on a phone. The save path
+keeps the result of the write instead of discarding it, so a failed write is counted and
+leaves the state "unsaved" — the changes are still only in the event log.
+
 **Follow-up (2026-10-20): the page no longer scrolls on a phone.** The body was
 `min-h-screen` (100vh) while the app is sized in `dvh` (100dvh). On a phone 100vh is the
 *large* viewport — taller than the app by the height of the browser toolbar — so the page

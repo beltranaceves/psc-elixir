@@ -633,6 +633,44 @@ test.describe('canvas editor layout', () => {
   });
 });
 
+test.describe('canvas editor status pill', () => {
+  test('reports the save status on hover', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Status Pill'));
+
+    const pill = page.locator('#canvas-save-state-pill');
+    const tip = page.locator('#canvas-save-state-pill-tooltip [data-part="content"]');
+
+    await expect(pill).toContainText('Saved');
+    await expect(tip).toBeHidden();
+
+    await pill.hover();
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText('Last saved');
+    await expect(tip).toContainText('Writes this session');
+  });
+
+  test('counts the writes it made', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Status Writes'));
+
+    const display = page.locator('#md-render-problem-content');
+    await expect(display).toContainText('Click to edit');
+    await display.click();
+    const textarea = page.locator('#md-problem-content textarea');
+    await textarea.fill('A write that counts');
+    await textarea.blur();
+
+    // The idle save lands 1.5 s after the last edit.
+    const pill = page.locator('#canvas-save-state-pill');
+    await expect(pill).toContainText('Saved', { timeout: 15_000 });
+
+    await pill.hover();
+    const tip = page.locator('#canvas-save-state-pill-tooltip [data-part="content"]');
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText('just now');
+    await expect(tip).toContainText('Last write took');
+  });
+});
+
 test.describe('template designer cell editing', () => {
   test('edits a cell label and fields directly in the grid and persists them', async ({
     page,

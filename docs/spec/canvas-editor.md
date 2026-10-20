@@ -26,6 +26,12 @@ See `template-designer.md` → **Design System** for the full design direction. 
   at most 16 px. The share dialog is rendered out of the flow, so its wrapper cannot act as a
   flex item and open a gap of its own between the header and the grid.
 - **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
+- **The status pill reports more than the state.** The pill (the badge beside the title on
+  larger screens, an icon in the app header on phones) opens a tooltip with the details: when
+  the last write landed ("just now", "2 min ago"), how many writes this session made, how
+  many failed, and how long the last write took. Hovering opens it on a desktop; a tap opens
+  it on a phone, where there is no hover. A failed write keeps the state "unsaved", because
+  the changes are still only in the event log.
 - **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
   `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
   leaves the canvas editor instead of stepping through view selections. The switch itself is
