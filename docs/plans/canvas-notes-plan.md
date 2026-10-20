@@ -30,6 +30,8 @@ before it:
 
 ## Task 1 — Extract the shared text store
 
+**Status: done.**
+
 The algorithm in `Psc.Documents` is lifted into two modules; Documents keeps
 working exactly as before.
 

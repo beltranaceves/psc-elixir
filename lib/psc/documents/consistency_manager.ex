@@ -6,6 +6,7 @@ defmodule Psc.Documents.ConsistencyManager do
 
   alias Psc.Documents
   alias Psc.Documents.CRDT
+  alias Psc.Text
 
   @doc """
   Verify that a client's text state matches the server's authoritative state.
@@ -66,7 +67,7 @@ defmodule Psc.Documents.ConsistencyManager do
   Compute a simple hash of the text for consistency verification.
   """
   def hash_text(text) do
-    :crypto.hash(:sha256, text) |> Base.encode16(case: :lower)
+    Text.hash(text)
   end
 
   @doc """

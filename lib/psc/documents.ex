@@ -1,13 +1,17 @@
 defmodule Psc.Documents do
   @moduledoc """
   The Documents context for managing collaborative text documents with CRDTs.
+
+  The collaboration machinery — the event log, the folded snapshot, the
+  sequencing, the pruning and the consistency check — lives in `Psc.TextStore`
+  and is shared with the notes. This module is the document-shaped façade over
+  it.
   """
 
   import Ecto.Query, warn: false
   alias Psc.Repo
-  alias Psc.Documents.{Document, DocumentEvent}
-  alias Psc.Documents.CRDT
-  alias Psc.Documents.SnapshotManager
+  alias Psc.Documents.{Document, DocumentEvent, Store}
+  alias Psc.TextStore
 
   @pubsub_topic_prefix "document:"
 
@@ -113,35 +117,7 @@ defmodule Psc.Documents do
   Content is persisted separately via save_content_to_db/2 on idle/timer.
   """
   def apply_operation(document_id, user_id, operation) do
-    # Get next sequence number
-    seq = next_sequence(document_id)
-
-    # Save event
-    event_attrs = %{
-      operation: operation,
-      seq: seq,
-      document_id: document_id,
-      user_id: user_id
-    }
-
-    case Repo.insert(DocumentEvent.changeset(%DocumentEvent{}, event_attrs)) do
-      {:ok, _event} ->
-        # Broadcast to all subscribers
-        broadcast_operation(document_id, user_id, operation, seq)
-        {:ok, seq}
-
-      {:error, changeset} ->
-        {:error, changeset}
-    end
-  end
-
-  # Broadcast an operation to all subscribers.
-  defp broadcast_operation(document_id, user_id, operation, seq) do
-    Phoenix.PubSub.broadcast(
-      Psc.PubSub,
-      pubsub_topic(document_id),
-      {:operation, user_id, operation, seq}
-    )
+    TextStore.apply_operation(Store, document_id, user_id, operation)
   end
 
   @doc """
@@ -150,41 +126,7 @@ defmodule Psc.Documents do
   This ensures proper loading: we load content + replay events after snapshot_seq.
   """
   def save_content_to_db(document_id, content) do
-    document = get_document(document_id)
-
-    # The seq the content is built through. Floored at the stored snapshot_seq:
-    # events at or below it are already pruned, so a save with no pending events
-    # (idle/periodic timers of any connected client) sees max(seq) = nil and
-    # would otherwise write 0 back over the marker that next_sequence/1 and
-    # SnapshotManager measure against.
-    max_seq =
-      max(
-        Repo.one(
-          from(e in DocumentEvent,
-            where: e.document_id == ^document_id,
-            select: max(e.seq)
-          )
-        ) || 0,
-        document.snapshot_seq || 0
-      )
-
-    result =
-      document
-      |> Document.changeset(%{content: content, snapshot_seq: max_seq})
-      |> Repo.update()
-
-    # Prune events already folded into the content snapshot (loading
-    # replays only seq > snapshot_seq). Keeps the event table small —
-    # free-tier Postgres is limited to 10k rows per table. Only prune once the
-    # marker is durably stored, so a failed update can never drop events that
-    # are not yet represented in the saved content.
-    with {:ok, _document} <- result do
-      Repo.delete_all(
-        from(e in DocumentEvent, where: e.document_id == ^document_id and e.seq <= ^max_seq)
-      )
-    end
-
-    result
+    TextStore.save_content(Store, document_id, content)
   end
 
   @doc """
@@ -193,36 +135,36 @@ defmodule Psc.Documents do
   Much faster than replaying all events from the beginning.
   """
   def build_content_from_events(document_id) do
-    SnapshotManager.load_with_snapshot(document_id)
+    TextStore.load_content(Store, document_id)
   end
 
   @doc """
   Get document content - uses snapshots for faster loading.
   """
   def get_document_content(document_id) do
-    SnapshotManager.load_with_snapshot(document_id)
+    TextStore.load_content(Store, document_id)
   end
 
   @doc """
   Get snapshot statistics for a document.
   """
   def get_snapshot_stats(document_id) do
-    SnapshotManager.get_stats(document_id)
+    document = Repo.get!(Document, document_id)
+    snapshot_seq = document.snapshot_seq || 0
+
+    %{
+      document_id: document_id,
+      snapshot_seq: snapshot_seq,
+      content_bytes: byte_size(document.content || ""),
+      pending_events: TextStore.pending_event_count(Store, document_id)
+    }
   end
 
   @doc """
   Number of pending (not yet folded into `content`) operations for a document.
   """
   def pending_event_count(document_id) do
-    snapshot_seq =
-      Repo.one(from(d in Document, where: d.id == ^document_id, select: d.snapshot_seq)) || 0
-
-    Repo.one(
-      from(e in DocumentEvent,
-        where: e.document_id == ^document_id and e.seq > ^snapshot_seq,
-        select: count(e.id)
-      )
-    ) || 0
+    TextStore.pending_event_count(Store, document_id)
   end
 
   @doc """
@@ -234,43 +176,18 @@ defmodule Psc.Documents do
   `snapshot_seq`. Returns the number of deleted rows.
   """
   def sweep_folded_events do
-    {deleted, _} =
-      Repo.delete_all(
-        from(e in DocumentEvent,
-          join: d in Document,
-          on: d.id == e.document_id,
-          where: e.seq <= d.snapshot_seq
-        )
-      )
-
-    deleted
+    TextStore.sweep_folded_events(Store)
   end
 
   @doc """
   Convert text changes to delta operations.
   """
   def text_to_operations(old_text, new_text) do
-    CRDT.text_to_deltas(old_text, new_text)
+    Psc.Documents.CRDT.text_to_deltas(old_text, new_text)
   end
 
-  # Get next sequence number for a document.
-  #
-  # Floored at snapshot_seq: events at or below the snapshot are pruned
-  # (see save_content_to_db/2), so max(seq) alone restarts at 1 after
-  # pruning and would place new events where load_with_snapshot/1 never
-  # replays them.
-  defp next_sequence(document_id) do
-    max_event_seq =
-      Repo.one(
-        from(e in DocumentEvent,
-          where: e.document_id == ^document_id,
-          select: max(e.seq)
-        )
-      ) || 0
-
-    snapshot_seq =
-      Repo.one(from(d in Document, where: d.id == ^document_id, select: d.snapshot_seq)) || 0
-
-    max(max_event_seq, snapshot_seq) + 1
-  end
+  @doc """
+  The event schema of a document.
+  """
+  def event_module, do: DocumentEvent
 end
