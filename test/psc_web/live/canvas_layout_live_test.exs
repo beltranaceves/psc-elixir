@@ -602,6 +602,48 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert html =~ "read-only"
       refute html =~ "Save Template"
       refute html =~ "Add Column"
+      # Publishing is the owner's choice.
+      refute html =~ ~s(id="template-public")
+    end
+
+    test "publishing is saved with the template", %{conn: conn, user: user} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      assert has_element?(lv, "#template-public")
+      # A new template starts private.
+      refute has_element?(lv, ~s|#template-public[checked]|)
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      assert {:error, {:redirect, %{to: "/templates"}}} =
+               lv
+               |> form("#template-form", %{
+                 "name" => "Public Tpl",
+                 "description" => "",
+                 "public" => "true"
+               })
+               |> render_submit()
+
+      assert [template] = Canvas.list_templates(user)
+      assert template.public
+
+      # And it comes back ticked when the template is opened again.
+      {:ok, lv, _html} = live(conn, ~p"/templates/#{template.id}")
+      assert has_element?(lv, ~s|#template-public[checked]|)
+
+      # Unpublishing is the same toggle, saved the same way.
+      assert {:error, {:redirect, %{to: "/templates"}}} =
+               lv
+               |> form("#template-form", %{
+                 "name" => template.name,
+                 "description" => "",
+                 "public" => "false"
+               })
+               |> render_submit()
+
+      assert [template] = Canvas.list_templates(user)
+      refute template.public
     end
   end
 end

@@ -251,7 +251,13 @@ Two levels of context, deliberately separate. The **app header** shows “Design
 the PSC mark while the **Templates** nav item stays current (highlighted,
 `aria-current="page"`). The page has **no title block**: a slim action row holds the
 **← Templates** back link and the **Share** combo button, and below it the form's
-**Name** and **Description** fields, followed by the Cancel / Save Template actions.
+**Name** and **Description** fields, a **Public** toggle, and the Cancel / Save Template
+actions.
+
+The **Public** toggle is the owner's choice to list the template in the
+[catalog](catalog.md). It is a checkbox in the save form, so publishing is saved with the
+template like any other field — there is no separate publish action and no second save
+button. A read-only viewer sees no toggle and no save controls.
 
 The rest of the designer is **collapsible sections** (`PscWeb.Components.Section`, a
 native `<details>`): **Notes**, **Grid**, **Analysis** and **Agent**. Each section's

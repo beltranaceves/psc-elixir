@@ -4,6 +4,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # Qualified SaladUI aliases (house pattern) — CoreComponents' button/1 etc.
   # would collide with unqualified imports.
   alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.Components.UI.Checkbox, as: UICheckbox
   alias PscWeb.Components.UI.Input, as: UIInput
   alias PscWeb.Components.UI.Textarea, as: UITextarea
   alias PscWeb.Components.UI.Label, as: UILabel
@@ -279,13 +280,18 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # ─── Save / share events ───
 
   @impl true
-  def handle_event("save_template", %{"name" => name, "description" => description}, socket) do
+  def handle_event(
+        "save_template",
+        %{"name" => name, "description" => description} = params,
+        socket
+      ) do
     user = socket.assigns.current_scope.user
 
     attrs = %{
       "name" => name,
       "description" => description,
-      "layout_map" => socket.assigns.layout_map
+      "layout_map" => socket.assigns.layout_map,
+      "public" => public?(params)
     }
 
     result =
@@ -428,6 +434,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   defp normalize_template_notes(_notes), do: []
 
   defp empty_template_note, do: %{"title" => "", "content" => ""}
+
+  # The publish toggle is a checkbox pair, so an unticked box still submits
+  # "false". A form without the toggle at all stays private.
+  defp public?(%{"public" => "true"}), do: true
+  defp public?(_params), do: false
 
   # A scratchpad holds one note. Switching a template that carries several
   # notes to the scratchpad mode keeps the first one and drops the rest; a
@@ -639,6 +650,25 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 disabled={!@owner?}
               />
             </div>
+
+            <%= if @owner? do %>
+              <%!-- Publishing is the owner's choice, and it is saved with the
+              template like any other field: no separate publish action. --%>
+              <label class="flex items-start gap-2.5 rounded-lg border border-base-content/10 bg-base-200/60 p-3 text-sm text-base-content transition-colors hover:border-base-content/20">
+                <UICheckbox.checkbox
+                  id="template-public"
+                  name="public"
+                  value={@editing_layout && @editing_layout.public}
+                  class="mt-0.5"
+                />
+                <span class="min-w-0">
+                  <span class="font-medium">Public</span>
+                  <span class="block text-xs text-base-content/55">
+                    List this template in the catalog, where anyone can use or fork it.
+                  </span>
+                </span>
+              </label>
+            <% end %>
 
             <%= if @owner? do %>
               <div class="flex items-center justify-end gap-3 border-t border-base-content/10 pt-4">

@@ -117,7 +117,7 @@ name-taken error is retried.
 
 ## Task 3 — Publish in the designer
 
-**Status: pending.**
+**Status: done.**
 
 - Under **Description** in the name/description form: a checkbox, **"Public — list this
   template in the catalog"**, owner only. The Phoenix checkbox pair (a hidden `false`
