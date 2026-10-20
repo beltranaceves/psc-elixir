@@ -5,6 +5,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # because CoreComponents is imported globally via html_helpers and defines
   # the same names — unqualified imports would conflict.
   alias PscWeb.Components.UI.Badge, as: UIBadge
+  alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Tooltip, as: UITooltip
 
   import PscWeb.Components.Accent
@@ -438,6 +439,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  defp active_user_count(presence), do: length(active_usernames(presence))
+
+  defp save_state_label(:saving), do: "Saving..."
+  defp save_state_label(:saved), do: "Saved"
+  defp save_state_label(_), do: "Unsaved changes"
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -452,6 +459,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <:header_nav>
         <.tab_strip tabs={@tabs} active_tab={@active_tab} />
       </:header_nav>
+      <:header_actions>
+        <.header_actions
+          presence={@presence}
+          save_state={@save_state}
+          can_share?={@canvas.author_id == @user_id}
+        />
+      </:header_actions>
       <div id="canvas-workspace" class="flex min-h-0 w-full flex-1 flex-col gap-3 pb-16 lg:pb-0">
         <%!-- Header: title, description, presence and actions --%>
         <div id="canvas-header" class="flex shrink-0 flex-col gap-2 px-2 sm:px-0">
@@ -474,8 +488,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
             <%!-- Save state: beside the title on phones, with the other
             actions on larger screens. The badge keeps the same height as the
-            other header controls so they line up on one line. --%>
-            <div class="order-2 shrink-0 sm:order-4">
+            other header controls so they line up on one line. Below `sm` the
+            app header carries a minimal version instead (see header_actions). --%>
+            <div id="canvas-save-state" class="order-2 hidden shrink-0 sm:order-4 sm:block">
               <%= cond do %>
                 <% @save_state == :saving -> %>
                   <UIBadge.badge variant="secondary" class="h-8 shrink-0">
@@ -512,7 +527,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             </.form>
 
             <%!-- Active users: truncated, with the full list in a hover tooltip --%>
-            <div class="order-4 sm:order-3">
+            <div id="canvas-presence" class="order-4 hidden sm:order-3 sm:block">
               <UITooltip.tooltip id="active-users-tooltip">
                 <UITooltip.tooltip_trigger>
                   <button
@@ -530,24 +545,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   </button>
                 </UITooltip.tooltip_trigger>
 
-                <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
-                  <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
-                    Active users
-                  </p>
-                  <ul class="space-y-1">
-                    <li
-                      :for={username <- active_usernames(@presence)}
-                      class="truncate text-sm text-base-content/80"
-                    >
-                      {username}
-                    </li>
-                  </ul>
-                </UITooltip.tooltip_content>
+                <.active_users_list presence={@presence} />
               </UITooltip.tooltip>
             </div>
-
             <%= if @canvas.author_id == @user_id do %>
-              <div class="order-5 ml-auto sm:ml-0">
+              <div class="order-5 ml-auto hidden sm:ml-0 sm:block">
                 <.share_button id="share-canvas-button" label="Share" />
               </div>
             <% end %>
@@ -761,6 +763,91 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     case find_tab(tab) do
       {_id, _label, icon, _blurb} -> icon
     end
+  end
+
+  # On phones the canvas header gives its vertical space back to the grid: the
+  # presence, the save state and Share move into the app header as icons.
+  attr :presence, :map, required: true
+  attr :save_state, :atom, required: true
+  attr :can_share?, :boolean, required: true
+
+  defp header_actions(assigns) do
+    ~H"""
+    <div class="flex items-center gap-1 sm:hidden">
+      <UITooltip.tooltip id="active-users-tooltip-compact">
+        <UITooltip.tooltip_trigger>
+          <button
+            type="button"
+            id="canvas-presence-compact"
+            class="inline-flex h-8 items-center gap-1.5 rounded-full border border-base-content/10 px-2.5 text-xs tabular-nums text-base-content/70 transition-colors hover:bg-base-content/5"
+            title={active_users_compact_label(@presence)}
+            aria-label={active_users_compact_label(@presence)}
+          >
+            <span class="relative flex size-2 shrink-0">
+              <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
+              <span class="relative inline-flex size-2 rounded-full bg-success"></span>
+            </span>
+            <span>{active_user_count(@presence)}</span>
+          </button>
+        </UITooltip.tooltip_trigger>
+
+        <.active_users_list presence={@presence} />
+      </UITooltip.tooltip>
+
+      <span
+        id="canvas-save-state-compact"
+        class="inline-flex size-8 items-center justify-center"
+        role="img"
+        aria-label={save_state_label(@save_state)}
+        title={save_state_label(@save_state)}
+      >
+        <%= case @save_state do %>
+          <% :saving -> %>
+            <.icon name="hero-arrow-path" class="size-4 animate-spin text-base-content/50" />
+          <% :saved -> %>
+            <.icon name="hero-check-circle" class="size-4 text-base-content/40" />
+          <% _ -> %>
+            <.icon name="hero-exclamation-circle" class="size-4 text-warning" />
+        <% end %>
+      </span>
+
+      <%= if @can_share? do %>
+        <UIButton.button
+          type="button"
+          id="share-canvas-button-compact"
+          phx-click="open_share"
+          variant="outline"
+          size="icon"
+          class="!size-8 rounded-full"
+          aria-label="Share"
+          title="Share"
+        >
+          <.icon name="hero-share" class="size-4" />
+        </UIButton.button>
+      <% end %>
+    </div>
+    """
+  end
+
+  # The people currently on the canvas, as shown in the presence tooltip.
+  attr :presence, :map, required: true
+
+  defp active_users_list(assigns) do
+    ~H"""
+    <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
+      <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
+        Active users
+      </p>
+      <ul class="space-y-1">
+        <li
+          :for={username <- active_usernames(@presence)}
+          class="truncate text-sm text-base-content/80"
+        >
+          {username}
+        </li>
+      </ul>
+    </UITooltip.tooltip_content>
+    """
   end
 
   # The tab strip lives in the app header on large screens. When the header

@@ -52,6 +52,10 @@ defmodule PscWeb.Layouts do
     doc:
       "navigation rendered in the free space of the app header; pages that need a different placement on small screens (e.g. a bottom app bar) style it themselves"
 
+  slot :header_actions,
+    doc:
+      "page actions rendered next to the section navigation in the app header (e.g. a minimal presence/share cluster on phones)"
+
   attr :header_section, :string,
     default: nil,
     doc:
@@ -88,6 +92,10 @@ defmodule PscWeb.Layouts do
         guessing with viewport breakpoints. --%>
         <div class="@container flex min-w-0 items-center justify-center lg:flex-1">
           {render_slot(@header_nav)}
+        </div>
+
+        <div class="flex shrink-0 items-center gap-2">
+          {render_slot(@header_actions)}
         </div>
 
         <div class="ml-auto flex items-center gap-3 sm:gap-4">
@@ -307,10 +315,13 @@ defmodule PscWeb.Layouts do
       "card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full",
       @class
     ]}>
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]" />
+      <%!-- The thumb is decoration only: it must not swallow the clicks of the
+      segment it sits on (that is the segment of the current theme). --%>
+      <div class="pointer-events-none absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]" />
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        type="button"
+        class="flex w-1/3 cursor-pointer items-center justify-center p-2"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
         aria-label="System theme"
@@ -320,7 +331,8 @@ defmodule PscWeb.Layouts do
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        type="button"
+        class="flex w-1/3 cursor-pointer items-center justify-center p-2"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
         aria-label="Light theme"
@@ -330,7 +342,8 @@ defmodule PscWeb.Layouts do
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        type="button"
+        class="flex w-1/3 cursor-pointer items-center justify-center p-2"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
         aria-label="Dark theme"

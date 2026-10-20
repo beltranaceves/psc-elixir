@@ -591,7 +591,8 @@ link, plain ×, bordered icon).
   Done action. It takes `manage?`, `shared_with`, `share_event`, `remove_event`,
   `on_close` and `link`, so each context keeps its own server events
   (`share_template`/`unshare_template`, `share_canvas`/`remove_access`,
-  `share_document`/`remove_access`).
+  `share_document`/`remove_access`). The panel is rounded and keeps a 16 px gutter on
+  phones, so the modal reads as a card instead of a full-bleed sheet.
 
 Each LiveView owns a boolean `@share_open` (`open_share` / `share_closed`), mirroring the
 Cancel-dialog pattern from ADR-014. The inline share blocks are gone; the canvas sidebar
@@ -837,6 +838,11 @@ info, and a tooltip that could leave the viewport and stay open after a tap.
   pointer) the scrollbar is hidden — it is noise and it steals ~15 px of the grid — and the
   column cut off at the edge is the affordance. Where a bar does show (fine pointers), it is
   a slim, low-contrast one instead of the platform default.
+- **The theme switch does not eat its own clicks.** The three-way switch draws a sliding
+  thumb over the segment of the current theme; the thumb is decoration only and is
+  `pointer-events-none`, so picking the theme you are already on still works. Its icons are
+  centred in their segments, which matters in the menu, where the switch spans the width of
+  the menu.
 - **Auth on phones.** Auth inputs are 16 px / 44 px below `sm` (below 16 px iOS zooms the page
   on focus) and the form container is `max-w-md`, giving ~92 % of a 390 px viewport.
 - **Success is green.** Flash gained a `:success` kind (green border/badge, check icon,
@@ -910,6 +916,12 @@ the presence pill showed a full e-mail address where it had no room for one.
   state, Share.
 - **Presence is compact where space is short.** Below `lg` the pill reads "1 online" /
   "N online" instead of the full e-mail address; the full list is always in the tooltip.
+- **On phones the editor header is only the title and the description.** The grid is the
+  point of the screen, so the presence, the save state and Share move into the **app
+  header** as a minimal cluster (a presence count, a save-state icon, an icon-only Share
+  button) and the editor header drops to two rows. From `sm` up the full controls stay
+  with the canvas header, where there is room for them. The cluster lives in a new
+  `Layouts.app` `:header_actions` slot.
 
 **Alternatives considered.** Keeping one element and repositioning it with CSS (the
 container query then also applied to the fixed bottom bar, whose ancestor became a

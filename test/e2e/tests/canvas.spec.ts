@@ -438,6 +438,40 @@ test.describe('canvas editor layout', () => {
     expect(ratio).toBeGreaterThan(0.9);
     expect(ratio).toBeLessThan(0.97);
   });
+
+  test('moves presence, save state and Share into the app header on phones', async ({
+    page,
+  }) => {
+    await createCanvasAndOpen(page, uniqueName('Compact Header'));
+
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    // The app header carries the minimal cluster ...
+    await expect(page.locator('#canvas-presence-compact')).toBeVisible();
+    await expect(page.locator('#canvas-save-state-compact')).toBeVisible();
+    await expect(page.locator('#share-canvas-button-compact')).toBeVisible();
+
+    // ... and the editor header keeps only the title and the description.
+    await expect(page.locator('#canvas-presence')).toBeHidden();
+    await expect(page.locator('#canvas-save-state')).toBeHidden();
+    await expect(page.locator('#share-canvas-button')).toBeHidden();
+
+    // The grid gets the vertical space back.
+    const grid = await page.locator('#canvas-grid').boundingBox();
+    expect(grid).not.toBeNull();
+    expect(grid!.y).toBeLessThan(200);
+
+    // The presence pill still opens the list of people on the canvas.
+    await page.locator('#canvas-presence-compact').click();
+    await expect(page.locator('#active-users-tooltip-compact [data-part="content"]')).toBeVisible();
+
+    // And the compact Share button opens the dialog (it used to push an
+    // unhandled event and take the LiveView down).
+    await page.locator('#canvas-presence-compact').click();
+    await page.locator('#share-canvas-button-compact').click();
+    await expect(page.locator('#share-canvas-dialog [data-part="content-panel"]')).toBeVisible();
+    await expect(page.locator('#canvas-grid')).toBeVisible();
+  });
 });
 
 test.describe('template designer cell editing', () => {

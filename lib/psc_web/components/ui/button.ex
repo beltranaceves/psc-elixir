@@ -47,7 +47,7 @@ defmodule PscWeb.Components.UI.Button do
     doc: "the button variant style"
 
   attr :size, :string, values: ~w(default sm lg icon), default: "default"
-  attr :rest, :global, include: ~w(disabled form name value)
+  attr :rest, :global, include: ~w(disabled form name value aria-label title)
 
   slot :inner_block, required: true
 
