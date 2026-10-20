@@ -253,7 +253,7 @@ defmodule PscWeb.CatalogLive.Index do
             >
               Fork
             </UIButton.button>
-            
+
             <UIButton.button
               type="button"
               phx-click="use_template"
