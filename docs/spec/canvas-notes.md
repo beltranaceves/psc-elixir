@@ -161,9 +161,9 @@ placeholder. It becomes the notes view.
 
 **Desktop (from `lg`)** — two panes:
 
-- **Left (260 px):** the list of the canvas's notes, newest first: title, a
-  one-line snippet, and the relative time it was last touched. A **New note**
-  action at the top.
+- **Left (260 px):** the list of the canvas's notes, most recently touched
+  first: title, a one-line snippet, and the relative time it was last touched.
+  A **New note** action at the top.
 - **Right:** the selected note's editor, or an empty state.
 
 **Phones and tablets** — one pane at a time: the list, and tapping a note
@@ -171,6 +171,10 @@ replaces it with the editor, with a back action to return to the list.
 
 The empty state says so and offers the create action. The list is empty until a
 note exists; the view never shows a blank panel.
+
+The note editor sits in the same rounded panel as the grid, so the two views
+read as one surface. Its header holds the title, the status pill and — for the
+canvas owner — a delete action; the row wraps on a narrow screen.
 
 ### The note editor
 

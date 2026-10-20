@@ -8,10 +8,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias PscWeb.Components.UI.Tooltip, as: UITooltip
 
   import PscWeb.Components.Accent
+  import PscWeb.Components.MarkdownEditor
   import PscWeb.Components.ShareDialog
   import PscWeb.Components.StatusPill
 
   alias Psc.Canvas
+  alias Psc.Notes
   alias PscWeb.Markdown
   alias PscWeb.Presence
   require Logger
@@ -75,6 +77,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:share_open, false)
         |> assign(:active_tab, "editor")
         |> assign(:tabs, @tabs)
+        |> assign(:notes, [])
+        |> assign(:note, nil)
+        |> assign(:note_content, "")
+        |> assign(:note_last_saved_content, "")
+        |> assign(:note_idle_timer_ref, nil)
+        |> assign(:note_save_state, :saved)
+        |> assign(:note_save_stats, @initial_save_stats)
+        |> assign(:note_topic, nil)
         |> subscribe_to_canvas(id)
 
       if connected?(socket) do
@@ -152,6 +162,114 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   def handle_event("select_tab", %{"tab" => tab}, socket) do
     {:noreply,
      push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}", replace: true)}
+  end
+
+  @impl true
+  def handle_event("select_note", %{"note" => note_id}, socket) do
+    {:noreply,
+     push_patch(
+       socket,
+       to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes&note=#{note_id}",
+       replace: true
+     )}
+  end
+
+  @impl true
+  def handle_event("create_note", _params, socket) do
+    case Notes.create_note(socket.assigns.canvas_id, socket.assigns.user_id, %{
+           title: "Untitled note"
+         }) do
+      {:ok, note} ->
+        {:noreply,
+         socket
+         |> load_notes()
+         |> push_patch(
+           to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes&note=#{note.id}",
+           replace: true
+         )}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not create the note")}
+    end
+  end
+
+  @impl true
+  def handle_event("delete_note", %{"note" => note_id}, socket) do
+    # Deleting a note is the canvas author's alone, like the canvas's
+    # structure. The note itself carries no access rules.
+    if socket.assigns.canvas.author_id == socket.assigns.user_id do
+      case Notes.get_note(note_id) do
+        %{canvas_id: canvas_id} = note when canvas_id == socket.assigns.canvas_id ->
+          {:ok, _note} = Notes.delete_note(note)
+
+          {:noreply,
+           socket
+           |> load_notes()
+           |> push_patch(to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes", replace: true)
+           |> put_flash(:success, "Note deleted")}
+
+        _other ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Only the canvas owner can delete a note")}
+    end
+  end
+
+  @impl true
+  def handle_event("update_note_title", %{"title" => title}, socket) do
+    case socket.assigns.note do
+      nil ->
+        {:noreply, socket}
+
+      note ->
+        {:ok, updated} = Notes.update_note(note, %{title: title})
+
+        {:noreply,
+         socket
+         |> assign(:note, updated)
+         |> load_notes()}
+    end
+  end
+
+  @impl true
+  def handle_event("update_note_content", %{"content" => new_content}, socket) do
+    case socket.assigns.note do
+      nil ->
+        {:noreply, socket}
+
+      note ->
+        operations = Notes.text_to_operations(socket.assigns.note_content, new_content)
+
+        Enum.each(operations, fn operation ->
+          Notes.apply_operation(note.id, socket.assigns.user_id, operation)
+        end)
+
+        socket =
+          if socket.assigns.note_idle_timer_ref do
+            Process.cancel_timer(socket.assigns.note_idle_timer_ref)
+            assign(socket, note_idle_timer_ref: nil)
+          else
+            socket
+          end
+
+        note_idle_timer_ref = Process.send_after(self(), :note_idle_save, @idle_save_interval)
+
+        {:noreply,
+         socket
+         |> assign(:note_content, new_content)
+         |> assign(:note_idle_timer_ref, note_idle_timer_ref)
+         |> assign(:note_save_state, :unsaved)}
+    end
+  end
+
+  @impl true
+  def handle_event("render_note", %{"content" => content}, socket) do
+    {:noreply,
+     push_event(socket, "note_rendered", %{
+       content: content,
+       html: Markdown.render(content, empty_message: "Start writing in the editor.")
+     })}
   end
 
   @impl true
@@ -257,12 +375,81 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
-  def handle_params(%{"tab" => tab}, _url, socket) do
-    {:noreply, assign(socket, :active_tab, find_tab(tab) |> elem(0))}
+  def handle_params(params, _url, socket) do
+    tab = find_tab(params["tab"]) |> elem(0)
+    socket = assign(socket, :active_tab, tab)
+
+    socket =
+      if tab == "notes" do
+        socket
+        |> load_notes()
+        |> load_note(params["note"])
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
-  def handle_params(_params, _url, socket) do
-    {:noreply, socket}
+  # The notes of the canvas, most recently touched first.
+  defp load_notes(socket) do
+    assign(socket, :notes, Notes.list_notes(socket.assigns.canvas_id))
+  end
+
+  # Open a note, if it belongs to this canvas. A note id from another canvas is
+  # ignored: the canvas is the only thing that grants access.
+  defp load_note(socket, note_id) when note_id in [nil, ""] do
+    socket
+    |> leave_note()
+    |> assign(:note, nil)
+    |> assign(:note_content, "")
+    |> assign(:note_last_saved_content, "")
+  end
+
+  defp load_note(socket, note_id) do
+    case Notes.get_note(note_id) do
+      %{canvas_id: canvas_id} = note when canvas_id == socket.assigns.canvas_id ->
+        content = Notes.get_note_content(note.id)
+
+        socket
+        |> leave_note()
+        |> assign(:note, note)
+        |> assign(:note_content, content)
+        |> assign(:note_last_saved_content, content)
+        |> assign(:note_save_state, :saved)
+        |> assign(:note_save_stats, @initial_save_stats)
+        |> subscribe_to_note(note.id)
+
+      _other ->
+        socket
+        |> leave_note()
+        |> assign(:note, nil)
+        |> assign(:note_content, "")
+    end
+  end
+
+  # Stop listening to the note that was open, so a stale topic cannot deliver
+  # operations for a note that is no longer on screen.
+  defp leave_note(socket) do
+    if socket.assigns[:note_topic] do
+      Phoenix.PubSub.unsubscribe(Psc.PubSub, socket.assigns.note_topic)
+    end
+
+    if socket.assigns[:note_idle_timer_ref] do
+      Process.cancel_timer(socket.assigns.note_idle_timer_ref)
+    end
+
+    assign(socket, note_topic: nil, note_idle_timer_ref: nil)
+  end
+
+  defp subscribe_to_note(socket, note_id) do
+    if connected?(socket) do
+      topic = Notes.pubsub_topic(note_id)
+      :ok = Phoenix.PubSub.subscribe(Psc.PubSub, topic)
+      assign(socket, :note_topic, topic)
+    else
+      socket
+    end
   end
 
   @impl true
@@ -381,6 +568,46 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
+  def handle_info(:note_idle_save, socket) do
+    case socket.assigns.note do
+      nil ->
+        {:noreply, assign(socket, note_idle_timer_ref: nil)}
+
+      note ->
+        if socket.assigns.note_content != socket.assigns.note_last_saved_content do
+          socket = assign(socket, note_save_state: :saving)
+
+          {:noreply,
+           socket
+           |> save_note_content(note)
+           |> assign(:note_last_saved_content, socket.assigns.note_content)
+           |> assign(:note_idle_timer_ref, nil)
+           |> assign(:note_save_state, :saved)}
+        else
+          {:noreply, assign(socket, note_idle_timer_ref: nil)}
+        end
+    end
+  end
+
+  @impl true
+  def handle_info({:note_operation, user_id, operation, _seq}, socket) do
+    # Only update if the operation is from another user (avoid echoing back).
+    if user_id != socket.assigns.user_id and socket.assigns.note do
+      new_content = Psc.Text.apply_operation(operation, socket.assigns.note_content)
+
+      {:noreply,
+       socket
+       |> assign(:note_content, new_content)
+       |> push_event("note_content_updated", %{
+         newContent: new_content,
+         fromUserId: user_id
+       })}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_info(:periodic_save, socket) do
     socket =
       if socket.assigns.cells != socket.assigns.last_saved_cells do
@@ -432,6 +659,38 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         assign(socket,
           save_state: :unsaved,
           save_stats: %{stats | failures: stats.failures + 1}
+        )
+    end
+  end
+
+  # Write the note's content and record what happened, so the status pill can
+  # report it. A failed write keeps the state "unsaved": the changes are
+  # still only in the event log, and the next save will try again.
+  defp save_note_content(socket, note) do
+    started = System.monotonic_time(:millisecond)
+
+    result = Notes.save_content_to_db(note.id, socket.assigns.note_content)
+
+    elapsed = System.monotonic_time(:millisecond) - started
+    stats = socket.assigns.note_save_stats
+
+    case result do
+      {:ok, _note} ->
+        assign(socket,
+          note_save_stats: %{
+            stats
+            | writes: stats.writes + 1,
+              last_saved_at: DateTime.utc_now(),
+              last_write_ms: elapsed
+          }
+        )
+
+      {:error, _changeset} ->
+        Logger.error("[UnstrCanvasLive] note save failed: note_id=#{note.id}")
+
+        assign(socket,
+          note_save_state: :unsaved,
+          note_save_stats: %{stats | failures: stats.failures + 1}
         )
     end
   end
@@ -774,8 +1033,28 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             </div>
           </div>
 
+          <div
+            id="canvas-panel-notes"
+            role="tabpanel"
+            aria-labelledby="canvas-tab-notes"
+            class={[
+              "flex min-h-0 w-full flex-1 flex-col",
+              @active_tab != "notes" && "hidden"
+            ]}
+          >
+            <.notes_view
+              notes={@notes}
+              note={@note}
+              note_content={@note_content}
+              note_save_state={@note_save_state}
+              note_save_stats={@note_save_stats}
+              user_id={@user_id}
+              is_owner={@canvas.author_id == @user_id}
+            />
+          </div>
+
           <%= for {tab_id, label, icon, blurb} <- @tabs do %>
-            <%= if tab_id != "editor" do %>
+            <%= if tab_id not in ["editor", "notes"] do %>
               <div
                 id={"canvas-panel-" <> tab_id}
                 role="tabpanel"
@@ -811,6 +1090,175 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <.tab_bar tabs={@tabs} active_tab={@active_tab} />
     </Layouts.app>
     """
+  end
+
+  # The Notes view: the canvas's notes, and the one that is open.
+  #
+  # On a wide screen the list sits beside the editor. On a phone they are one
+  # pane at a time: the list, and — once a note is open — the editor with a
+  # back action.
+  attr :notes, :list, required: true
+  attr :note, :map, default: nil
+  attr :note_content, :string, default: ""
+  attr :note_save_state, :atom, required: true
+  attr :note_save_stats, :map, required: true
+  attr :user_id, :integer, required: true
+  attr :is_owner, :boolean, required: true
+
+  defp notes_view(assigns) do
+    ~H"""
+    <div id="canvas-notes" class="flex min-h-0 w-full flex-1 flex-col lg:flex-row lg:gap-4">
+      <%!-- The list. On a phone it is hidden while a note is open. --%>
+      <div
+        id="canvas-notes-list"
+        class={[
+          "flex min-h-0 w-full flex-col lg:w-64 lg:shrink-0",
+          @note && "hidden lg:flex"
+        ]}
+      >
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="text-sm font-medium uppercase tracking-wide text-base-content/50">
+            Notes
+          </h2>
+          <UIButton.button type="button" id="new-note-button" phx-click="create_note" size="sm">
+            <.icon name="hero-plus" class="size-4" /> New note
+          </UIButton.button>
+        </div>
+
+        <%= if @notes == [] do %>
+          <div
+            id="canvas-notes-empty"
+            class="rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-6 text-center"
+          >
+            <p class="text-sm text-base-content/60">No notes yet.</p>
+            <p class="mt-1 text-xs text-base-content/45">
+              Notes are shared Markdown attached to this canvas.
+            </p>
+          </div>
+        <% else %>
+          <ul id="canvas-notes-items" class="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            <li :for={note <- @notes} id={"canvas-note-" <> note.id}>
+              <button
+                type="button"
+                phx-click="select_note"
+                phx-value-note={note.id}
+                aria-current={to_string(@note && @note.id == note.id)}
+                class={[
+                  "w-full rounded-lg border p-3 text-left transition-colors",
+                  @note && @note.id == note.id && "border-primary/40 bg-primary/10",
+                  !(@note && @note.id == note.id) &&
+                    "border-base-content/10 bg-base-200 hover:border-base-content/25"
+                ]}
+              >
+                <span class="block truncate text-sm font-medium text-base-content">
+                  {note.title || "Untitled note"}
+                </span>
+                <span class="mt-1 block truncate text-xs text-base-content/50">
+                  {note_snippet(note.content)}
+                </span>
+              </button>
+            </li>
+          </ul>
+        <% end %>
+      </div>
+
+      <%!-- The editor. On a phone it takes over the pane. --%>
+      <div
+        id="canvas-note-editor"
+        class={[
+          "flex min-h-0 w-full flex-1 flex-col",
+          !@note && "hidden lg:flex"
+        ]}
+      >
+        <%= if @note do %>
+          <div class="mb-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              id="canvas-notes-back"
+              phx-click="select_note"
+              phx-value-note=""
+              class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-base-content/60 transition-colors hover:bg-base-content/5 hover:text-base-content lg:hidden"
+              aria-label="Back to the notes"
+            >
+              <.icon name="hero-arrow-left" class="size-5" />
+            </button>
+
+            <.form
+              for={%{}}
+              id="canvas-note-title-form"
+              phx-change="update_note_title"
+              class="min-w-0 flex-1"
+            >
+              <input
+                name="title"
+                type="text"
+                value={@note.title}
+                phx-debounce="500"
+                placeholder="Untitled note"
+                class="w-full min-w-0 border-b-2 border-transparent bg-transparent text-lg font-semibold text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary focus:outline-none"
+              />
+            </.form>
+
+            <.status_pill
+              id="canvas-note-status"
+              save_state={@note_save_state}
+              save_stats={@note_save_stats}
+            />
+
+            <%= if @is_owner do %>
+              <UIButton.button
+                type="button"
+                id="canvas-note-delete"
+                phx-click="delete_note"
+                phx-value-note={@note.id}
+                variant="outline"
+                size="sm"
+                class="text-error hover:text-error"
+              >
+                Delete
+              </UIButton.button>
+            <% end %>
+          </div>
+
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200">
+            <.markdown_editor
+              id="canvas-note-markdown"
+              input_id="canvas-note-input"
+              form_id="canvas-note-form"
+              preview_id="canvas-note-preview"
+              content={@note_content}
+              html={Markdown.render(@note_content, empty_message: "Start writing in the editor.")}
+              current_user_id={@user_id}
+              change_event="update_note_content"
+              preview_event="render_note"
+              render_event="note_rendered"
+              update_event="note_content_updated"
+              empty_message="Start writing in the editor."
+              preview_label="Edit note content"
+            />
+          </div>
+        <% else %>
+          <div class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center">
+            <p class="max-w-sm text-sm text-base-content/50">
+              Select a note, or create one, to start writing.
+            </p>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    """
+  end
+
+  # A one-line preview of a note's content for the list.
+  defp note_snippet(nil), do: "Empty"
+
+  defp note_snippet(content) when content in ["", nil], do: "Empty"
+
+  defp note_snippet(content) do
+    content
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+    |> String.slice(0, 90)
   end
 
   # On phones the canvas header gives its vertical space back to the grid: the

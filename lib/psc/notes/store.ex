@@ -24,4 +24,7 @@ defmodule Psc.Notes.Store do
 
   @impl Psc.TextStore
   def topic(id), do: Psc.Notes.pubsub_topic(id)
+
+  @impl Psc.TextStore
+  def event_tag, do: :note_operation
 end

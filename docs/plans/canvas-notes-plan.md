@@ -154,6 +154,8 @@ browser test that mounts two editors on one page and edits both.
 
 ## Task 5 — The Notes view
 
+**Status: done.**
+
 The canvas editor's **Notes** tab becomes the notes view.
 
 - The list: the canvas's notes, newest first, showing the title, a one-line

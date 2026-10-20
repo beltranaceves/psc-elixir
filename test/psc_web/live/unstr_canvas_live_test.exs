@@ -197,10 +197,10 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#canvas-panel-editor:not(.hidden)")
       assert has_element?(lv, "#canvas-panel-notes.hidden")
 
-      # Switching tabs shows the placeholder and hides the grid.
+      # Switching tabs shows the notes view and hides the grid.
       lv |> element("#canvas-tab-notes") |> render_click()
       assert has_element?(lv, "#canvas-tab-notes[aria-selected='true']")
-      assert has_element?(lv, "#canvas-placeholder-notes")
+      assert has_element?(lv, "#canvas-notes")
       assert has_element?(lv, "#canvas-panel-notes:not(.hidden)")
       assert has_element?(lv, "#canvas-panel-editor.hidden")
 

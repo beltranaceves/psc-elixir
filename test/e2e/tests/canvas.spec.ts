@@ -361,7 +361,7 @@ test.describe('canvas editor tabs', () => {
 
     await page.locator('#canvas-tab-notes').click();
     await expect(page.locator('#canvas-tab-notes')).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('#canvas-placeholder-notes')).toBeVisible();
+    await expect(page.locator('#canvas-notes')).toBeVisible();
     // The grid stays in the DOM but is hidden, so the switch is instant.
     await expect(page.locator('#canvas-grid')).toBeHidden();
     await expect(page).toHaveURL(/tab=notes/);
@@ -385,7 +385,7 @@ test.describe('canvas editor tabs', () => {
 
     const started = Date.now();
     await page.locator('#canvas-tab-notes').click();
-    await expect(page.locator('#canvas-placeholder-notes')).toBeVisible();
+    await expect(page.locator('#canvas-notes')).toBeVisible();
     const elapsed = Date.now() - started;
 
     await page.evaluate(() => window.liveSocket.disableLatencySim());

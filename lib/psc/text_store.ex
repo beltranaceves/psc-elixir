@@ -50,6 +50,15 @@ defmodule Psc.TextStore do
   @callback topic(id :: term) :: String.t()
 
   @doc """
+  The tag of the broadcast message.
+
+  The message is `{tag, user_id, operation, seq}`. A consumer that listens to
+  more than one kind of operation — the canvas editor listens to both the
+  canvas's and a note's — needs to tell them apart.
+  """
+  @callback event_tag() :: atom
+
+  @doc """
   The next sequence number for a store.
 
   Floored at the store's `snapshot_seq`: events at or below the snapshot are
@@ -157,7 +166,7 @@ defmodule Psc.TextStore do
     Phoenix.PubSub.broadcast(
       Psc.PubSub,
       adapter.topic(id),
-      {:operation, user_id, operation, seq}
+      {adapter.event_tag(), user_id, operation, seq}
     )
   end
 
