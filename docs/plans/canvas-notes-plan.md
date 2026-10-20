@@ -223,12 +223,24 @@ should 404 or redirect, not crash).
 | Two editors on one page (the Notes view and a canvas cell). | Task 4's data-attribute wiring is the precondition; the canvas cell fields already use that pattern. |
 | Note-level presence is missing in the first version. | Deliberate: the canvas-level cluster is shown in the Notes view. A note-scoped indicator needs a new presence field and is a follow-up. |
 | The free tier's connection limit (2 connections) makes a second concurrent aggregate expensive. | Notes share the canvas LiveView's connection — no new socket, no new database connection. |
+| The documents' own tests disappear with the feature. | They were the regression net for the extracted store. They ran green before the section was removed, and the store's behaviour is now covered by the notes' tests. |
 
 ## Definition of done
 
-- [ ] Every task above is committed, with the spec and this document updated.
-- [ ] `mix.bat precommit` green (format, no warnings, all tests).
-- [ ] The full Playwright suite green, including the new notes tests.
-- [ ] The notes feature verified in the browser at phone and desktop sizes.
-- [ ] ADR-026 and ADR-027 match what was built.
-- [ ] Deployed only when the user asks.
+- [x] Every task above is committed, with the spec and this document updated.
+- [x] `mix.bat precommit` green (format, no warnings, all tests) — 216 tests.
+- [x] The full Playwright suite green, including the new notes tests — 34 tests.
+- [x] The notes feature verified in the browser at phone and desktop sizes.
+- [x] ADR-027 and ADR-028 match what was built.
+- [x] Deployed — Gigalixir release 32, Healthy.
+
+## What was left out, deliberately
+
+- **Note-level presence.** The Notes view shows the canvas-level presence cluster (who is
+  on the canvas). A "X is editing this note" indicator needs a new field in the canvas
+  presence metadata and a second topic; it is a follow-up, not a blocker.
+- **A note's own share control.** There is none, on purpose: sharing the canvas shares
+  its notes, and a second share list would be a second permission system to keep in
+  sync (ADR-027).
+- **A note ordering the user can change.** The list is ordered by the most recently
+  touched. A manual order is a `position` column and a drag, for a later need.
