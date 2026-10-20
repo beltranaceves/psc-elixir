@@ -134,11 +134,44 @@ test.describe('canvas editor mobile fullscreen cells', () => {
     await expect(card.locator('textarea:visible')).toHaveCount(0);
   });
 
+  test('the fullscreen cell lives in the URL, so Back returns to the canvas', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const url = await createCanvasAndOpen(page, uniqueName('Fullscreen URL'));
+
+    const card = page.locator('.canvas-cell').first();
+    await card.click({ position: { x: 14, y: 12 } });
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(1);
+
+    // The fullscreen view is a URL state, so it can be linked and reloaded.
+    await expect(page).toHaveURL(/#cell-/);
+
+    // Back leaves the fullscreen view, not the canvas.
+    await page.goBack();
+    await expect(page).not.toHaveURL(/#cell-/);
+    await expect(page.locator('.canvas-cell.is-expanded')).toHaveCount(0);
+    await expect(page.locator('#canvas-grid')).toBeVisible();
+    expect(page.url()).toContain(url.split('#')[0]);
+  });
+
+  test('the share modal does not scroll the canvas behind it', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('Share Scroll'));
+
+    const main = page.locator('main');
+    const before = await main.evaluate(el => el.scrollTop);
+
+    await page.getByRole('button', { name: 'Share' }).click({ force: true });
+    await expect(page.locator('#share-canvas-dialog [data-part="content-panel"]')).toBeVisible();
+
+    // The dialog is moved with a transform; it never scrolls the page.
+    expect(await main.evaluate(el => el.scrollTop)).toBe(before);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
   test('a touch tap only expands the cell — no instant edit — and swipes navigate', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await createCanvasAndOpen(page, uniqueName('Touch Cell'));
+    await page.setViewportSize({ width: 390, height: 844 });    await createCanvasAndOpen(page, uniqueName('Touch Cell'));
 
     // Real touch events (the phone path): the markdown display has its own
     // click listener, so a tap must not slip through into edit mode.

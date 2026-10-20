@@ -26,8 +26,14 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
   `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
   leaves the canvas editor instead of stepping through view selections.
-- **Mobile feedback** appears above the fixed bottom app bar. The shared dialog panel scrolls
-  within the visible viewport when the virtual keyboard is open.
+- **The fullscreen cell is a URL state.** On phones the expanded cell is encoded as the
+  `#cell-<key>` fragment, so Back returns to the canvas grid instead of leaving the canvas,
+  and the view can be linked and reloaded. The fragment is used on purpose: LiveView compares
+  only pathname and search, so a fragment change never triggers a server round trip. Swiping
+  to a neighbouring cell replaces the fragment instead of adding another history entry.
+- **Mobile feedback** appears above the fixed bottom app bar. The shared dialog panel is
+  moved with a transform to stay inside the visible viewport when the virtual keyboard is
+  open; it never scrolls the page behind it.
 - **Rendered Markdown** is intentionally denser than the editing controls: line height and block
   margins are reduced only inside `.md-render` cells.
 

@@ -9,6 +9,67 @@
 const MOBILE_QUERY = "(max-width: 639px)"
 const SWIPE_THRESHOLD = 44
 
+// The fullscreen cell is a view state inside the canvas, so it lives in the
+// URL fragment: `#cell-<key>`. The fragment is deliberate — LiveView compares
+// pathname and search to decide whether a history entry is its own, so a
+// fragment change never triggers a server round trip.
+const CELL_HASH_PREFIX = "#cell-"
+
+// Only one cell is full screen at a time, so the history entry that stands for
+// it is shared between the cells.
+let fullscreenHashPushed = false
+let popstateBound = false
+
+function cellHash(key) {
+  return `${CELL_HASH_PREFIX}${key}`
+}
+
+// Back (or any history move) leaves the fullscreen view: collapse the cell.
+function bindPopState() {
+  if (popstateBound) return
+  popstateBound = true
+
+  window.addEventListener("popstate", () => {
+    fullscreenHashPushed = false
+
+    const cell = document.querySelector(".canvas-cell.is-expanded")
+    if (cell && cell._cellFocus) cell._cellFocus.collapse({ instant: true, history: false })
+  })
+}
+
+function pushCellHash(key) {
+  if (fullscreenHashPushed) return
+
+  const url = new URL(window.location.href)
+  url.hash = cellHash(key)
+  window.history.pushState({ cell: key }, "", url)
+  fullscreenHashPushed = true
+}
+
+// Swiping to a neighbouring cell stays in the same history entry: it is the
+// same fullscreen view, only a different cell.
+function replaceCellHash(key) {
+  const url = new URL(window.location.href)
+  url.hash = cellHash(key)
+  window.history.replaceState({ cell: key }, "", url)
+}
+
+// Leaving the fullscreen view drops the fragment again, so the URL is the
+// plain canvas URL.
+function releaseCellHash() {
+  if (fullscreenHashPushed) {
+    fullscreenHashPushed = false
+    window.history.back()
+    return
+  }
+
+  const url = new URL(window.location.href)
+  if (!url.hash.startsWith(CELL_HASH_PREFIX)) return
+
+  url.hash = ""
+  window.history.replaceState(window.history.state, "", url)
+}
+
 export default {
   mounted() {
     this.cellKey = this.el.dataset.cellKey || this.el.id.replace("cell-card-", "")
@@ -38,12 +99,19 @@ export default {
     this.el.addEventListener("touchstart", this.handleTouchStart, { passive: true })
     this.el.addEventListener("touchend", this.handleTouchEnd, { passive: true })
     document.addEventListener("keydown", this.handleKeydown)
+
+    bindPopState()
+
+    // A deep link opens the cell full screen: /canvas/<id>#cell-r1_c1.
+    if (window.location.hash === cellHash(this.cellKey)) {
+      this.expand({ history: "none" })
+    }
   },
 
   updated() {
     // LiveView patches can rewrite the class attribute; keep the fullscreen
     // state while the user is inside the cell.
-    if (this.expandedByPatch && !this.isExpanded()) this.expand()
+    if (this.expandedByPatch && !this.isExpanded()) this.expand({ history: "none" })
   },
 
   destroyed() {
@@ -159,15 +227,15 @@ export default {
     const target = targetCell && targetCell.querySelector(".canvas-cell")
     if (!target || target === this.el || !target._cellFocus) return
 
-    this.collapse({ swipeOut: direction.out })
-    target._cellFocus.expand({ swipeIn: direction.in })
+    this.collapse({ swipeOut: direction.out, history: false })
+    target._cellFocus.expand({ swipeIn: direction.in, history: "replace" })
   },
 
   isExpanded() {
     return this.el.classList.contains("is-expanded")
   },
 
-  expand({ swipeIn = null } = {}) {
+  expand({ swipeIn = null, history = "push" } = {}) {
     document.querySelectorAll(".canvas-cell.is-expanded").forEach(cell => {
       if (cell === this.el) return
       // A cell that is sliding out keeps its frame until its animation ends.
@@ -200,9 +268,14 @@ export default {
     this.expandedByPatch = true
     document.body.classList.add("overflow-hidden")
     this.el.scrollTop = 0
+
+    // The fullscreen view is part of the URL, so Back returns to the canvas
+    // instead of leaving it.
+    if (history === "push") pushCellHash(this.cellKey)
+    else if (history === "replace") replaceCellHash(this.cellKey)
   },
 
-  collapse({ instant = false, swipeOut = null } = {}) {
+  collapse({ instant = false, swipeOut = null, history = true } = {}) {
     if (!this.isExpanded()) return
 
     this.expandedByPatch = false
@@ -230,6 +303,8 @@ export default {
     if (document.activeElement && this.el.contains(document.activeElement)) {
       document.activeElement.blur()
     }
+
+    if (history) releaseCellHash()
   },
 
   finishCollapse() {

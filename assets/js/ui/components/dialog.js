@@ -234,7 +234,10 @@ class DialogComponent extends Component {
     this.panelVisibilityTimer = setTimeout(() => {
       if (this.destroyed || this.state !== "open" || !this.contentPanel) return;
 
-      this.contentPanel.scrollIntoView({ block: "center", inline: "nearest" });
+      // The panel is fixed and centred: it is moved with a transform, never by
+      // scrolling. `scrollIntoView` would scroll the page behind the dialog
+      // (the canvas editor scrolls its own main area), which made the grid
+      // jump around while the modal was open.
       this.syncPanelToVisualViewport();
     }, 75);
   }

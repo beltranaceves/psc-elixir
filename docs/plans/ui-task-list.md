@@ -352,6 +352,13 @@ long unbreakable token used to paint past the card's border (measured: 596 px of
 on a 373 px card). Card names now break on word boundaries and descriptions both break
 long tokens and clamp to two lines, in the canvas list and the template library.
 
+**Follow-up (2026-10-20): view state in the URL.** The phone fullscreen cell is now a URL
+state (`#cell-<key>`): entering it pushes a history entry, so Back collapses the cell and
+returns to the canvas grid instead of leaving the canvas, and the view can be linked and
+reloaded. Swiping to a neighbour replaces the fragment rather than stacking entries. The
+share dialog no longer scrolls the page — it is moved with a transform to stay inside the
+visible viewport when the keyboard opens, so the grid behind it no longer jumps.
+
 ---
 
 ## Notes / incidental findings

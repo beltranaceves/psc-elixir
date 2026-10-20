@@ -35,6 +35,7 @@ it costs, and the evidence it was verified against.
 | [ADR-023](#adr-023--the-canvas-tabs-follow-the-space-they-have) | The canvas tabs follow the space they have | Accepted | 2026-10-20 |
 | [ADR-024](#adr-024--mobile-feedback-and-dialogs-stay-in-the-visible-viewport) | Mobile feedback and dialogs stay in the visible viewport | Accepted | 2026-10-20 |
 | [ADR-025](#adr-025--the-app-header-owns-index-page-titles) | The app header owns index page titles | Accepted | 2026-10-20 |
+| [ADR-026](#adr-026--view-state-lives-in-the-url-not-in-the-page) | View state lives in the URL, not in the page | Accepted | 2026-10-20 |
 
 ---
 
@@ -1004,6 +1005,42 @@ stranded above the library (it reads as detached from the content it acts on).
 template library's create action is a grid tile, so the library reads as one
 uniform grid. Browser and LiveView tests assert the header heading, the tile's
 placement, and the absence of a `main h1`.
+
+## ADR-026 — View state lives in the URL, not in the page
+
+**Context.** The canvas editor has two kinds of view state: the selected tab
+(Analysis, Notes, Editor, Agent) and, on phones, the cell that is expanded to
+the full screen. The tab was already in the URL. The fullscreen cell was not:
+it was a client-side class, so pressing Back left the canvas entirely and
+landed on the canvas list, and the view could not be linked or reloaded.
+
+**Decision.**
+
+- The expanded cell is encoded as the URL fragment `#cell-<key>`. Entering the
+  fullscreen view pushes a history entry, so Back collapses the cell and
+  returns to the canvas grid; leaving it removes the fragment.
+- The fragment is deliberate. LiveView decides whether a history entry is its
+  own by comparing pathname and search, so a fragment-only change is invisible
+  to it and costs no server round trip. A query parameter would have made
+  every expand and collapse a LiveView navigation.
+- Swiping to a neighbouring cell replaces the fragment instead of adding an
+  entry: it is the same fullscreen view, only a different cell.
+- A URL that already names a cell opens that cell full screen, so the view can
+  be shared and survives a reload.
+- The shared dialog no longer calls `scrollIntoView`. The panel is fixed and
+  centred, and it is moved with a transform to stay inside the visible
+  viewport when the keyboard opens; scrolling the document made the canvas
+  editor's own scroll area jump behind the modal.
+
+**Alternatives considered.** Leaving the cell out of the URL (Back leaves the
+canvas); a query parameter such as `?cell=` (every expand becomes a LiveView
+navigation and a server round trip); pushing a history entry per swipe (the
+Back button would walk through cells); and `scrollIntoView` for the dialog (it
+scrolls the nearest scrollable ancestor, which is the editor's grid).
+
+**Consequences.** The fullscreen cell is linkable, reload-safe, and Back
+returns to the canvas. The browser and LiveView tests assert the fragment, the
+Back behaviour, and that opening the share modal does not move the page.
 
 ---
 
