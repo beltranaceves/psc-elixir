@@ -352,6 +352,11 @@ long unbreakable token used to paint past the card's border (measured: 596 px of
 on a 373 px card). Card names now break on word boundaries and descriptions both break
 long tokens and clamp to two lines, in the canvas list and the template library.
 
+**Follow-up (2026-10-20): tighter editor header.** The gap between the canvas description and
+the table dropped from 30 px to 14 px. Two causes: the share dialog's root was a zero-height
+flex item between the header and the grid, so it opened a gap of its own on each side (it is
+now rendered out of the flow), and the workspace gap went from 12 px to 8 px.
+
 **Follow-up (2026-10-20): view state in the URL.** The phone fullscreen cell is now a URL
 state (`#cell-<key>`): entering it pushes a history entry, so Back collapses the cell and
 returns to the canvas grid instead of leaving the canvas, and the view can be linked and

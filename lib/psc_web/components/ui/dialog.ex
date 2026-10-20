@@ -94,7 +94,7 @@ defmodule PscWeb.Components.UI.Dialog do
     <div
       id={@id}
       tabindex="-1"
-      class="relative z-50 group/dialog"
+      class="absolute z-50 group/dialog"
       data-component="dialog"
       data-options={@options}
       data-open={to_string(@open)}

@@ -22,6 +22,9 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **Structure-editing controls** (add/remove row/column, add/remove field) are hidden behind a "Structure" toggle in the editor header. When active, they appear as small outline buttons with accent color on hover.
 - **The sidebar** (presence + sharing) is fixed at 280px on the right, collapsible via a button in the header. On mobile, it becomes a slide-over panel.
 - **The editor header** contains: canvas name (editable inline), description (editable inline, below name), Structure toggle, Share button, and presence avatars.
+- **The description sits close to the grid.** The gap between the description and the table is
+  at most 16 px. The share dialog is rendered out of the flow, so its wrapper cannot act as a
+  flex item and open a gap of its own between the header and the grid.
 - **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
 - **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
   `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back

@@ -534,10 +534,24 @@ test.describe('canvas editor layout', () => {
     expect(ratio).toBeLessThan(0.97);
   });
 
+  test('keeps the gap between the description and the table tight', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Tight Header'));
+
+    const description = page.locator('#canvas-description-form textarea');
+    const grid = page.locator('#canvas-grid');
+    const descriptionBox = await description.boundingBox();
+    const gridBox = await grid.boundingBox();
+    expect(descriptionBox).not.toBeNull();
+    expect(gridBox).not.toBeNull();
+
+    // The share dialog is an out-of-flow element: it must not add a gap of
+    // its own between the header and the table.
+    expect(gridBox!.y - (descriptionBox!.y + descriptionBox!.height)).toBeLessThanOrEqual(16);
+  });
+
   test('ends the grid on the app bar, without a dead band or a page scroll', async ({
     page,
-  }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+  }) => {    await page.setViewportSize({ width: 390, height: 844 });
     await createCanvasAndOpen(page, uniqueName('No Dead Band'));
 
     const grid = await page.locator('#canvas-grid').boundingBox();

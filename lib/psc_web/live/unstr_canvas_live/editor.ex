@@ -469,7 +469,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       </:header_actions>
       <div
         id="canvas-workspace"
-        class="flex min-h-0 w-full flex-1 flex-col gap-3 pb-[calc(var(--canvas-tab-bar-height)+env(safe-area-inset-bottom))] lg:pb-2"
+        class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+env(safe-area-inset-bottom))] lg:pb-2"
       >
         <%!-- Header: title, description, presence and actions --%>
         <div id="canvas-header" class="flex shrink-0 flex-col gap-2 px-2 sm:px-0">
