@@ -109,9 +109,11 @@ pattern for one.
 
 ## Task 3 — The status pill becomes a shared component
 
+**Status: done.**
+
 Extract `PscWeb.Components.StatusPill` from the canvas editor's private
 `status_pill/1`, taking the save state and the statistics as parameters
-(ADR-027). The canvas editor uses it; the note editor will.
+(ADR-028). The canvas editor uses it; the note editor will.
 
 **Acceptance**
 
