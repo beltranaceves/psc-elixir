@@ -362,6 +362,14 @@ The database, migrations, seed user, and assets are handled automatically by the
 set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && set PSC_PORT=4001 && mix e2e.setup
 ```
 
+**The E2E database is reset on every run.** Each run creates canvases and templates, and
+nothing removed them afterwards, so after a few runs the canvas index listed thousands of
+rows: the LiveView re-render after a creation took seconds, and any assertion that waited
+for the flash (or for anything else in that patch) started racing the server.
+`globalSetup` therefore runs `priv/repo/e2e_reset.exs` after seeding, which deletes the
+canvases and templates owned by the two seeded accounts — only that data, never the dev
+database.
+
 **Running:**
 
 ```bash
@@ -406,6 +414,11 @@ pre-confirmed to bypass that flow.)
 **Screenshots on failure:** `@playwright/test` auto-saves a PNG + trace for every failed test
 to `test-results/`. The agent reads these with `view_image` to *see* exactly what broke — the
 image enters the LLM context.
+
+**Never assert on the flash.** The success flash is transient: the card fades out shortly
+before the server drops it from the flash map, so `#flash-group` text is a race that fails
+under load. Assert on durable DOM instead — the created canvas card, the share dialog's
+access list — and use `dismissFlash()` only as best-effort cleanup.
 
 ---
 

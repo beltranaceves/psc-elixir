@@ -67,11 +67,15 @@ async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
 
-  await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
-  await dismissFlash(page);
-
+  // The flash auto-dismisses, so it is not a reliable assertion here.
+  // Wait for the new card instead — that proves the creation round trip
+  // landed and the canvas is listed.
   // h3 is a direct child of the card div that owns the Edit link.
   const card = page.locator(`h3:text-is("${name}")`).locator('..');
+  await expect(card).toBeVisible({ timeout: 15_000 });
+
+  await dismissFlash(page);
+
   await card.getByRole('link', { name: 'Edit' }).click();
 
   await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
@@ -464,7 +468,9 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
       .locator('#share-canvas-dialog-form')
       .getByRole('button', { name: 'Share' })
       .click();
-    await expect(page.locator('#flash-group')).toContainText(`Canvas shared with ${USER_B}`);
+    // The flash auto-dismisses, so the access list is the durable proof that
+    // the canvas was shared.
+    await expect(shareDialog.locator(`li[data-email="${USER_B}"]`)).toBeVisible();
     await dismissFlash(page);
     await shareDialog.getByRole('button', { name: 'Done' }).click();
     await expect(shareDialog.locator('[data-part="content-panel"]')).toBeHidden();
@@ -853,10 +859,12 @@ test.describe('canvas accents', () => {
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
     await page.getByLabel('Start from').selectOption({ label: templateName });
     await page.getByRole('button', { name: 'Create Canvas' }).click();
-    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
+
+    // The success flash auto-dismisses, so wait for the new card instead.
+    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
+    await expect(canvasCard).toBeVisible({ timeout: 15_000 });
     await dismissFlash(page);
 
-    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
     await canvasCard.getByRole('link', { name: 'Edit' }).click();
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
 
@@ -914,10 +922,12 @@ test.describe('template designer accents', () => {
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
     await page.getByLabel('Start from').selectOption({ label: templateName });
     await page.getByRole('button', { name: 'Create Canvas' }).click();
-    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
+
+    // The success flash auto-dismisses, so wait for the new card instead.
+    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
+    await expect(canvasCard).toBeVisible({ timeout: 15_000 });
     await dismissFlash(page);
 
-    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
     await canvasCard.getByRole('link', { name: 'Edit' }).click();
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
@@ -964,7 +974,9 @@ test.describe('mobile flash placement', () => {
     await page.getByRole('button', { name: 'Create Canvas' }).click();
 
     const flash = page.locator('#flash-group');
-    await expect(flash).toContainText('Canvas created successfully');
+    // The card rides along with the patch that adds the new canvas, and the
+    // index page can be slow, so give it room before measuring it.
+    await expect(flash).toContainText('Canvas created successfully', { timeout: 30_000 });
     const box = await flash.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.y).toBeGreaterThan(844 / 2);
@@ -983,16 +995,15 @@ test.describe('canvas library', () => {
     await page.getByPlaceholder('Enter canvas name...').fill(name);
     await page.getByPlaceholder('Enter canvas description...').fill(longWord);
     await page.getByRole('button', { name: 'Create Canvas' }).click();
-    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
-    await dismissFlash(page);
 
     const card = page.getByRole('heading', { name }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
     const description = card.locator('p').first();
 
     // The card is rendered by the LiveView patch that follows the creation,
     // so wait for it before measuring.
-    await expect(card).toBeVisible();
+    await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(description).toBeVisible();
+    await dismissFlash(page);
 
     // The text must not paint outside the card it belongs to.
     const cardBox = await card.boundingBox();

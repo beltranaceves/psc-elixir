@@ -18,6 +18,9 @@ export default function globalSetup(): void {
   execSync('mix ecto.create --quiet', { cwd: root, env, stdio: 'inherit' });
   execSync('mix ecto.migrate --quiet', { cwd: root, env, stdio: 'inherit' });
   execSync('mix run priv/repo/e2e_seeds.exs', { cwd: root, env, stdio: 'inherit' });
+  // Previous runs leave thousands of canvases behind, which makes the index
+  // LiveView slow enough to race the assertions. Start from a clean slate.
+  execSync('mix run priv/repo/e2e_reset.exs', { cwd: root, env, stdio: 'inherit' });
 
   const appJs = join(root, 'priv', 'static', 'assets', 'js', 'app.js');
   if (!existsSync(appJs)) {
