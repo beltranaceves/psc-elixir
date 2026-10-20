@@ -35,6 +35,30 @@ async function dismissFlash(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Read a computed colour once it has stopped changing.
+ *
+ * The badges animate their colour (`transition-colors`), so reading the
+ * value right after a state change catches an intermediate frame.
+ */
+async function settledColour(page: Page, selector: string): Promise<string> {
+  let last: string | null = null;
+  await expect
+    .poll(
+      async () => {
+        const value = await page
+          .locator(selector)
+          .evaluate((el) => getComputedStyle(el).color);
+        const stable = value === last;
+        last = value;
+        return stable;
+      },
+      { timeout: 5000 },
+    )
+    .toBe(true);
+  return last as unknown as string;
+}
+
 /** Create a canvas from the index page and open its editor. */
 async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
   await page.goto('/canvas');
@@ -603,8 +627,7 @@ test.describe('canvas editor layout', () => {
     await expect(page.locator('#canvas-save-state-compact')).toBeVisible();
     await expect(page.locator('#share-canvas-button-compact')).toBeVisible();
 
-    // ... and the three read as one cluster: the same height, the same
-    // rounded border, not a bare glyph among two controls.
+    // ... and the three read as one cluster: the same height.
     const box = async (selector: string) => {
       const b = await page.locator(selector).boundingBox();
       expect(b).not.toBeNull();
@@ -617,15 +640,19 @@ test.describe('canvas editor layout', () => {
     expect(Math.abs(presence.height - status.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(status.height - share.height)).toBeLessThanOrEqual(1);
 
-    const shape = async (selector: string) =>
-      page.locator(selector).evaluate((el) => ({
-        border: getComputedStyle(el).borderTopWidth,
-        radius: getComputedStyle(el).borderTopLeftRadius,
-      }));
+    const colours = async (selector: string) =>
+      page.locator(selector).evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { bg: cs.backgroundColor, color: cs.color };
+      });
 
-    const statusShape = await shape('#canvas-save-state-compact');
-    expect(statusShape.border).toBe('1px');
-    expect(parseFloat(statusShape.radius)).toBeGreaterThanOrEqual(12);
+    // The phone pill carries the same state colours as the desktop badge.
+    const phoneColours = await colours('#canvas-save-state-compact');
+    const desktopColours = await colours('#canvas-save-state-pill');
+    expect(phoneColours.bg).toBe(desktopColours.bg);
+    expect(phoneColours.color).toBe(desktopColours.color);
+    // "Saved" is the primary colour, not the neutral one.
+    expect(phoneColours.bg).not.toBe('rgba(0, 0, 0, 0)');
 
     // ... and the editor header keeps only the title and the description.
     await expect(page.locator('#canvas-presence')).toBeHidden();
@@ -692,6 +719,30 @@ test.describe('canvas editor status pill', () => {
     await expect(tip).toBeVisible();
     await expect(tip).toContainText('just now');
     await expect(tip).toContainText('Last write took');
+  });
+
+  test('marks the unsaved state with the warning colour', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Status Unsaved'));
+
+    const pill = page.locator('#canvas-save-state-pill');
+    const display = page.locator('#md-render-problem-content');
+    await display.click();
+    const textarea = page.locator('#md-problem-content textarea');
+    await textarea.fill('Not saved yet');
+    await textarea.blur();
+
+    // The pill turns amber while the change waits for the idle save.
+    await expect(pill).toContainText('Unsaved');
+
+    const desktop = await settledColour(page, '#canvas-save-state-pill');
+    // Amber, not the neutral foreground the outline variant carries.
+    expect(desktop).not.toBe('rgba(0, 0, 0, 0)');
+    expect(desktop).toContain('oklch');
+
+    // The phone pill uses the same colour.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const phone = await settledColour(page, '#canvas-save-state-compact');
+    expect(phone).toBe(desktop);
   });
 });
 

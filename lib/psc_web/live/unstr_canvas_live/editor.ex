@@ -505,30 +505,22 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     ~H"""
     <UITooltip.tooltip id={"#{@id}-tooltip"}>
       <UITooltip.tooltip_trigger>
-        <%= if @compact do %>
-          <%!-- The same round, bordered shape as the presence pill and the
-          Share button next to it, so the three read as one cluster. --%>
-          <span
-            id={@id}
-            class="inline-flex size-8 items-center justify-center rounded-full border border-base-content/10 transition-colors hover:bg-base-content/5"
-            role="img"
-            aria-label={save_state_label(@save_state)}
-          >
-            <.icon
-              name={status_icon(@save_state)}
-              class={status_icon_class(@save_state)}
-            />
-          </span>
-        <% else %>
-          <UIBadge.badge id={@id} variant={status_variant(@save_state)} class="h-8 shrink-0">
-            <%= if @save_state == :saving do %>
-              <span class="size-3 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
-            <% else %>
-              <.icon name={status_icon(@save_state)} class="size-4" />
-            <% end %>
-            <span>{save_state_pill_label(@save_state)}</span>
-          </UIBadge.badge>
-        <% end %>
+        <%!-- Both renderings use the same badge variant, so the state colours
+        are identical on the desktop and on the phone. --%>
+        <UIBadge.badge
+          id={@id}
+          variant={status_variant(@save_state)}
+          class={status_pill_class(@save_state, @compact)}
+          role={@compact && "img"}
+          aria-label={@compact && save_state_label(@save_state)}
+        >
+          <%= if @save_state == :saving do %>
+            <span class="size-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+          <% else %>
+            <.icon name={status_icon(@save_state)} class="size-5" />
+          <% end %>
+          <span :if={!@compact}>{save_state_pill_label(@save_state)}</span>
+        </UIBadge.badge>
       </UITooltip.tooltip_trigger>
 
       <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
@@ -564,13 +556,30 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp status_icon(:saved), do: "hero-check-circle"
   defp status_icon(_), do: "hero-exclamation-circle"
 
-  defp status_icon_class(:saving), do: "size-5 animate-spin text-base-content/50"
-  defp status_icon_class(:saved), do: "size-5 text-base-content/50"
+  # The state colours, used where the icon stands on its own (the tooltip's
+  # heading). Inside the badge the icon inherits the badge's colour.
+  defp status_icon_class(:saving), do: "size-5 animate-spin text-secondary"
+  defp status_icon_class(:saved), do: "size-5 text-primary"
   defp status_icon_class(_), do: "size-5 text-warning"
 
   defp status_variant(:saving), do: "secondary"
   defp status_variant(:saved), do: "default"
   defp status_variant(_), do: "outline"
+
+  # The badge classes for the pill. The phone renders the same badge as the
+  # desktop — only the label is dropped — so the two can never drift apart.
+  defp status_pill_class(state, compact) do
+    [
+      "shrink-0",
+      if(compact, do: "!size-8 justify-center !p-0", else: "h-8"),
+      # "Unsaved" is the one state the outline variant gives no colour of its
+      # own, so the warning token goes on top of it. The `!` prefix is needed:
+      # the variant sets a text colour of its own.
+      if(state in [:saved, :saving], do: "", else: "!text-warning !border-warning/40")
+    ]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join(" ")
+  end
 
   # "just now" / "2 min ago" — how long ago the last write landed.
   defp last_saved_label(%{last_saved_at: nil}), do: "not yet"

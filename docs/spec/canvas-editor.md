@@ -31,9 +31,12 @@ See `template-designer.md` → **Design System** for the full design direction. 
   the last write landed ("just now", "2 min ago"), how many writes this session made, how
   many failed, and how long the last write took. Hovering opens it on a desktop; a tap opens
   it on a phone, where there is no hover. A failed write keeps the state "unsaved", because
-  the changes are still only in the event log. On phones the pill is a round, bordered
-  control like the presence pill and the Share button next to it, so the three read as one
-  cluster rather than as a bare glyph among two buttons.
+  the changes are still only in the event log.
+
+  Both renderings are the *same* badge — the phone only drops the label — so the state
+  colours cannot drift apart: **Saved** is the primary colour, **Saving** the secondary one,
+  and **Unsaved** the warning colour. The phone pill is a 32 px circle like the presence
+  pill and the Share button next to it, so the three read as one cluster.
 - **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
   `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
   leaves the canvas editor instead of stepping through view selections. The switch itself is
