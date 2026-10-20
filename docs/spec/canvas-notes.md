@@ -226,11 +226,13 @@ airtight.
 
 ### The standalone documents section
 
-`/documents` is parked and unlinked (ADR-018). Notes are the integration that
-ADR-018 anticipated. Once notes ship, the standalone section is retired: its
-routes and LiveViews are removed, and any remaining document rows are migrated
-into a note on a canvas, or deleted — there is one document row in the deployed
-database and no navigation pointing at it.
+`/documents` was parked and unlinked (ADR-018). Notes are the integration that
+ADR-018 anticipated, and the section is now retired: its routes, LiveViews,
+context and tables are gone, and the `documents` and `document_events` tables
+were dropped. The collaborative-text machinery it built now lives in
+`Psc.TextStore` and serves the notes, and its Markdown editor became the
+reusable `PscWeb.Components.MarkdownEditor` — the document editor and the note
+editor are the same component, with different events.
 
 ## Data model summary
 
@@ -242,8 +244,6 @@ users ──┬─< unstr_canvases ──< notes ──< note_events
         │         └── shared_with (array of emails) — the canvas's access list
         │
         └──< unstr_canvas_events
-
-documents ──< document_events          (standalone; retired once notes ship)
 ```
 
 ## Related documents

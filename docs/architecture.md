@@ -31,9 +31,9 @@ flowchart LR
     subgraph CTX["Psc — domain contexts"]
         direction TB
         AC["Accounts<br/>User · UserToken · Scope · UserNotifier"]
-        DC["Documents<br/>Document · DocumentEvent"]
+        DC["Notes<br/>Note · NoteEvent"]
         CA["Canvas<br/>Canvas (12 cell embeds) · UnstrCanvas · CanvasLayout"]
-        SYN["Sync engines<br/>CRDT · SnapshotManager · ConsistencyManager<br/>UnstrCanvasCRDT"]
+        SYN["Sync engines<br/>Text · TextStore<br/>UnstrCanvasCRDT"]
     end
 
     subgraph INF["OTP / infrastructure"]
@@ -86,7 +86,7 @@ flowchart LR
 
 - [design-decisions.md](design-decisions.md) — why these structures are the way they are (ADR log)
 - [supervision_tree.md](supervision_tree.md) — OTP process tree under `Psc.Application`
-- [documents_collaboration_flow.md](documents_collaboration_flow.md) — event-sourced text documents
+- [notes_collaboration_flow.md](notes_collaboration_flow.md) — event-sourced collaborative text (notes)
 - [canvas_collaboration_flow.md](canvas_collaboration_flow.md) — per-cell canvas editing
 - [data_model.md](data_model.md) — Ecto schemas and tables
 - [routing_map.md](routing_map.md) — routes, pipelines, and `live_session` scopes

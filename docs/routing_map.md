@@ -19,7 +19,6 @@ flowchart TD
     end
 
     subgraph PRIV["require_authenticated_user — live_session :require_authenticated_user"]
-        R6["/documents · /documents/:id<br/>(parked — not linked from the nav)"] --> V4["DocumentLive.Index · Editor"]
         R7["/canvas · /canvas/:id"] --> V5["UnstrCanvasLive.Index · Editor<br/>(canvas editor)"]
         R7b["/canvases · /canvases/:id<br/>(redirects to /canvas)"] --> C2["RedirectController"]
         R8["/templates · /templates/new · /templates/:id"] --> V6["CanvasLayoutLive.Index · Editor<br/>(template designer)"]
@@ -31,8 +30,8 @@ flowchart TD
         R12["/dev/mailbox"] --> V10["Swoosh MailboxPreview"]
     end
 
-    V4 --> DC2["Psc.Documents"]
     V5 --> CA2["Psc.Canvas (UnstrCanvas + cells)"]
+    V5 --> NO2["Psc.Notes"]
     V6 --> CA2
     C2 --> CA2
     V3 --> AC2["Psc.Accounts"]

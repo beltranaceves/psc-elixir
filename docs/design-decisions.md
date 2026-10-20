@@ -61,7 +61,7 @@ the configurable canvas (`unstr_canvases`).
 - Loading is `folded state + replay of operations with seq > snapshot_seq` — normally
   a bare read, because saving deletes the operations it covered.
 
-See [documents_collaboration_flow.md](documents_collaboration_flow.md) and
+See [notes_collaboration_flow.md](notes_collaboration_flow.md) and
 [canvas_collaboration_flow.md](canvas_collaboration_flow.md) for the
 sequence diagrams.
 
@@ -82,7 +82,9 @@ sequence diagrams.
   recorded reason for each pivot. Pruning means that feature needs its own substrate
   (explicit version rows), not the operation tables. Recorded as open work below.
 - Replay gives a cheap consistency check: the server can rebuild authoritative state
-  and resync a diverged client (`Psc.Documents.ConsistencyManager`).
+  and resync a diverged client. (This was written when the consistency check
+  lived in `Psc.Documents.ConsistencyManager`; it now lives in the shared store,
+  `Psc.TextStore`.)
 
 ---
 
@@ -112,8 +114,9 @@ once the update is durable (`with {:ok, _} <- result`):
 max_seq = max(max_event_seq, document.snapshot_seq || 0)
 ```
 
-Applied to both `Psc.Documents.save_content_to_db/2` and
-`Psc.Canvas.save_unstr_canvas_content_to_db/2`, which had the identical defect.
+Applied to both the text stores (`Psc.TextStore.save_content/3`, which serves the
+notes) and `Psc.Canvas.save_unstr_canvas_content_to_db/2`, which had the identical
+defect.
 
 **Alternatives considered.** Driving `seq` from a Postgres sequence instead of
 `max(seq)`: removes the "restart at 1" hazard, but the marker still has to be
@@ -678,6 +681,12 @@ the product story. `/documents` remains reachable by direct URL until the integr
 lands; if that is unwanted, the routes can be removed (or redirected) with a one-line
 change. `docs/spec/` still describes the document editor, now explicitly as parked work.
 
+**Superseded by [ADR-027](#adr-027--a-note-is-a-child-of-its-canvas)** (2026-10-20). The
+integration this decision was waiting for has landed: a note is collaborative Markdown
+that lives inside a canvas, and it inherits the canvas's access rules. The standalone
+section is now retired — its routes, LiveViews, context and tables are gone, and the
+collaborative-text machinery it built now serves the notes.
+
 ---
 
 ## ADR-019 — Auth feedback: inline validation plus feedback cards
@@ -1118,9 +1127,13 @@ the duplicate permission system to avoid.
   `/canvas/:id?tab=notes&note=<id>`. There is no `/notes/:id` route, which is
   what keeps the inherited permission model airtight — a note is only ever
   reachable through a canvas the user may open.
-- The standalone `/documents` section is retired once notes ship. It has been
-  parked and unlinked since ADR-018; the deployed database holds one document
-  row and nothing links to the section.
+- The standalone `/documents` section is retired. It had been parked and unlinked since
+  ADR-018; the deployed database held one document row, a deployment smoke-test
+  artefact, and nothing linked to the section. Its routes, LiveViews, context and
+  tables are gone. The collaborative-text machinery it built — the event log, the
+  folded snapshot, the sequencing, the pruning and the consistency check — now
+  lives in `Psc.TextStore` and serves the notes, and the Markdown editor it had
+  became the reusable `PscWeb.Components.MarkdownEditor`.
 
 **Alternatives considered.** Adding `canvas_id` to `documents` (keeps one
 table, but leaves the duplicated `shared_with` and an owner column that means

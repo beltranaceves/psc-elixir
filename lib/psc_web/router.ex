@@ -52,8 +52,6 @@ defmodule PscWeb.Router do
 
     live_session :require_authenticated_user,
       on_mount: [{PscWeb.UserAuth, :require_authenticated}] do
-      live "/documents", DocumentLive.Index, :index
-      live "/documents/:id", DocumentLive.Editor, :show
       live "/canvas", UnstrCanvasLive.Index, :index
       live "/canvas/:id", UnstrCanvasLive.Editor, :edit
       live "/templates", CanvasLayoutLive.Index, :index

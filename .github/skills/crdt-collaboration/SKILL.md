@@ -18,44 +18,43 @@ This skill documents how to implement and operate real-time collaborative text e
 ## Architecture Overview
 
 - Clients send edited text to a LiveView (`phx-change`) which computes deltas and emits events.
-- Each delta is persisted as a `DocumentEvent` in an append-only event log with a monotonic `seq` number.
-- The server broadcasts operations over Phoenix.PubSub to all subscribers for the same document topic.
-- Subscribers apply operations to their local state using `CRDT.apply_operation/2` and push `content_updated` events to the client hook.
-- The client hook (`EditorHook`) updates the textarea while avoiding clobbering the active editor and preserving cursor position.
-- Periodic idle/periodic saves persist full `content` to the `documents` table and record `snapshot_seq` indicating the event seq that the content covers.
-- SnapshotManager replays only events after `snapshot_seq` for efficient loading.
-- ConsistencyManager periodically verifies client state and enforces resyncs when divergence is detected.
+- Each delta is persisted as a `NoteEvent` in an append-only event log with a monotonic `seq` number.
+- The server broadcasts operations over Phoenix.PubSub to all subscribers for the same note topic.
+- Subscribers apply operations to their local state using `Psc.Text.apply_operation/2` and push `content_updated` events to the client hook.
+- The client hook (`MarkdownEditorHook`) updates the textarea while avoiding clobbering the active editor and preserving cursor position.
+- Periodic idle/periodic saves persist full `content` to the `notes` table and record `snapshot_seq` indicating the event seq that the content covers.
+- `Psc.TextStore` replays only events after `snapshot_seq` for efficient loading.
+- The consistency check periodically verifies client state and enforces resyncs when divergence is detected.
 
 ## Key Files (implementation reference)
 
-- LiveView editor: [lib/psc_web/live/document_live/editor.ex](lib/psc_web/live/document_live/editor.ex#L1-L1)
-- Context & orchestration: [lib/psc/documents.ex](lib/psc/documents.ex#L1-L1)
-- CRDT logic (delta compute/apply): [lib/psc/documents/crdt.ex](lib/psc/documents/crdt.ex#L1-L1)
-- Consistency checks: [lib/psc/documents/consistency_manager.ex](lib/psc/documents/consistency_manager.ex#L1-L1)
-- Snapshots: [lib/psc/documents/snapshot_manager.ex](lib/psc/documents/snapshot_manager.ex#L1-L1)
-- Ecto: `Document` schema: [lib/psc/documents/document.ex](lib/psc/documents/document.ex#L1-L1)
-- Ecto: `DocumentEvent` schema: [lib/psc/documents/document_event.ex](lib/psc/documents/document_event.ex#L1-L1)
+- LiveView editor: [lib/psc_web/live/unstr_canvas_live/editor.ex](lib/psc_web/live/unstr_canvas_live/editor.ex#L1-L1)
+- Context & orchestration: [lib/psc/notes.ex](lib/psc/notes.ex#L1-L1)
+- The shared log/snapshot algorithm: [lib/psc/text_store.ex](lib/psc/text_store.ex#L1-L1)
+- CRDT logic (delta compute/apply): [lib/psc/text.ex](lib/psc/text.ex#L1-L1)
+- Ecto: `Note` schema: [lib/psc/notes/note.ex](lib/psc/notes/note.ex#L1-L1)
+- Ecto: `NoteEvent` schema: [lib/psc/notes/note_event.ex](lib/psc/notes/note_event.ex#L1-L1)
 - Presence wrapper: [lib/psc_web/presence.ex](lib/psc_web/presence.ex#L1-L1)
-- Client hook: [assets/js/hooks/editor_hook.js](assets/js/hooks/editor_hook.js#L1-L1)
+- Client hook: [assets/js/hooks/markdown_editor_hook.js](assets/js/hooks/markdown_editor_hook.js#L1-L1)
 
 ## Data Model
 
-- `documents` table (Ecto `Psc.Documents.Document`)
-  - `title`, `content`, `crdt_state` (future), `shared_with`, `snapshot_content`, `snapshot_seq`
+- `notes` table (Ecto `Psc.Notes.Note`)
+  - `title`, `content`, `snapshot_seq`, `canvas_id`, `created_by_id`
   - `content` stores last saved full text; `snapshot_seq` is max event seq included in that content
-  - `shared_with` is an array of emails for simple share-list-based authorization
+  - `canvas_id` is the access rule: a note inherits its canvas's access, and has no `shared_with` of its own
 
-- `document_events` table (Ecto `Psc.Documents.DocumentEvent`)
-  - `operation` (map), `seq` (integer), `document_id`, `user_id`
+- `note_events` table (Ecto `Psc.Notes.NoteEvent`)
+  - `operation` (map), `seq` (integer), `note_id`, `user_id`
   - Append-only event log; `seq` provides deterministic replay order
 
 ## CRDT Design in this repo
 
-- Format: positional deltas per character
-  - Insert: `%{"type" => "insert", "pos" => pos, "char" => char}`
-  - Delete: `%{"type" => "delete", "pos" => pos}`
-- `CRDT.text_to_deltas/2` computes a minimal set of per-character ops by finding the first divergence point and emitting one op per inserted/deleted char.
-- `CRDT.apply_operation/2` applies a single op to a server-side string via slicing.
+- Format: positional deltas per run
+  - Insert: `%{"type" => "insert", "pos" => pos, "text" => text}`
+  - Delete: `%{"type" => "delete", "pos" => pos, "count" => n}`
+- `Psc.Text.text_to_deltas/2` computes a minimal set of ops by finding the first divergence point and emitting one op per inserted/deleted run.
+- `Psc.Text.apply_operation/2` applies a single op to a server-side string via slicing.
 - Concurrency model: server-assigned `seq` numbers serialize operations; event order determines final state.
 
 ## LiveView Behavior

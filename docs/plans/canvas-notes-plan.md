@@ -189,16 +189,19 @@ The canvas editor's **Notes** tab becomes the notes view.
 
 ## Task 6 — Retire the standalone documents section
 
+**Status: done.**
+
 ADR-018 parked the standalone `/documents` section, and notes are the integration
 it anticipated.
 
-- Migrate any remaining document rows (one in the deployed database) into a note
-  on a canvas, or delete them.
-- Remove the `/documents` routes, `PscWeb.DocumentLive` and the
-  `Psc.Documents` façade — leaving the shared store, which the notes use.
-- Remove the `documents` and `document_events` tables in a migration.
-- Keep `Psc.Documents.CRDT`'s history helpers only if the shared store needs
-  them; otherwise they go with the rest.
+- The `documents` and `document_events` tables are dropped. The one document row
+  in the deployed database was a deployment smoke-test artefact, and nothing
+  linked to the section.
+- The `/documents` routes, `PscWeb.DocumentLive` and the `Psc.Documents` context
+  are removed — leaving the shared store, which the notes use.
+- The document editor became the reusable `PscWeb.Components.MarkdownEditor` in
+  task 4, and its status pill became the shared component in task 3, so nothing
+  of value was thrown away.
 
 **Acceptance**
 

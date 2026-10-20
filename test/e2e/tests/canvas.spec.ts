@@ -989,6 +989,11 @@ test.describe('canvas library', () => {
     const card = page.getByRole('heading', { name }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
     const description = card.locator('p').first();
 
+    // The card is rendered by the LiveView patch that follows the creation,
+    // so wait for it before measuring.
+    await expect(card).toBeVisible();
+    await expect(description).toBeVisible();
+
     // The text must not paint outside the card it belongs to.
     const cardBox = await card.boundingBox();
     const descriptionBox = await description.boundingBox();

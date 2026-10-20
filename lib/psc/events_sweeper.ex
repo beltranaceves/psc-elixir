@@ -45,17 +45,16 @@ defmodule Psc.EventsSweeper do
   Run one sweep over every event table. Returns the counts deleted.
   """
   def sweep do
-    document_events = Psc.Documents.sweep_folded_events()
     canvas_events = Psc.Canvas.sweep_folded_events()
     note_events = Psc.Notes.sweep_folded_events()
 
-    if document_events + canvas_events + note_events > 0 do
+    if canvas_events + note_events > 0 do
       Logger.info(
-        "EventsSweeper pruned #{document_events} document_events, " <>
-          "#{canvas_events} unstr_canvas_events and #{note_events} note_events rows"
+        "EventsSweeper pruned #{canvas_events} unstr_canvas_events and " <>
+          "#{note_events} note_events rows"
       )
     end
 
-    {document_events, canvas_events, note_events}
+    {canvas_events, note_events}
   end
 end

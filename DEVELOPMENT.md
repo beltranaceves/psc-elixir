@@ -460,17 +460,17 @@ exemplar and adapt it. These are the files the project already treats as idiomat
 
 | Task | Copy the structure of |
 |---|---|
-| Ecto schema + changeset | `lib/psc/documents/document.ex` |
-| Context module (CRUD + authorization) | `lib/psc/documents.ex` |
-| Pure domain logic / algorithms | `lib/psc/documents/crdt.ex` |
-| List LiveView (index) | `lib/psc_web/live/document_live/index.ex` |
+| Ecto schema + changeset | `lib/psc/notes/note.ex` |
+| Context module (CRUD + authorization) | `lib/psc/notes.ex` |
+| Pure domain logic / algorithms | `lib/psc/text.ex` |
+| List LiveView (index) | `lib/psc_web/live/canvas_layout_live/index.ex` |
 | Editor LiveView (events, forms) | `lib/psc_web/live/canvas_layout_live/editor.ex` |
-| LiveView with CRDT + presence + timers | `lib/psc_web/live/document_live/editor.ex` |
-| Context test | `test/psc/documents_test.exs` |
-| Pure-function test | `test/psc/documents/crdt_test.exs` |
-| LiveView test | `test/psc_web/live/document_live_test.exs` |
-| Test fixtures | `test/support/fixtures/document_fixtures.ex` |
-| Playwright E2E test | `test/e2e/tests/smoke.spec.ts` |
+| LiveView with CRDT + presence + timers | `lib/psc_web/live/unstr_canvas_live/editor.ex` |
+| Context test | `test/psc/notes_test.exs` |
+| Pure-function test | `test/psc_web/markdown_test.exs` |
+| LiveView test | `test/psc_web/live/canvas_notes_live_test.exs` |
+| Test fixtures | `test/support/fixtures/notes_fixtures.ex` |
+| Playwright E2E test | `test/e2e/tests/notes.spec.ts` |
 
 **Vision-first verification.** When a change affects the UI, a screenshot is **mandatory
 evidence**. Reasoning about markup is expensive and unreliable; *looking* at the rendered page is

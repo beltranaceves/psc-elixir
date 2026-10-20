@@ -32,4 +32,4 @@ Repo, PubSub, and Presence are up.
 ## Related diagrams
 
 - [architecture.md](architecture.md) — system-wide layering
-- [documents_collaboration_flow.md](documents_collaboration_flow.md) — how PubSub and Presence are used
+- [notes_collaboration_flow.md](notes_collaboration_flow.md) — how PubSub and Presence are used

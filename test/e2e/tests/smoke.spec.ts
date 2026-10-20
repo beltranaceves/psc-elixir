@@ -11,12 +11,6 @@ function uniqueName(label: string): string {
 }
 
 test.describe('authenticated app', () => {
-  test('documents index loads', async ({ page }) => {
-    await page.goto('/documents');
-    await expect(page).toHaveURL(/\/documents/);
-    await expect(page.getByRole('heading', { level: 1, name: 'My Documents' })).toBeVisible();
-  });
-
   test('canvases index loads', async ({ page }) => {
     await page.goto('/canvas');
     await expect(page).toHaveURL(/\/canvas/);

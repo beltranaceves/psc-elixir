@@ -19,7 +19,7 @@ defmodule PscWeb.UserSessionController do
         UserAuth.disconnect_sessions(tokens_to_disconnect)
 
         # Sign-up lands in the workspace: a stale :user_return_to from an
-        # earlier signed-out visit (e.g. /documents) must not hijack it.
+        # earlier signed-out visit must not hijack it.
         conn
         |> delete_session(:user_return_to)
         |> put_flash(:info, info)

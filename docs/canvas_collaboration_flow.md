@@ -41,5 +41,5 @@ State-shape rules that must stay consistent across the editor, templates, and re
 ## Related diagrams
 
 - [architecture.md](architecture.md) — system-wide layering
-- [documents_collaboration_flow.md](documents_collaboration_flow.md) — the text-document equivalent
+- [notes_collaboration_flow.md](notes_collaboration_flow.md) — the text-document equivalent
 - [data_model.md](data_model.md) — `unstr_canvases` / `unstr_canvas_events` tables

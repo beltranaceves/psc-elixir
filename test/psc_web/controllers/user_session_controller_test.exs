@@ -107,7 +107,7 @@ defmodule PscWeb.UserSessionControllerTest do
 
       conn =
         conn
-        |> init_test_session(user_return_to: ~p"/documents")
+        |> init_test_session(user_return_to: ~p"/canvas")
         |> post(~p"/users/log-in", %{"user" => %{"token" => token}})
 
       assert redirected_to(conn) == ~p"/"
