@@ -158,6 +158,69 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       assert canvas.notes_mode == "single"
     end
 
+    test "a template can carry notes, and a canvas inherits them", %{conn: conn, user: user} do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+      lv |> element("button[phx-click='add_note']") |> render_click()
+
+      assert has_element?(lv, "#template-notes")
+
+      lv
+      |> form("#template-note-0-title-form", %{"index" => "0", "value" => "Framing questions"})
+      |> render_change()
+
+      lv
+      |> form("#template-note-0-content-form", %{
+        "index" => "0",
+        "value" => "What is the actual problem?"
+      })
+      |> render_change()
+
+      lv
+      |> form("#template-form", %{"name" => "Notes Tpl", "description" => ""})
+      |> render_submit()
+
+      assert [template] = Canvas.list_templates(user)
+
+      assert [%{"title" => "Framing questions", "content" => content}] =
+               template.layout_map["notes"]
+
+      assert content == "What is the actual problem?"
+
+      # A canvas made from it starts with a copy of the note.
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      assert [note] = Psc.Notes.list_notes(canvas.id)
+      assert note.title == "Framing questions"
+      assert Psc.Notes.get_note_content(note.id) == "What is the actual problem?"
+
+      # The copy is independent: editing the canvas's note leaves the template
+      # alone.
+      assert {:ok, _note} = Psc.Notes.update_note(note, %{content: "Changed"})
+
+      assert template.layout_map["notes"] == [
+               %{"title" => "Framing questions", "content" => content}
+             ]
+    end
+
+    test "switching a template to the scratchpad mode keeps only the first note", %{
+      conn: conn
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/templates/new")
+
+      lv |> element("button[phx-click='add_note']") |> render_click()
+      lv |> element("button[phx-click='add_note']") |> render_click()
+      assert has_element?(lv, "#template-note-0")
+      assert has_element?(lv, "#template-note-1")
+
+      lv |> element("#notes-mode-single") |> render_click()
+
+      assert has_element?(lv, "#template-note-0")
+      refute has_element?(lv, "#template-note-1")
+    end
+
     test "edits cell details directly in the grid", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/templates/new")
 

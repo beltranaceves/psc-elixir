@@ -12,19 +12,32 @@ function uniqueName(label: string): string {
   return `${label} ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+async function dismissFlash(page: import('@playwright/test').Page): Promise<void> {
+  const close = page.locator('#flash-group').getByRole('button', { name: 'close' }).first();
+  if (await close.isVisible().catch(() => false)) {
+    await close.click();
+    await expect(close).toBeHidden();
+  }
+}
+
 async function createCanvasAndOpen(page: import('@playwright/test').Page, name: string) {
   await page.goto('/canvas');
   await page.locator('.phx-connected').first().waitFor();
 
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
-  await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
 
+  // The success flash auto-dismisses, so it is not a reliable assertion.
+  // The new card is durable proof that the creation round trip landed.
   // The list holds every canvas, and the tests run in parallel, so the card
   // is found by name rather than by position.
   const card = page
     .getByRole('heading', { name })
     .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+  await expect(card).toBeVisible({ timeout: 15_000 });
+
+  await dismissFlash(page);
+
   await card.getByRole('link', { name: 'Edit' }).click();
   await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
   await expect(page.locator('#canvas-name-form')).toBeVisible();
@@ -146,6 +159,50 @@ test.describe('canvas notes', () => {
     await expect(tip).toContainText('Writes this session');
   });
 
+  test('a template can carry notes, and a canvas inherits them', async ({ page }) => {
+    const templateName = uniqueName('Notes Template');
+
+    // The template designer authors the notes.
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await page.getByRole('button', { name: 'Add Row' }).click();
+    await page.getByRole('button', { name: 'Add note' }).click();
+
+    await page.locator('#template-notes input[name="value"]').first().fill('Framing questions');
+    await page
+      .locator('#template-notes textarea[name="value"]')
+      .first()
+      .fill('What is the actual problem?');
+
+    await page.locator('#template-form input[name="name"]').fill(templateName);
+    await page.getByRole('button', { name: 'Save Template' }).click();
+    await page.waitForURL(/\/templates$/);
+
+    // A canvas made from it starts with the note.
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+    const canvasName = uniqueName('Inherited Notes');
+    await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
+    await page.getByLabel('Start from').selectOption({ label: templateName });
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+
+    const card = page
+      .getByRole('heading', { name: canvasName })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await dismissFlash(page);
+
+    await card.getByRole('link', { name: 'Edit' }).click();
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+
+    await page.locator('#canvas-tab-notes').click();
+    await expect(page.locator('#canvas-notes-items')).toContainText('Framing questions');
+    await expect(page.locator('#canvas-notes-items')).toContainText(
+      'What is the actual problem?',
+    );
+  });
+
   test('a scratchpad template gives a canvas one note and no list', async ({ page }) => {
     await page.goto('/templates/new');
     await page.locator('.phx-connected').first().waitFor();
@@ -169,11 +226,13 @@ test.describe('canvas notes', () => {
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
     await page.getByLabel('Start from').selectOption({ label: templateName });
     await page.getByRole('button', { name: 'Create Canvas' }).click();
-    await expect(page.locator('#flash-group')).toContainText('Canvas created successfully');
 
     const card = page
       .getByRole('heading', { name: canvasName })
       .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await dismissFlash(page);
+
     await card.getByRole('link', { name: 'Edit' }).click();
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
 

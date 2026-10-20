@@ -1227,6 +1227,17 @@ scratchpad, and nothing else". A scratchpad canvas is still a normal canvas
 otherwise — the note is still collaborative Markdown, still inherits the canvas's
 access, and the canvas owner can still rename it.
 
+**Addendum (2026-10-20): a template carries its notes too.** The mode decided
+*how many* notes a canvas has, not what they say. A template can now also carry
+the notes themselves: they live in the template's `layout_map` under `"notes"`,
+the designer authors them, and a canvas made from the template starts with a
+copy — the same way it starts with a copy of the template's cells.
+
+The copy is independent, exactly as the cell copy is (ADR-009): editing a note
+in the canvas never touches the template. The scratchpad mode holds one note, so
+switching a template that carries several notes to that mode keeps the first and
+drops the rest.
+
 ## Measurement summary
 
 Numbers referenced above, all taken on 2026-10-18 against a local Postgres and the

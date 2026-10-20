@@ -155,6 +155,11 @@ defmodule Psc.Canvas do
   (flat cell keys with row/column metadata and field values), per the
   editor spec.
 
+  The template's notes are copied too: a note is part of the template's
+  definition, so a canvas made from it starts with the same notes. The copy
+  is independent — editing a note in the canvas never touches the template
+  (ADR-009).
+
   `overrides` lets the caller supply a user-chosen name/description; anything
   not given falls back to the template's own values.
   """
@@ -179,7 +184,10 @@ defmodule Psc.Canvas do
       }
       |> Map.merge(Map.reject(overrides || %{}, fn {_k, v} -> is_nil(v) or v == "" end))
 
-    create_unstr_canvas(user_id, attrs)
+    with {:ok, canvas} <- create_unstr_canvas(user_id, attrs) do
+      Psc.Notes.seed_notes(canvas, lm["notes"] || [])
+      {:ok, canvas}
+    end
   end
 
   defp put_instantiated_cells(cells, template_cells, layout, rows, columns) do

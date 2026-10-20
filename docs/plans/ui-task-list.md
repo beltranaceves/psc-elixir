@@ -385,6 +385,14 @@ one, label dropped — so the state colours are identical by construction: **Sav
 primary colour, **Saving** the secondary one, **Unsaved** the warning colour (the outline
 variant carries no colour of its own, so the warning token goes on top of it).
 
+**Follow-up (2026-10-20): templates carry notes.** A template can now come with
+notes: the designer authors them in its Notes section (a title and a Markdown
+body each), and a canvas made from the template starts with a copy — the same
+way it starts with a copy of the template's cells. The copy is independent, so
+editing a note in the canvas never touches the template. The scratchpad mode
+holds one note, so switching a template that carries several to that mode
+keeps the first and drops the rest.
+
 **Follow-up (2026-10-20): the editor's focus ring follows its rounded frame.** The
 Markdown editor's textarea is square-cornered, so the focus ring it painted for
 itself cut across the rounded frame around it. The editor now draws the frame —

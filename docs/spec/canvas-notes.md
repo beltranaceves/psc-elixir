@@ -184,6 +184,25 @@ when the canvas is instantiated. A canvas made before this setting existed gets
 Everything else is the same — the note is still collaborative Markdown, it still
 inherits the canvas's access, and the canvas owner can still rename it.
 
+### Notes a template carries
+
+A template can come with notes. A canvas made from it starts with a copy of
+them, the same way it starts with a copy of the template's cells.
+
+The template's notes are part of its definition, so they live in the template's
+`layout_map` under `"notes"` — a list of `%{"title" => ..., "content" => ...}`.
+The **template designer** authors them in its Notes section: an *Add note*
+action, and a card per note with a title and a Markdown body.
+
+- In `multi` mode the designer holds any number of them, and the canvas starts
+  with all of them.
+- In `single` mode there is only the scratchpad, so the designer holds one —
+  switching a template that carries several notes to the scratchpad mode keeps
+  the first and drops the rest.
+
+The copy is **independent**: editing a note in the canvas never touches the
+template, exactly as editing a cell never does (ADR-009).
+
 ### The Notes view
 
 The canvas editor's tab strip already has a **Notes** tab, currently a

@@ -277,6 +277,15 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
    [ADR-029](../design-decisions.md#adr-029--a-template-picks-its-note-mode) and
    [canvas-notes.md](canvas-notes.md).
 
+6. **Notes the template carries** — under the mode picker, the designer holds
+   the notes a canvas made from this template starts with: an *Add note* action
+   and a card per note with a title and a Markdown body. They are stored in the
+   template's `layout_map` under `"notes"` and copied onto the canvas when it is
+   instantiated. In the scratchpad mode there is only one, so switching a
+   template that carries several notes to that mode keeps the first and drops
+   the rest. The copy is independent: editing a note in the canvas never
+   touches the template.
+
 ### Validation rules
 
 - At least 1 row and 1 column.

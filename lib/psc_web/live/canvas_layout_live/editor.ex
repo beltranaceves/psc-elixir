@@ -79,10 +79,52 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # canvases made from it behave. Only the owner may change it.
   def handle_event("set_notes_mode", %{"mode" => mode}, socket) do
     if socket.assigns.owner? and mode in NotesMode.modes() do
-      {:noreply, update_layout(socket, &Map.put(&1, "notes_mode", mode))}
+      {:noreply,
+       update_layout(socket, fn lm ->
+         lm
+         |> Map.put("notes_mode", mode)
+         |> apply_notes_mode()
+       end)}
     else
       {:noreply, socket}
     end
+  end
+
+  # A note the template carries. A canvas made from it starts with a copy.
+  def handle_event("add_note", _params, socket) do
+    if socket.assigns.owner? do
+      {:noreply,
+       update_layout(socket, fn lm ->
+         notes = Map.get(lm, "notes", []) ++ [%{"title" => "", "content" => ""}]
+         Map.put(lm, "notes", notes)
+       end)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("remove_note", %{"index" => index}, socket) do
+    if socket.assigns.owner? do
+      {:noreply,
+       update_layout(socket, fn lm ->
+         Map.put(lm, "notes", List.delete_at(Map.get(lm, "notes", []), String.to_integer(index)))
+       end)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("update_note_title", %{"index" => index, "value" => title}, socket) do
+    {:noreply,
+     update_layout(socket, &update_template_note(&1, String.to_integer(index), "title", title))}
+  end
+
+  def handle_event("update_note_content", %{"index" => index, "value" => content}, socket) do
+    {:noreply,
+     update_layout(
+       socket,
+       &update_template_note(&1, String.to_integer(index), "content", content)
+     )}
   end
 
   def handle_event("remove_column", %{"index" => index}, socket) do
@@ -324,6 +366,22 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   # ─── Layout map helpers ───
 
+  # Update one field of one of the template's notes. The notes list may be
+  # missing entirely on a template saved before notes existed, so the list is
+  # rebuilt rather than indexed into.
+  defp update_template_note(lm, index, key, value) do
+    notes =
+      lm
+      |> Map.get("notes", [])
+      |> Enum.with_index()
+      |> Enum.map(fn
+        {note, ^index} -> Map.put(note, key, value)
+        {note, _other} -> note
+      end)
+
+    Map.put(lm, "notes", notes)
+  end
+
   defp update_layout(socket, fun) do
     socket
     |> assign(:layout_map, fun.(socket.assigns.layout_map))
@@ -336,8 +394,32 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       "columns" => [],
       "layout" => [],
       "cells" => %{},
+      "notes" => [],
       "notes_mode" => NotesMode.default()
     }
+  end
+
+  # The template's notes, each with a title and a body. A template saved
+  # before notes existed has none.
+  defp normalize_template_notes(notes) when is_list(notes) do
+    Enum.map(notes, fn note ->
+      %{
+        "title" => note["title"] || "",
+        "content" => note["content"] || ""
+      }
+    end)
+  end
+
+  defp normalize_template_notes(_notes), do: []
+
+  # A scratchpad holds one note. Switching a template that carries several
+  # notes to the scratchpad mode keeps the first one and drops the rest.
+  defp apply_notes_mode(lm) do
+    if NotesMode.single?(lm["notes_mode"]) do
+      Map.put(lm, "notes", Enum.take(Map.get(lm, "notes", []), 1))
+    else
+      lm
+    end
   end
 
   defp empty_cell_meta do
@@ -359,7 +441,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       |> Map.put_new("columns", [])
       |> Map.put_new("layout", [])
       |> Map.put_new("cells", %{})
+      |> Map.put("notes", normalize_template_notes(lm["notes"]))
       |> Map.put("notes_mode", NotesMode.normalize(lm["notes_mode"]))
+      |> apply_notes_mode()
 
     rows = lm["rows"]
     columns = lm["columns"]
@@ -561,6 +645,84 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                     {NotesMode.label(mode)}
                   </button>
                 <% end %>
+              </div>
+
+              <%!-- The template's notes. A canvas made from this template
+              starts with a copy of them. --%>
+              <div class="mt-4 border-t border-base-content/10 pt-4">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-xs font-medium uppercase tracking-wide text-base-content/50">
+                    <%= if @layout_map["notes_mode"] == "single" do %>
+                      Scratchpad content
+                    <% else %>
+                      Notes
+                    <% end %>
+                  </h3>
+                  <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
+                    <UIButton.button variant="outline" size="sm" phx-click="add_note">
+                      <.icon name="hero-plus" class="size-4" /> Add note
+                    </UIButton.button>
+                  <% end %>
+                </div>
+
+                <p class="mt-1 text-xs text-base-content/45">
+                  <%= if @layout_map["notes_mode"] == "single" do %>
+                    The scratchpad every canvas from this template starts with.
+                  <% else %>
+                    Canvases made from this template start with these notes.
+                  <% end %>
+                </p>
+
+                <div id="template-notes" class="mt-3 space-y-3">
+                  <%= for {note, index} <- Enum.with_index(@layout_map["notes"] || []) do %>
+                    <div
+                      id={"template-note-#{index}"}
+                      class="rounded-lg border border-base-content/10 bg-base-200/60 p-3"
+                    >
+                      <div class="flex items-start gap-2">
+                        <form
+                          id={"template-note-#{index}-title-form"}
+                          phx-change="update_note_title"
+                          class="min-w-0 flex-1"
+                        >
+                          <input type="hidden" name="index" value={index} />
+                          <input
+                            type="text"
+                            name="value"
+                            value={note["title"]}
+                            phx-debounce="300"
+                            placeholder="Note title"
+                            class="w-full border-b border-transparent bg-transparent text-sm font-medium text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary focus:outline-none"
+                          />
+                        </form>
+                        <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
+                          <button
+                            type="button"
+                            phx-click="remove_note"
+                            phx-value-index={index}
+                            class="shrink-0 rounded-md p-1 text-base-content/40 transition-colors hover:bg-base-content/5 hover:text-error"
+                            aria-label="Remove note"
+                          >
+                            <.icon name="hero-x-mark" class="size-4" />
+                          </button>
+                        <% end %>
+                      </div>
+                      <form
+                        id={"template-note-#{index}-content-form"}
+                        phx-change="update_note_content"
+                        class="mt-2"
+                      >
+                        <input type="hidden" name="index" value={index} />
+                        <textarea
+                          name="value"
+                          placeholder="The note's Markdown…"
+                          rows="3"
+                          class="w-full resize-y rounded-md border border-base-content/10 bg-base-100 p-2 font-mono text-xs leading-5 text-base-content placeholder-base-content/40 focus:border-primary focus:outline-none"
+                        >{note["content"]}</textarea>
+                      </form>
+                    </div>
+                  <% end %>
+                </div>
               </div>
             </div>
 

@@ -66,6 +66,29 @@ defmodule Psc.Notes do
   end
 
   @doc """
+  Copy a template's notes onto a canvas.
+
+  A template's notes are part of its definition, so a canvas made from it
+  starts with the same notes. The copy is independent: editing a note in the
+  canvas never touches the template (ADR-009).
+
+  Each entry is `%{"title" => ..., "content" => ...}`. A template that
+  carries no notes simply produces a canvas without any.
+  """
+  def seed_notes(canvas, notes) do
+    author_id = canvas.author_id
+
+    Enum.each(List.wrap(notes), fn note ->
+      create_note(canvas.id, author_id, %{
+        title: note["title"] || "Untitled note",
+        content: note["content"] || ""
+      })
+    end)
+
+    canvas
+  end
+
+  @doc """
   Update a note's title and content.
   """
   def update_note(note, attrs) do
