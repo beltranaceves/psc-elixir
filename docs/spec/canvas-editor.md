@@ -31,7 +31,9 @@ See `template-designer.md` → **Design System** for the full design direction. 
   the last write landed ("just now", "2 min ago"), how many writes this session made, how
   many failed, and how long the last write took. Hovering opens it on a desktop; a tap opens
   it on a phone, where there is no hover. A failed write keeps the state "unsaved", because
-  the changes are still only in the event log.
+  the changes are still only in the event log. On phones the pill is a round, bordered
+  control like the presence pill and the Share button next to it, so the three read as one
+  cluster rather than as a bare glyph among two buttons.
 - **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
   `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
   leaves the canvas editor instead of stepping through view selections. The switch itself is

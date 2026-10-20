@@ -357,7 +357,10 @@ canvas title (an icon in the app header on phones) now opens a tooltip with the 
 when the last write landed, how many writes this session made, how many failed, and how
 long the last write took. Hovering opens it on a desktop, a tap on a phone. The save path
 keeps the result of the write instead of discarding it, so a failed write is counted and
-leaves the state "unsaved" — the changes are still only in the event log.
+leaves the state "unsaved" — the changes are still only in the event log. On phones the
+pill is a round, bordered control like the presence pill and the Share button next to it
+(measured: all three are 32 px tall with a 1 px border and a full radius), so the header
+cluster reads as one row of controls.
 
 **Follow-up (2026-10-20): the page no longer scrolls on a phone.** The body was
 `min-h-screen` (100vh) while the app is sized in `dvh` (100dvh). On a phone 100vh is the

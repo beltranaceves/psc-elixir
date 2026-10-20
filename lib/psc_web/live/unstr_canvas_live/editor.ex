@@ -506,9 +506,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     <UITooltip.tooltip id={"#{@id}-tooltip"}>
       <UITooltip.tooltip_trigger>
         <%= if @compact do %>
+          <%!-- The same round, bordered shape as the presence pill and the
+          Share button next to it, so the three read as one cluster. --%>
           <span
             id={@id}
-            class="inline-flex size-8 items-center justify-center"
+            class="inline-flex size-8 items-center justify-center rounded-full border border-base-content/10 transition-colors hover:bg-base-content/5"
             role="img"
             aria-label={save_state_label(@save_state)}
           >
@@ -562,9 +564,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp status_icon(:saved), do: "hero-check-circle"
   defp status_icon(_), do: "hero-exclamation-circle"
 
-  defp status_icon_class(:saving), do: "size-4 animate-spin text-base-content/50"
-  defp status_icon_class(:saved), do: "size-4 text-base-content/40"
-  defp status_icon_class(_), do: "size-4 text-warning"
+  defp status_icon_class(:saving), do: "size-5 animate-spin text-base-content/50"
+  defp status_icon_class(:saved), do: "size-5 text-base-content/50"
+  defp status_icon_class(_), do: "size-5 text-warning"
 
   defp status_variant(:saving), do: "secondary"
   defp status_variant(:saved), do: "default"

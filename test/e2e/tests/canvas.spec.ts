@@ -603,6 +603,30 @@ test.describe('canvas editor layout', () => {
     await expect(page.locator('#canvas-save-state-compact')).toBeVisible();
     await expect(page.locator('#share-canvas-button-compact')).toBeVisible();
 
+    // ... and the three read as one cluster: the same height, the same
+    // rounded border, not a bare glyph among two controls.
+    const box = async (selector: string) => {
+      const b = await page.locator(selector).boundingBox();
+      expect(b).not.toBeNull();
+      return b!;
+    };
+    const presence = await box('#canvas-presence-compact');
+    const status = await box('#canvas-save-state-compact');
+    const share = await box('#share-canvas-button-compact');
+
+    expect(Math.abs(presence.height - status.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(status.height - share.height)).toBeLessThanOrEqual(1);
+
+    const shape = async (selector: string) =>
+      page.locator(selector).evaluate((el) => ({
+        border: getComputedStyle(el).borderTopWidth,
+        radius: getComputedStyle(el).borderTopLeftRadius,
+      }));
+
+    const statusShape = await shape('#canvas-save-state-compact');
+    expect(statusShape.border).toBe('1px');
+    expect(parseFloat(statusShape.radius)).toBeGreaterThanOrEqual(12);
+
     // ... and the editor header keeps only the title and the description.
     await expect(page.locator('#canvas-presence')).toBeHidden();
     await expect(page.locator('#canvas-save-state')).toBeHidden();
