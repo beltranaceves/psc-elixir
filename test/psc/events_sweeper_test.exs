@@ -8,9 +8,11 @@ defmodule Psc.EventsSweeperTest do
   alias Psc.Canvas
   alias Psc.Documents
   alias Psc.EventsSweeper
+  alias Psc.Notes
+  alias Psc.NotesFixtures
 
   describe "sweep/0" do
-    test "prunes folded rows from both event tables" do
+    test "prunes folded rows from every event table" do
       user = Psc.AccountsFixtures.user_fixture()
 
       {:ok, document} = Documents.create_document(user.id, %{title: "Sweep doc"})
@@ -35,19 +37,33 @@ defmodule Psc.EventsSweeperTest do
       cells = Canvas.get_unstr_canvas_content(canvas.id)
       {:ok, _} = Canvas.save_unstr_canvas_content_to_db(canvas.id, cells)
 
+      note = NotesFixtures.note_fixture(%{user: user})
+
+      {:ok, 1} =
+        Notes.apply_operation(note.id, user.id, %{
+          "type" => "insert",
+          "pos" => 0,
+          "text" => "ab"
+        })
+
+      {:ok, _} = Notes.save_content_to_db(note.id, "ab")
+
       # Re-create the rows that escaped pruning, so the marker covers them and
       # the saved content already includes them.
       insert_legacy_document_event(document, user, 1)
       insert_legacy_canvas_event(canvas, user, 1)
+      insert_legacy_note_event(note, user, 1)
 
-      assert {1, 1} = EventsSweeper.sweep()
+      assert {1, 1, 1} = EventsSweeper.sweep()
 
       assert Repo.aggregate(from(e in Documents.DocumentEvent), :count) == 0
       assert Repo.aggregate(from(e in Canvas.UnstrCanvasEvent), :count) == 0
+      assert Repo.aggregate(from(e in Notes.NoteEvent), :count) == 0
 
       # Folded state is still loadable after the sweep
       assert Documents.get_document_content(document.id) == "ab"
       assert Canvas.get_unstr_canvas_content(canvas.id)["$name"] == "Renamed"
+      assert Notes.get_note_content(note.id) == "ab"
     end
 
     test "returns zeros when there is nothing to prune" do
@@ -61,7 +77,7 @@ defmodule Psc.EventsSweeperTest do
           "text" => "pending"
         })
 
-      assert {0, 0} = EventsSweeper.sweep()
+      assert {0, 0, 0} = EventsSweeper.sweep()
       assert Documents.pending_event_count(document.id) == 1
     end
   end
@@ -112,6 +128,17 @@ defmodule Psc.EventsSweeperTest do
       user_id: user.id,
       seq: seq,
       operation: %{"type" => "update_name", "value" => "Renamed"}
+    })
+    |> Repo.insert!()
+  end
+
+  defp insert_legacy_note_event(note, user, seq) do
+    %Notes.NoteEvent{}
+    |> Notes.NoteEvent.changeset(%{
+      note_id: note.id,
+      user_id: user.id,
+      seq: seq,
+      operation: %{"type" => "insert", "pos" => 0, "text" => "ab"}
     })
     |> Repo.insert!()
   end

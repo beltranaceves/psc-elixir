@@ -14,6 +14,9 @@ defmodule Psc.Canvas.UnstrCanvas do
     field :snapshot_seq, :integer, default: 0
     has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
 
+    # A note belongs to a canvas and inherits its access rules.
+    has_many :notes, Psc.Notes.Note, foreign_key: :canvas_id, on_delete: :delete_all
+
     field :cells, :map,
       default: %{
         "columns" => [

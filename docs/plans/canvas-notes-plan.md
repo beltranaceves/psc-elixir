@@ -67,6 +67,8 @@ replayed. It is easy to "simplify" this into a bug. See ADR-001/ADR-002.
 
 ## Task 2 — The notes aggregate
 
+**Status: done.**
+
 - Migration `create_notes_and_note_events`:
   - `notes`: `id` (`binary_id`), `canvas_id` (`binary_id`, FK →
     `unstr_canvases.id`, `on_delete: :delete_all`, not null), `title`, `content`
