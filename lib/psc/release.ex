@@ -23,7 +23,10 @@ defmodule Psc.Release do
   end
 
   defp load_app do
-    # Many platforms require SSL when connecting to the database
+    # Some platforms require SSL when connecting to the database, so the
+    # application is started when it is there. It is not an error when it is
+    # not: a database next to the app is reached in plain text, and the slim
+    # Elixir image has no :ssl application at all.
     Application.ensure_all_started(:ssl)
     Application.ensure_loaded(@app)
   end

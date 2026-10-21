@@ -273,6 +273,35 @@ set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && mix run scripts/my_check.exs
 
 See also "Backend Stress/Validity Scripts" below.
 
+### Deploying: what the app expects from its host
+
+The app is deployed two ways, and they differ in three environment variables.
+
+| Variable | Gigalixir | A Docker Compose / Dokploy setup |
+|---|---|---|
+| `DATABASE_URL` | set by the platform (`ecto://…@<free-tier-db>.db.gigalixir.net:5432/…`) | set by you, e.g. `ecto://psc:pw@postgres:5432/psc_elixir` |
+| `SECRET_KEY_BASE` | `gigalixir config:set SECRET_KEY_BASE <value>` | an env var in the compose file |
+| `PHX_HOST` | the app's public hostname | the public hostname (`https://…` by default) |
+| `PHX_SERVER` | set by the platform's Procfile | `true` |
+| `PSC_DB_SSL` | not needed (the host is public, so SSL is on) | not needed (the host is a compose service, so SSL is off) |
+
+**The database's SSL follows its host.** A public host — Gigalixir's managed Postgres —
+is reached over the internet, so the connection is encrypted; a database on the same
+machine or a private network is reached in plain text. `PSC_DB_SSL=true|false` overrides
+the decision.
+
+It has to be decided rather than hard-coded: the official Postgres image *does* offer SSL
+(it generates a self-signed certificate at init), but a deployment that starts Postgres
+with `ssl = off` does not, and the connection then dies with
+`Postgrex.Error) ssl not available`. Forcing SSL on a slim Elixir image is worse: it has
+no `:ssl` application at all.
+
+**The public URL is the proxy's, not the app's.** `config :psc, PscWeb.Endpoint, url:`
+drives the URLs Phoenix generates (redirects, emails), so it describes what the browser
+sees: `https` on 443 when a proxy terminates TLS in front of the app (both Gigalixir and
+Dokploy/Traefik do). A deployment served over plain HTTP on a port of its own sets
+`PSC_URL_SCHEME=http` and `PSC_URL_PORT=<port>`.
+
 ### Toolchain
 
 - **NIF extension (`nif.fix`).** Erlang on Windows resolves NIFs as `.dll`, but `elixir_make`

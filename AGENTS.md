@@ -102,9 +102,13 @@ applied everything); it prints migration output only when it actually applies so
   honor *numeric* values of `PSC_PORT`/`PORT`; otherwise **listen on 4000** (their health
   check + proxy port). Symptoms if wrong: boot crash
   `binary_to_integer("tcp://…")` or pod stuck "isn't listening on port 4000 yet".
-- **SSL is mandatory** for Gigalixir Postgres: `ssl: true` + `ssl_opts: [verify: :verify_none]`
-  in the prod block. Symptom if missing: app boots Healthy but every DB call hangs
-  ("push timeout" on LiveView events).
+- **The database's SSL is decided by its host**, not hard-coded: a public host (Gigalixir's
+  managed Postgres) gets `ssl: [verify: :verify_none]`, a local or private one does not.
+  A container next to the app usually has no SSL to offer, and the slim Elixir image has
+  no `:ssl` application at all — forcing SSL there kills the connection with
+  `Postgrex.Error) ssl not available`. `PSC_DB_SSL=true|false` overrides the decision.
+  Gigalixir needs SSL: without it the app boots Healthy but every DB call hangs ("push
+  timeout" on LiveView events).
 - `SECRET_KEY_BASE` via `config:set` — generate with `mix.bat phx.gen.secret` **from the
   project dir** (a temp-dir run silently yields an EMPTY secret).
 

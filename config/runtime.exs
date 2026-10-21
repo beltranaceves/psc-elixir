@@ -55,16 +55,55 @@ if config_env() == :prod do
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
   config :psc, Psc.Repo,
-    # Gigalixir Postgres requires SSL. Certificate verification is relaxed
-    # for the free-tier demo; switch to verify_peer + cacerts for production
-    # databases (see Postgrex docs on :ssl_opts).
-    ssl: true,
-    ssl_opts: [verify: :verify_none],
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     # For machines with several cores, consider starting multiple pools of `pool_size`
     # pool_count: 4,
     socket_options: maybe_ipv6
+
+  # The database connection's SSL.
+  #
+  # It is not a universal yes: Gigalixir's managed Postgres *requires* it,
+  # while a Postgres container next to the app usually does not offer it (and
+  # the slim Elixir image has no :ssl application at all - the connection dies
+  # with "ssl not available"). The host decides by default: a database on the
+  # same machine or a private network is reached in plain text, anything else
+  # is encrypted. `PSC_DB_SSL=true|false` overrides the decision.
+  #
+  # A bare host without a dot is a compose service ("postgres", "db") or a
+  # container name - a public hostname always has a dot in it - and the private
+  # address ranges are the ones a local network uses.
+  database_host =
+    case URI.parse(database_url) do
+      %URI{host: host} when is_binary(host) -> host
+      _other -> ""
+    end
+
+  private_address? =
+    case database_host |> String.split(".") |> Enum.map(&Integer.parse/1) do
+      [{10, ""}, _, _, _] -> true
+      [{172, ""}, {second, ""}, _, _] when second in 16..31 -> true
+      [{192, ""}, {168, ""}, _, _] -> true
+      _other -> false
+    end
+
+  local_database? =
+    database_host in ["", "localhost", "127.0.0.1", "::1"] or
+      not String.contains?(database_host, ".") or
+      private_address?
+
+  database_ssl? =
+    case System.get_env("PSC_DB_SSL") do
+      "true" -> true
+      "false" -> false
+      _otherwise -> not local_database?
+    end
+
+  # Certificate verification is relaxed for the free-tier demo; switch to
+  # verify_peer + cacerts for a production database (see the Postgrex docs).
+  if database_ssl? do
+    config :psc, Psc.Repo, ssl: [verify: :verify_none]
+  end
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
@@ -82,8 +121,30 @@ if config_env() == :prod do
 
   config :psc, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # The public URL Phoenix generates (redirects, emails). It is the URL of the
+  # proxy in front of the app, not the app's own port: Gigalixir and a
+  # Dokploy/Traefik setup both terminate TLS on 443, and a deployment serving
+  # plain HTTP on a port of its own sets `PSC_URL_SCHEME` and `PSC_URL_PORT`.
+  url_scheme = System.get_env("PSC_URL_SCHEME", "https")
+
+  url_port =
+    case System.get_env("PSC_URL_PORT") do
+      nil ->
+        443
+
+      port ->
+        case Integer.parse(port) do
+          {number, ""} -> number
+          _other -> 443
+        end
+    end
+
   config :psc, PscWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: [
+      host: host,
+      port: url_port,
+      scheme: url_scheme
+    ],
     http: [
       ip: {0, 0, 0, 0},
       port: endpoint_port
