@@ -42,6 +42,12 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
   # of ADR-012 — both kept reserved so old cells cannot gain them back.
   @reserved_cell_keys ["row", "column", "label", "name", "semantics", "titles"]
 
+  @doc """
+  The cell keys that are metadata, not content: the structure events refuse
+  to add or remove them.
+  """
+  def reserved_cell_keys, do: @reserved_cell_keys
+
   def load_events(unstr_canvas_id) do
     from(e in UnstrCanvasEvent,
       where: e.unstr_canvas_id == ^unstr_canvas_id,

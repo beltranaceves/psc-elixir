@@ -259,9 +259,9 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       # A custom section title is rendered…
-      assert has_element?(lv, "#cell-form-r1_c1 label", "Problem statement")
+      assert has_element?(lv, "#cell-field-r1_c1-content label", "Problem statement")
       # …while an intentionally empty one is not rendered at all.
-      refute has_element?(lv, "#cell-form-r1_c1 label", "notes")
+      refute has_element?(lv, "#cell-field-r1_c1-content label", "notes")
     end
 
     test "the conventional content field has no section title", %{conn: conn, user: user} do
@@ -270,8 +270,8 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      refute has_element?(lv, "#cell-form-r1_c1 label", "content")
-      assert has_element?(lv, "#cell-form-r1_c1 #md-r1_c1-content")
+      refute has_element?(lv, "#cell-field-r1_c1-content label", "content")
+      assert has_element?(lv, "#cell-field-r1_c1-content #md-r1_c1-content")
     end
 
     test "has a tab picker that swaps the panel", %{conn: conn, user: user} do
@@ -402,6 +402,242 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       # ... and the grid itself stays always visible for editing.
       assert has_element?(lv, "#md-r1_c1-content")
+    end
+
+    test "structure editing is the owner's toggle, hidden from shared users", %{
+      conn: conn,
+      user: user
+    } do
+      owner = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, owner.id)
+      {:ok, _} = Canvas.share_unstr_canvas_with(canvas, user.email)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      # The owner sees the toggle; a shared user does not.
+      refute has_element?(lv, "#edit-structure-toggle")
+    end
+
+    test "the owner toggles Edit structure and the controls appear", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      assert has_element?(lv, "#edit-structure-toggle[aria-pressed='false']")
+      refute has_element?(lv, "button[phx-click='add_column']")
+
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      assert has_element?(lv, "#edit-structure-toggle[aria-pressed='true']")
+      assert has_element?(lv, "button[phx-click='add_column']")
+      assert has_element?(lv, "button[phx-click='add_row']")
+      # The grid's headers become inputs, and each cell gains its controls.
+      assert has_element?(lv, "#column-c1-label-form input[name='label']")
+      assert has_element?(lv, "#row-r1-label-form input[name='label']")
+      assert has_element?(lv, "#cell-label-r1_c1")
+      assert has_element?(lv, "#cell-add-field-r1_c1")
+    end
+
+    test "adding a row and a column applies the operations", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      lv |> render_click("add_row", %{})
+      lv |> render_click("add_column", %{})
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1", "r2", "r3"]
+      assert Enum.map(cells["columns"], & &1["id"]) == ["c1", "c2", "c3"]
+      assert Enum.at(cells["layout"], 2) == ["r3_c1", "r3_c2", "r3_c3"]
+      assert cells["r3_c1"]["label"] == "r3_c1"
+    end
+
+    test "renaming a row and a column applies the operations", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      lv
+      |> form("#row-r1-label-form", %{"structure_id" => "r1", "label" => "Rationale"})
+      |> render_change()
+
+      lv
+      |> form("#column-c1-label-form", %{"structure_id" => "c1", "label" => "Perceive"})
+      |> render_change()
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.at(cells["rows"], 0)["label"] == "Rationale"
+      assert Enum.at(cells["columns"], 0)["label"] == "Perceive"
+    end
+
+    test "accenting a row applies the operation", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      lv |> element("#accent-swatch-row-r1") |> render_click()
+
+      # The swatch opens the inline palette; choosing a token sets the accent.
+      assert has_element?(lv, "button[phx-click='set_row_accent'][phx-value-accent='teal']")
+
+      lv
+      |> element("button[phx-click='set_row_accent'][phx-value-accent='teal']")
+      |> render_click()
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.at(cells["rows"], 0)["accent"] == "teal"
+    end
+
+    test "removing an empty row goes straight away", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      lv |> element("button[phx-click='request_remove_row'][phx-value-id='r2']") |> render_click()
+
+      refute has_element?(lv, "#remove-structure-dialog")
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1"]
+      refute Map.has_key?(cells, "r2_c1")
+    end
+
+    test "removing a row with content asks first, and the confirm removes it", %{
+      conn: conn,
+      user: user
+    } do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, _} =
+        Canvas.apply_unstr_canvas_operation(canvas.id, user.id, %{
+          "type" => "update_cell",
+          "cell_key" => "r2_c1",
+          "field" => "content",
+          "value" => "precious work"
+        })
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      lv |> element("button[phx-click='request_remove_row'][phx-value-id='r2']") |> render_click()
+
+      assert has_element?(lv, "#remove-structure-dialog[data-open='true']")
+      assert has_element?(lv, "#remove-structure-dialog", "Row 2")
+
+      # Keeping it removes nothing.
+      lv |> element("button[phx-click='dismiss_remove_structure']") |> render_click()
+      refute has_element?(lv, "#remove-structure-dialog")
+
+      assert Enum.map(Canvas.get_unstr_canvas_content(canvas.id)["rows"], & &1["id"]) == [
+               "r1",
+               "r2"
+             ]
+
+      # Removing it does.
+      lv |> element("button[phx-click='request_remove_row'][phx-value-id='r2']") |> render_click()
+      lv |> element("#confirm-remove-structure") |> render_click()
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1"]
+      refute Map.has_key?(cells, "r2_c1")
+    end
+
+    test "cell label, fields and section titles apply their operations", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      lv
+      |> form("#cell-label-r1_c1", %{"cell_key" => "r1_c1", "label" => "Problem"})
+      |> render_change()
+
+      lv
+      |> form("#cell-add-field-r1_c1", %{"cell_key" => "r1_c1", "field" => "notes"})
+      |> render_submit()
+
+      lv
+      |> form("#cell-title-r1_c1-notes", %{
+        "cell_key" => "r1_c1",
+        "field" => "notes",
+        "title" => "Notes"
+      })
+      |> render_change()
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert cells["r1_c1"]["label"] == "Problem"
+      assert cells["r1_c1"]["notes"] == ""
+      assert cells["r1_c1"]["titles"]["notes"] == "Notes"
+
+      lv
+      |> form("#cell-title-r1_c1-content", %{
+        "cell_key" => "r1_c1",
+        "field" => "content",
+        "title" => "Body"
+      })
+      |> render_change()
+
+      lv
+      |> element(
+        "button[phx-click='remove_cell_field'][phx-value-cell_key='r1_c1'][phx-value-field='notes']"
+      )
+      |> render_click()
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert cells["r1_c1"]["titles"]["content"] == "Body"
+      refute Map.has_key?(cells["r1_c1"], "notes")
+    end
+
+    test "a shared user forging a structure event is a no-op", %{conn: conn, user: user} do
+      owner = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, owner.id)
+      {:ok, _} = Canvas.share_unstr_canvas_with(canvas, user.email)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      render_click(lv, "add_row", %{})
+
+      # The forged operation is a no-op: the structure is untouched.
+      assert Enum.map(Canvas.get_unstr_canvas_content(canvas.id)["rows"], & &1["id"]) == [
+               "r1",
+               "r2"
+             ]
+    end
+
+    test "a blank canvas renders the empty state and is built in place", %{conn: conn, user: user} do
+      {:ok, canvas} =
+        Canvas.create_unstr_canvas(user.id, %{"name" => "Blank", "cells" => Canvas.blank_cells()})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      assert has_element?(lv, "#canvas-grid", "This canvas has no structure yet.")
+      assert has_element?(lv, "button[phx-click='add_row']")
+
+      lv |> render_click("add_row", %{})
+      lv |> render_click("add_column", %{})
+      lv |> render_click("add_column", %{})
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1"]
+      assert Enum.map(cells["columns"], & &1["id"]) == ["c1", "c2"]
+      assert Enum.at(cells["layout"], 0) == ["r1_c1", "r1_c2"]
+
+      # The grid renders once the structure exists.
+      assert has_element?(lv, "#cell-card-r1_c1")
     end
 
     test "renders accents defined by the template and offers no canvas picker", %{
