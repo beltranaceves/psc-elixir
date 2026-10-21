@@ -42,6 +42,7 @@ it costs, and the evidence it was verified against.
 | [ADR-030](#adr-030--the-designer-is-collapsible-sections-with-a-shared-note-editor) | The designer is collapsible sections, with a shared note editor | Accepted | 2026-10-20 |
 | [ADR-031](#adr-031--a-template-can-be-public-and-its-use-is-counted) | A template can be public, and its use is counted | Accepted | 2026-10-20 |
 | [ADR-032](#adr-032--the-canvas-picker-shows-the-templates-and-creating-enters-the-canvas) | The canvas picker shows the templates, and creating enters the canvas | Accepted | 2026-10-21 |
+| [ADR-033](#adr-033--a-canvass-structure-is-editable-in-place) | A canvas's structure is editable in place | Accepted | 2026-10-21 |
 
 ---
 
@@ -1402,6 +1403,62 @@ deployed Gigalixir instance:
 | Orphan event rows reclaimed by the first sweep | 297 (65 + 232) |
 | Test suite | 228 passing (was 215) |
 | Deploy | release 7, healthy, migration applied at boot, no errors in logs |
+
+---
+
+## ADR-033 — A canvas's structure is editable in place
+
+**Context.** A canvas was frozen at the shape it was instantiated with: rows, columns,
+cell labels, fields and accents were authored in the template designer, copied once by
+`instantiate_template/3`, and never editable again. Changing a canvas's structure meant
+throwing it away and starting over — and the picker's no-template option could not be a
+truly blank canvas, because an empty grid would be a pane with no way to add anything.
+
+**Decision.**
+
+- The canvas editor gains an owner-only **Edit structure** toggle. While it is on, the
+  grid carries the designer's controls: row and column headers become label inputs with
+  an accent swatch and a remove ×, and each cell gains a label input, per-field section
+  titles, field add/remove, and the add-field form. Content editing keeps working
+  throughout — the toggle reveals controls, it does not lock anything.
+- Every structure change is a **granular operation** in the existing event log
+  (`add_row`, `remove_column`, `update_cell_label`, `add_cell_field`, …), applied by
+  `UnstrCanvasCRDT.apply_operation/2` like `update_cell` today, inserted through the same
+  `apply_unstr_canvas_operation/4`, and folded into the snapshot by the same save path.
+  Each operation carries its ids and labels, so applying the events in sequence order
+  always reaches the same state.
+- **Owner-only.** The guard lives where the operation is created (the LiveView handler,
+  like `delete_note`); collaborators receive and apply structure operations but cannot
+  create them.
+- **Removing a row or column that holds content confirms first.** The operation is
+  destructive; the event log keeps the old values only until pruning folds them.
+- **The picker's no-template option becomes a truly blank canvas** (empty structure,
+  default-selected), and the built-in 12-cell PSC grid — which used to be the schema's
+  silent `cells` default — becomes an explicit second card backed by `Canvas.psc_cells/0`.
+  The schema default is now the empty structure. The editor has no structure-editing UI
+  without this feature, which is why the default had to be a full grid; with editing in
+  place, blank is buildable.
+- New row and column ids are generated once, server-side, as the **next free index**
+  (scanning existing ids), and travel inside the operation. `length + 1` collides after a
+  removal — a latent bug the designer still has; the canvas ops do not copy it.
+- A row's or a column's cells are found by their **back-reference** (`"row"` / `"column"`),
+  not by their key: the built-in PSC structure keys its cells semantically
+  (`"problem"`, `"manifestations"`), while instantiated and added cells use
+  `"rowId_colId"`. Both carry the back-references, and only cells are maps that have them.
+
+**Alternatives considered.** One `restructure` operation carrying the whole new shape
+(last-write-wins on the entire structure, a large payload, and the designer's
+draft-and-apply dance in a surface that autosaves); making structure editing
+collaborative for every shared user (the canvas's content is collaborative, but who may
+reshape someone's workspace is a different question, and the designer's owner-only rule
+is the established answer); keeping the PSC as the silent default (the "blank canvas"
+that was never blank).
+
+**Consequences.** A canvas is no longer stuck with what it started as, and a blank canvas
+is built in place. The cost is twelve apply clauses to keep deterministic, a confirm
+dialog on destructive removals, and one shift for existing users: the picker's default is
+now an empty canvas, with the PSC one click away. The event log stays bounded — structure
+operations fold and prune exactly like cell operations.
 
 ---
 

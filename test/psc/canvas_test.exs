@@ -473,6 +473,361 @@ defmodule Psc.CanvasTest do
 
       assert Canvas.can_access_unstr_canvas?(canvas, user.email)
     end
+
+    test "is unaffected by the schema's empty-structure default" do
+      user = Psc.AccountsFixtures.user_fixture()
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+      assert {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert length(cells["rows"]) == length(template.layout_map["rows"])
+      assert length(cells["columns"]) == length(template.layout_map["columns"])
+    end
+  end
+
+  describe "creation paths" do
+    test "a canvas with no cells is the empty structure" do
+      user = Psc.AccountsFixtures.user_fixture()
+
+      assert {:ok, canvas} = Canvas.create_unstr_canvas(user.id, %{"name" => "Empty"})
+
+      assert canvas.cells["rows"] == []
+      assert canvas.cells["columns"] == []
+      assert canvas.cells["layout"] == []
+    end
+
+    test "blank_cells/0 is the empty structure and psc_cells/0 the built-in grid" do
+      blank = Canvas.blank_cells()
+      assert blank["rows"] == []
+      assert blank["columns"] == []
+      assert blank["layout"] == []
+
+      psc = Canvas.psc_cells()
+      assert length(psc["rows"]) == 3
+      assert length(psc["columns"]) == 4
+      assert length(psc["layout"]) == 3
+      assert length(Enum.at(psc["layout"], 0)) == 4
+
+      # Every layout position has a cell entry: the changeset's invariant.
+      for row <- psc["layout"], key <- row do
+        assert Map.has_key?(psc, key), "expected cell #{key} in the PSC structure"
+      end
+    end
+
+    test "the PSC structure passes the changeset's cell validation" do
+      user = Psc.AccountsFixtures.user_fixture()
+
+      assert {:ok, canvas} =
+               Canvas.create_unstr_canvas(user.id, %{
+                 "name" => "PSC",
+                 "cells" => Canvas.psc_cells()
+               })
+
+      assert length(canvas.cells["rows"]) == 3
+    end
+
+    test "the empty structure passes the changeset's cell validation" do
+      user = Psc.AccountsFixtures.user_fixture()
+
+      assert {:ok, canvas} =
+               Canvas.create_unstr_canvas(user.id, %{
+                 "name" => "Blank",
+                 "cells" => Canvas.blank_cells()
+               })
+
+      assert canvas.cells["rows"] == []
+    end
+  end
+
+  describe "structure operations" do
+    # A representative instantiated state: 2×2 with labels, accents and a
+    # field, the shape the editor's structure ops act on.
+    defp structured_cells do
+      %{
+        "rows" => [
+          %{"id" => "r1", "label" => "Row 1", "accent" => "amber"},
+          %{"id" => "r2", "label" => "Row 2"}
+        ],
+        "columns" => [
+          %{"id" => "c1", "label" => "Column 1", "accent" => "sky"},
+          %{"id" => "c2", "label" => "Column 2"}
+        ],
+        "layout" => [["r1_c1", "r1_c2"], ["r2_c1", "r2_c2"]],
+        "r1_c1" => %{
+          "row" => "r1",
+          "column" => "c1",
+          "label" => "Cell 1",
+          "content" => "hello",
+          "titles" => %{"content" => "Body"}
+        },
+        "r1_c2" => %{"row" => "r1", "column" => "c2", "label" => "Cell 2", "content" => ""},
+        "r2_c1" => %{"row" => "r2", "column" => "c1", "label" => "Cell 3", "content" => ""},
+        "r2_c2" => %{"row" => "r2", "column" => "c2", "label" => "Cell 4", "content" => ""}
+      }
+    end
+
+    defp apply_op(cells, op), do: Psc.Canvas.UnstrCanvasCRDT.apply_operation(op, cells)
+
+    test "add_row appends the def, the matrix row and the cells" do
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "add_row", "id" => "r3", "label" => "Row 3"})
+
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1", "r2", "r3"]
+      assert length(cells["layout"]) == 3
+      assert Enum.at(cells["layout"], 2) == ["r3_c1", "r3_c2"]
+
+      assert cells["r3_c1"] == %{"row" => "r3", "column" => "c1", "label" => "r3_c1"}
+      assert cells["r3_c2"] == %{"row" => "r3", "column" => "c2", "label" => "r3_c2"}
+
+      # The existing cells are untouched.
+      assert cells["r1_c1"]["content"] == "hello"
+    end
+
+    test "add_row on the empty structure starts the matrix" do
+      cells =
+        Canvas.blank_cells()
+        |> apply_op(%{"type" => "add_row", "id" => "r1", "label" => "Only"})
+
+      assert cells["rows"] == [%{"id" => "r1", "label" => "Only"}]
+      assert cells["layout"] == [[]]
+    end
+
+    test "add_row is idempotent on an id that is already there" do
+      cells = apply_op(structured_cells(), %{"type" => "add_row", "id" => "r1", "label" => "Dup"})
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1", "r2"]
+      assert length(cells["layout"]) == 2
+    end
+
+    test "add_column appends the def, extends every matrix row and creates the cells" do
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "add_column", "id" => "c3", "label" => "Column 3"})
+
+      assert Enum.map(cells["columns"], & &1["id"]) == ["c1", "c2", "c3"]
+      assert Enum.at(cells["layout"], 0) == ["r1_c1", "r1_c2", "r1_c3"]
+      assert Enum.at(cells["layout"], 1) == ["r2_c1", "r2_c2", "r2_c3"]
+      assert cells["r1_c3"]["column"] == "c3"
+      assert cells["r2_c3"]["row"] == "r2"
+    end
+
+    test "add_column on the empty structure waits for the rows" do
+      cells =
+        Canvas.blank_cells()
+        |> apply_op(%{"type" => "add_column", "id" => "c1", "label" => "Only"})
+
+      assert cells["columns"] == [%{"id" => "c1", "label" => "Only"}]
+      assert cells["layout"] == []
+
+      # A row added afterwards picks the column up.
+      cells = apply_op(cells, %{"type" => "add_row", "id" => "r1", "label" => "Only"})
+      assert Enum.at(cells["layout"], 0) == ["r1_c1"]
+    end
+
+    test "remove_row drops the def, its matrix row and its cells, keeping the rest" do
+      cells = apply_op(structured_cells(), %{"type" => "remove_row", "id" => "r1"})
+
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r2"]
+      assert cells["layout"] == [["r2_c1", "r2_c2"]]
+      refute Map.has_key?(cells, "r1_c1")
+      refute Map.has_key?(cells, "r1_c2")
+      assert cells["r2_c1"]["label"] == "Cell 3"
+    end
+
+    test "remove_row is idempotent on an id that is already gone" do
+      cells = apply_op(structured_cells(), %{"type" => "remove_row", "id" => "r1"})
+      again = apply_op(cells, %{"type" => "remove_row", "id" => "r1"})
+      assert again == cells
+    end
+
+    test "remove_column drops the def, its matrix slice and its cells" do
+      cells = apply_op(structured_cells(), %{"type" => "remove_column", "id" => "c2"})
+
+      assert Enum.map(cells["columns"], & &1["id"]) == ["c1"]
+      assert cells["layout"] == [["r1_c1"], ["r2_c1"]]
+      refute Map.has_key?(cells, "r1_c2")
+      refute Map.has_key?(cells, "r2_c2")
+      assert cells["r1_c1"]["content"] == "hello"
+    end
+
+    test "update_row_label and update_column_label rename in place" do
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "update_row_label", "id" => "r2", "label" => "Strategy"})
+        |> apply_op(%{"type" => "update_column_label", "id" => "c1", "label" => "Perceive"})
+
+      assert Enum.at(cells["rows"], 1)["label"] == "Strategy"
+      assert Enum.at(cells["columns"], 0)["label"] == "Perceive"
+      # The other defs keep their labels and accents.
+      assert Enum.at(cells["rows"], 0)["accent"] == "amber"
+    end
+
+    test "set_row_accent sets and clears a known token, and ignores an unknown one" do
+      cells =
+        apply_op(structured_cells(), %{
+          "type" => "set_row_accent",
+          "id" => "r2",
+          "accent" => "teal"
+        })
+
+      assert Enum.at(cells["rows"], 1)["accent"] == "teal"
+
+      cells = apply_op(cells, %{"type" => "set_row_accent", "id" => "r2", "accent" => nil})
+      assert Enum.at(cells["rows"], 1)["accent"] == nil
+
+      cells =
+        apply_op(cells, %{"type" => "set_row_accent", "id" => "r2", "accent" => "chartreuse"})
+
+      assert Enum.at(cells["rows"], 1)["accent"] == nil
+    end
+
+    test "update_cell_label renames a cell" do
+      cells =
+        apply_op(structured_cells(), %{
+          "type" => "update_cell_label",
+          "cell_key" => "r1_c1",
+          "label" => "Problem"
+        })
+
+      assert cells["r1_c1"]["label"] == "Problem"
+      assert cells["r1_c1"]["content"] == "hello"
+    end
+
+    test "add_cell_field adds an empty value and an untitled section" do
+      cells =
+        apply_op(structured_cells(), %{
+          "type" => "add_cell_field",
+          "cell_key" => "r1_c1",
+          "field" => "notes"
+        })
+
+      assert cells["r1_c1"]["notes"] == ""
+      assert cells["r1_c1"]["titles"]["notes"] == ""
+      assert cells["r1_c1"]["content"] == "hello"
+    end
+
+    test "add_cell_field rejects reserved keys and duplicates" do
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "add_cell_field", "cell_key" => "r1_c1", "field" => "row"})
+        |> apply_op(%{"type" => "add_cell_field", "cell_key" => "r1_c1", "field" => "content"})
+
+      assert cells["r1_c1"]["row"] == "r1"
+      assert cells["r1_c1"]["content"] == "hello"
+    end
+
+    test "remove_cell_field drops the value and its title, and drops an empty titles map" do
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "remove_cell_field", "cell_key" => "r1_c1", "field" => "content"})
+
+      refute Map.has_key?(cells["r1_c1"], "content")
+      refute Map.has_key?(cells["r1_c1"], "titles")
+
+      # A cell with several titled fields keeps the map while any remain.
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "add_cell_field", "cell_key" => "r1_c1", "field" => "notes"})
+        |> apply_op(%{"type" => "remove_cell_field", "cell_key" => "r1_c1", "field" => "content"})
+
+      assert cells["r1_c1"]["titles"] == %{"notes" => ""}
+    end
+
+    test "remove_cell_field never removes a reserved key" do
+      cells =
+        apply_op(structured_cells(), %{
+          "type" => "remove_cell_field",
+          "cell_key" => "r1_c1",
+          "field" => "row"
+        })
+
+      assert cells["r1_c1"]["row"] == "r1"
+    end
+
+    test "update_cell_field_title sets a section title" do
+      cells =
+        apply_op(structured_cells(), %{
+          "type" => "update_cell_field_title",
+          "cell_key" => "r1_c1",
+          "field" => "content",
+          "title" => "The problem"
+        })
+
+      assert cells["r1_c1"]["titles"]["content"] == "The problem"
+    end
+
+    test "ops on cells and defs that are not there are no-ops" do
+      cells = structured_cells()
+
+      assert apply_op(cells, %{
+               "type" => "update_cell_label",
+               "cell_key" => "nope",
+               "label" => "x"
+             }) ==
+               cells
+
+      assert apply_op(cells, %{"type" => "add_cell_field", "cell_key" => "nope", "field" => "x"}) ==
+               cells
+
+      assert apply_op(cells, %{
+               "type" => "remove_cell_field",
+               "cell_key" => "nope",
+               "field" => "x"
+             }) ==
+               cells
+
+      assert apply_op(cells, %{"type" => "update_row_label", "id" => "nope", "label" => "x"}) ==
+               cells
+
+      assert apply_op(cells, %{"type" => "set_row_accent", "id" => "nope", "accent" => "teal"}) ==
+               cells
+    end
+
+    test "a sequence of structure ops replays to the same state after a save" do
+      user = Psc.AccountsFixtures.user_fixture()
+
+      {:ok, canvas} =
+        Canvas.create_unstr_canvas(user.id, %{"name" => "Replay", "cells" => Canvas.psc_cells()})
+
+      id = canvas.id
+
+      ops = [
+        %{"type" => "add_row", "id" => "r4", "label" => "Row 4"},
+        %{"type" => "update_row_label", "id" => "r4", "label" => "Reflection"},
+        %{"type" => "add_column", "id" => "c5", "label" => "Act"},
+        %{"type" => "update_cell_label", "cell_key" => "r4_perceive", "label" => "Review"},
+        %{"type" => "add_cell_field", "cell_key" => "problem", "field" => "notes"},
+        %{"type" => "set_column_accent", "id" => "c5", "accent" => "violet"},
+        %{"type" => "remove_row", "id" => "tactics"}
+      ]
+
+      Enum.each(ops, &Canvas.apply_unstr_canvas_operation(id, user.id, &1))
+
+      live = Canvas.get_unstr_canvas_content(id)
+
+      # Fold the ops over the stored snapshot the way a reload would, and
+      # compare: the ops are replay-safe.
+      assert {:ok, _canvas} = Canvas.save_unstr_canvas_content_to_db(id, live)
+
+      reloaded = Canvas.get_unstr_canvas_content(id)
+      assert reloaded == live
+
+      assert Enum.map(reloaded["rows"], & &1["id"]) == ["rationale", "strategy", "r4"]
+
+      assert Enum.map(reloaded["columns"], & &1["id"]) == [
+               "perceive",
+               "form",
+               "consolidate",
+               "learn",
+               "c5"
+             ]
+
+      refute Map.has_key?(reloaded, "manifestations")
+      assert reloaded["r4_perceive"]["label"] == "Review"
+      assert reloaded["problem"]["notes"] == ""
+      assert Enum.at(reloaded["columns"], 4)["accent"] == "violet"
+    end
   end
 
   describe "event pruning" do

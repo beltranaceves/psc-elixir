@@ -21,96 +21,10 @@ defmodule Psc.Canvas.UnstrCanvas do
     # A note belongs to a canvas and inherits its access rules.
     has_many :notes, Psc.Notes.Note, foreign_key: :canvas_id, on_delete: :delete_all
 
-    field :cells, :map,
-      default: %{
-        "columns" => [
-          %{"id" => "perceive", "label" => "Perceive"},
-          %{"id" => "form", "label" => "Form"},
-          %{"id" => "consolidate", "label" => "Consolidate"},
-          %{"id" => "learn", "label" => "Learn"}
-        ],
-        "rows" => [
-          %{"id" => "rationale", "label" => "Rationale"},
-          %{"id" => "strategy", "label" => "Strategy"},
-          %{"id" => "tactics", "label" => "Tactics"}
-        ],
-        "layout" => [
-          ["problem", "leverage", "solution_cluster", "horizon"],
-          ["outer_environment", "inner_environment", "evolvability_cluster", "potential"],
-          ["manifestations", "capabilities", "merit_cluster", "mission"]
-        ],
-        "problem" => %{
-          "row" => "rationale",
-          "column" => "perceive",
-          "content" => ""
-        },
-        "leverage" => %{
-          "row" => "rationale",
-          "column" => "form",
-          "technology" => "",
-          "components" => "",
-          "information" => "",
-          "human_resources" => ""
-        },
-        "solution_cluster" => %{
-          "row" => "rationale",
-          "column" => "consolidate",
-          "content" => ""
-        },
-        "horizon" => %{
-          "row" => "rationale",
-          "column" => "learn",
-          "content" => ""
-        },
-        "outer_environment" => %{
-          "row" => "strategy",
-          "column" => "perceive",
-          "external_services" => "",
-          "external_implements" => "",
-          "external_repositories" => "",
-          "external_people" => ""
-        },
-        "inner_environment" => %{
-          "row" => "strategy",
-          "column" => "form",
-          "content" => ""
-        },
-        "evolvability_cluster" => %{
-          "row" => "strategy",
-          "column" => "consolidate",
-          "evolvability" => "",
-          "diffusibility" => "",
-          "adoptability" => ""
-        },
-        "potential" => %{
-          "row" => "strategy",
-          "column" => "learn",
-          "content" => ""
-        },
-        "manifestations" => %{
-          "row" => "tactics",
-          "column" => "perceive",
-          "content" => ""
-        },
-        "capabilities" => %{
-          "row" => "tactics",
-          "column" => "form",
-          "content" => ""
-        },
-        "merit_cluster" => %{
-          "row" => "tactics",
-          "column" => "consolidate",
-          "merit" => "",
-          "value" => "",
-          "reservation" => "",
-          "rebuttal" => ""
-        },
-        "mission" => %{
-          "row" => "tactics",
-          "column" => "learn",
-          "content" => ""
-        }
-      }
+    # An empty structure: a canvas with no rows and no columns yet. The owner
+    # builds it in place (structure editing); the built-in PSC grid is an
+    # explicit choice (Canvas.psc_cells/0), not a silent default.
+    field :cells, :map, default: %{"rows" => [], "columns" => [], "layout" => []}
 
     timestamps()
   end

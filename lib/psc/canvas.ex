@@ -10,6 +10,111 @@ defmodule Psc.Canvas do
   alias Psc.Canvas.Layout
   alias Psc.Canvas.NotesMode
 
+  # The built-in Problem–Solution Canvas: the 12-cell grid (Perceive / Form /
+  # Consolidate / Learn × Rationale / Strategy / Tactics) that used to be the
+  # schema's silent default. It is an explicit choice now — the picker's PSC
+  # card — so a canvas without a template can be truly blank.
+  @psc_cells %{
+    "columns" => [
+      %{"id" => "perceive", "label" => "Perceive"},
+      %{"id" => "form", "label" => "Form"},
+      %{"id" => "consolidate", "label" => "Consolidate"},
+      %{"id" => "learn", "label" => "Learn"}
+    ],
+    "rows" => [
+      %{"id" => "rationale", "label" => "Rationale"},
+      %{"id" => "strategy", "label" => "Strategy"},
+      %{"id" => "tactics", "label" => "Tactics"}
+    ],
+    "layout" => [
+      ["problem", "leverage", "solution_cluster", "horizon"],
+      ["outer_environment", "inner_environment", "evolvability_cluster", "potential"],
+      ["manifestations", "capabilities", "merit_cluster", "mission"]
+    ],
+    "problem" => %{
+      "row" => "rationale",
+      "column" => "perceive",
+      "content" => ""
+    },
+    "leverage" => %{
+      "row" => "rationale",
+      "column" => "form",
+      "technology" => "",
+      "components" => "",
+      "information" => "",
+      "human_resources" => ""
+    },
+    "solution_cluster" => %{
+      "row" => "rationale",
+      "column" => "consolidate",
+      "content" => ""
+    },
+    "horizon" => %{
+      "row" => "rationale",
+      "column" => "learn",
+      "content" => ""
+    },
+    "outer_environment" => %{
+      "row" => "strategy",
+      "column" => "perceive",
+      "external_services" => "",
+      "external_implements" => "",
+      "external_repositories" => "",
+      "external_people" => ""
+    },
+    "inner_environment" => %{
+      "row" => "strategy",
+      "column" => "form",
+      "content" => ""
+    },
+    "evolvability_cluster" => %{
+      "row" => "strategy",
+      "column" => "consolidate",
+      "evolvability" => "",
+      "diffusibility" => "",
+      "adoptability" => ""
+    },
+    "potential" => %{
+      "row" => "strategy",
+      "column" => "learn",
+      "content" => ""
+    },
+    "manifestations" => %{
+      "row" => "tactics",
+      "column" => "perceive",
+      "content" => ""
+    },
+    "capabilities" => %{
+      "row" => "tactics",
+      "column" => "form",
+      "content" => ""
+    },
+    "merit_cluster" => %{
+      "row" => "tactics",
+      "column" => "consolidate",
+      "merit" => "",
+      "value" => "",
+      "reservation" => "",
+      "rebuttal" => ""
+    },
+    "mission" => %{
+      "row" => "tactics",
+      "column" => "learn",
+      "content" => ""
+    }
+  }
+
+  @doc """
+  The built-in Problem–Solution Canvas structure, for the picker's PSC card.
+  """
+  def psc_cells, do: @psc_cells
+
+  @doc """
+  The empty structure: a canvas with no rows and no columns yet, built in
+  place with structure editing.
+  """
+  def blank_cells, do: %UnstrCanvas{}.cells
+
   @doc """
   Returns the display title for a cell field.
 
@@ -424,7 +529,12 @@ defmodule Psc.Canvas do
   end
 
   @doc """
-  Create a new unstructured canvas with default PSC structure.
+  Create a new unstructured canvas.
+
+  The `cells` come from the caller: the picker's blank card passes
+  `blank_cells/0`, its PSC card passes `psc_cells/0`, and instantiating a
+  template builds them from the template. With no `cells` in the attrs the
+  schema's empty-structure default applies.
   """
   def create_unstr_canvas(user_id, attrs \\ %{}) do
     # Ensure params use string keys (avoid mixing atom and string keys)
