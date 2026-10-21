@@ -131,8 +131,10 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           </h2>
           <div id="template-grid" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <%!-- The create action is the first tile of the library: same size
-            as a template card, so the list reads as one grid. --%>
+            as a template card, so the list reads as one grid. The catalog
+            follows it, so the two ways to get a template lead the page. --%>
             <.new_template_card />
+            <.catalog_card />
 
             <%= for template <- @templates do %>
               <.template_card
@@ -175,6 +177,26 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       <span class="flex flex-col gap-1">
         <span class="font-medium text-base-content">New Template</span>
         <span class="text-sm text-base-content/50">Design a grid and its cells</span>
+      </span>
+    </.link>
+    """
+  end
+
+  # The second tile of the library: the same dashed card, pointing at the
+  # catalog, where the templates other people published are ranked.
+  defp catalog_card(assigns) do
+    ~H"""
+    <.link
+      id="catalog-card"
+      navigate={~p"/catalog"}
+      class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-4 text-center transition-colors hover:border-base-content/45 hover:bg-base-content/5"
+    >
+      <span class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <.icon name="hero-book-open" class="size-5" />
+      </span>
+      <span class="flex flex-col gap-1">
+        <span class="font-medium text-base-content">Open Catalog</span>
+        <span class="text-sm text-base-content/50">Browse the public templates</span>
       </span>
     </.link>
     """

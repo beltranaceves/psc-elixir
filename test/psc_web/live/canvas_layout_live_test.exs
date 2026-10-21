@@ -18,6 +18,8 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       # The create action is the first tile of the library, not a header button.
       assert has_element?(lv, "#template-grid #new-template-card")
       refute has_element?(lv, ~s|header a[href="/templates/new"]|)
+      # The catalog is the second tile, right after it.
+      assert has_element?(lv, ~s|#template-grid #catalog-card[href="/catalog"]|)
       refute has_element?(lv, "main h1")
       # Creating happens in the designer only — no duplicate inline form.
       refute html =~ "Create New Template"

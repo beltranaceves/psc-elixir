@@ -25,6 +25,9 @@ test.describe('authenticated app', () => {
     await expect(page.locator('main h1')).toHaveCount(0);
     // The create action is the first tile of the library, not a header button.
     await expect(page.locator('#new-template-card')).toBeVisible();
+    // The catalog is the second tile, right after it.
+    await expect(page.locator('#catalog-card')).toBeVisible();
+    await expect(page.locator('#catalog-card')).toHaveAttribute('href', '/catalog');
   });
 
   test('the New Template card leads the library at the same size as a template', async ({
