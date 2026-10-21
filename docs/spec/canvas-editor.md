@@ -234,7 +234,7 @@ Unchanged from existing implementation:
 
 The **Start a canvas** card at the top of the index page holds the creation form:
 
-- **Template picker** — a row of cards, a **Blank canvas** card first, then one per
+- **Template picker** — a row of cards, a **PSC canvas** card first, then one per
   template the user can access (own + shared). Each card shows a schematic preview of the
   template's grid (`PscWeb.Components.TemplatePreview.mini_preview`), its name and its
   dimensions; the selected card carries the primary border and tint. The choice is made
@@ -242,8 +242,16 @@ The **Start a canvas** card at the top of the index page holds the creation form
   to the submit in a hidden input, and only ids the picker offered are accepted.
 - **Name** text input, **Description** textarea.
 - **Create** button — calls `instantiate_template` (if a template is selected) or
-  `create_unstr_canvas` (if blank), then **navigates to the new canvas's editor**. Creating
+  `create_unstr_canvas` (if not), then **navigates to the new canvas's editor**. Creating
   is the start of work, not a list update.
+
+  The no-template option is the **PSC canvas**, not an empty grid: `create_unstr_canvas/2`
+  fills `cells` with the schema's default — the built-in 12-cell Problem–Solution Canvas
+  (Perceive/Form/Consolidate/Learn × Rationale/Strategy/Tactics). The editor renders
+  whatever `cells` defines but has no structure-editing UI — rows, columns and cells are
+  authored in the template designer — so an empty canvas would be a pane with no way to
+  add anything. The default is what makes starting without a template possible, and the
+  card says so instead of promising an emptiness it does not deliver.
 
 ## Acceptance Criteria
 
@@ -259,7 +267,7 @@ The **Start a canvas** card at the top of the index page holds the creation form
 - [ ] Shared user can edit cell content but does not see structure-editing controls
 - [ ] Auto-save persists the `cells` map to the database on idle
 - [ ] Creating a canvas from a template copies the template's structure into the new canvas
-- [ ] Creating a blank canvas produces an empty 1×1 grid with one cell
+- [ ] Creating a canvas without a template produces the built-in 12-cell PSC grid
 
 ## Out of Scope
 

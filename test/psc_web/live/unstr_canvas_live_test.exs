@@ -49,7 +49,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       refute options_html =~ private.id
 
       # The picker is cards, not a select: blank first, then one per template.
-      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='true']|)
       assert has_element?(lv, ~s|#template-picker-#{own.id}[aria-pressed='false']|)
       assert has_element?(lv, ~s|#template-picker-#{shared.id}[aria-pressed='false']|)
     end
@@ -61,12 +61,12 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
       # Blank starts selected.
-      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='true']|)
 
       lv |> element("#template-picker-#{template.id}") |> render_click()
 
       assert has_element?(lv, ~s|#template-picker-#{template.id}[aria-pressed='true']|)
-      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='false']|)
+      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='false']|)
 
       # The hidden input carries the choice to the submit.
       form_html = lv |> element("#new-canvas-form") |> render()

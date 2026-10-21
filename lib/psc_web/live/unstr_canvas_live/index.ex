@@ -8,8 +8,8 @@ defmodule PscWeb.UnstrCanvasLive.Index do
   alias Psc.Canvas
   alias Psc.Canvas.UnstrCanvas
 
-  # The blank canvas's own structure, for its picker card's preview: the
-  # default PSC grid a blank canvas starts with.
+  # The built-in canvas's own structure, for its picker card's preview: the
+  # default PSC grid a canvas starts with when no template is chosen.
   @blank_cells %UnstrCanvas{}.cells
 
   @impl true
@@ -164,19 +164,19 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               <div id="template-picker" class="canvas-grid-scroll flex gap-3 overflow-x-auto pb-1">
                 <button
                   type="button"
-                  id="template-picker-blank"
+                  id="template-picker-psc"
                   phx-click="select_template"
                   phx-value-id=""
                   aria-pressed={to_string(@selected_template_id == "")}
-                  aria-label="Start from a blank canvas"
+                  aria-label="Start from the PSC canvas"
                   class={picker_card_class(@selected_template_id == "")}
                 >
                   <.mini_preview layout_map={@blank_cells} />
 
                   <span class="break-words text-sm font-medium text-base-content">
-                    Blank canvas
+                    PSC canvas
                   </span>
-                  <span class="text-xs text-base-content/50">Start empty</span>
+                  <span class="text-xs text-base-content/50">The built-in 12-cell grid</span>
                 </button>
 
                 <button

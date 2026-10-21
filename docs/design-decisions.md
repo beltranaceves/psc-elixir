@@ -1358,7 +1358,7 @@ start.
 
 **Decision.**
 
-- The **Start from** picker becomes a row of cards: a **Blank canvas** card first,
+- The **Start from** picker becomes a row of cards: a **PSC canvas** card first,
   then one per template the user can access. Each card shows a schematic preview of
   the grid (`PscWeb.Components.TemplatePreview.mini_preview`), the name and the
   dimensions; the selected card carries the primary border and tint. The preview
