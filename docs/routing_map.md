@@ -26,6 +26,12 @@ flowchart TD
         R10["/users/settings"] --> V8["UserLive.Settings"]
     end
 
+    subgraph ADMIN["require_authenticated_user + require_admin — live_session :admin"]
+        A1["/admin"] --> AV1["Admin.DashboardLive"]
+        A2["/admin/users · /admin/templates<br/>/admin/canvases · /admin/notes"] --> AV2["Admin.*Live (Backpex)<br/>index · show · edit"]
+        A3["POST /admin/backpex_preferences"] --> AC3["Backpex.PreferencesController"]
+    end
+
     subgraph DEV["dev only — dev_routes"]
         R11["/dev/dashboard"] --> V9["Phoenix.LiveDashboard"]
         R12["/dev/mailbox"] --> V10["Swoosh MailboxPreview"]
@@ -45,6 +51,10 @@ Route additions must land inside an **existing** `live_session` block — a
 `live_session` name may only be defined once in the router. Authenticated pages go in
 `live_session :require_authenticated_user`; pages that work with or without a login go
 in `live_session :current_user`.
+
+The administration scope is guarded twice: the `:require_admin` plug protects the dead
+render, and the `:require_admin` `on_mount` re-checks the role on the live connection.
+Backpex's preference endpoint lives in that same scope, behind the same plugs.
 
 ## Related diagrams
 

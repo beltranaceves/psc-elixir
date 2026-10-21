@@ -7,9 +7,6 @@ defmodule PscWeb.UnstrCanvasLive.Index do
 
   alias Psc.Canvas
 
-  # The built-in PSC grid, for its picker card's preview.
-  @psc_cells Canvas.psc_cells()
-
   @impl true
   def mount(_params, _session, socket) do
     user_id = socket.assigns.current_scope.user.id
@@ -26,18 +23,17 @@ defmodule PscWeb.UnstrCanvasLive.Index do
      |> assign(:shared_canvases, shared_canvases)
      |> assign(:new_canvas_form, to_form(%{}))
      |> assign(:templates, templates)
-     |> assign(:psc_cells, @psc_cells)
      |> assign(:selected_template_id, "")}
   end
 
   # Picking a starting point is a click on its card. The id lands in the form's
   # hidden input, so the submit carries it like a select's value would. Only
-  # ids the picker offered are accepted - blank, the built-in PSC, or one of
-  # the user's templates - so a forged one cannot sit in the draft waiting for
-  # a submit.
+  # ids the picker offered are accepted - blank, or one of the templates the
+  # user can access - so a forged one cannot sit in the draft waiting for a
+  # submit. A built-in template's id is its stable slug.
   @impl true
   def handle_event("select_template", %{"id" => id}, socket) do
-    if id in ["", "psc"] or Enum.any?(socket.assigns.templates, &(&1.id == id)) do
+    if id == "" or Enum.any?(socket.assigns.templates, &(template_id(&1) == id)) do
       {:noreply, assign(socket, :selected_template_id, id)}
     else
       {:noreply, socket}
@@ -88,20 +84,17 @@ defmodule PscWeb.UnstrCanvasLive.Index do
   end
 
   # The creation paths, routed by the picker's id: blank (the empty
-  # structure), the built-in PSC, or a template instantiated through the
-  # context — which transforms the template's nested cell metadata into the
-  # flat cell shape a canvas expects; copying the template's layout_map
-  # verbatim is rejected by the canvas changeset. The name/description typed
-  # in the form win over the template's.
+  # structure) or a template instantiated through the context — which
+  # transforms the template's nested cell metadata into the flat cell shape a
+  # canvas expects; copying the template's layout_map verbatim is rejected by
+  # the canvas changeset. The name/description typed in the form win over the
+  # template's.
   defp create_canvas(user, name, description, template_id) do
     attrs = %{"name" => name, "description" => description || ""}
 
     case template_id do
       "" ->
         Canvas.create_unstr_canvas(user.id, Map.put(attrs, "cells", Canvas.blank_cells()))
-
-      "psc" ->
-        Canvas.create_unstr_canvas(user.id, Map.put(attrs, "cells", Canvas.psc_cells()))
 
       other ->
         case template_for(user, other) do
@@ -114,24 +107,26 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     end
   end
 
-  # "psc" is the picker's built-in choice, never a template id; blank is the
-  # empty structure.
-  defp template_for(_user, template_id) when template_id in [nil, "", "psc"], do: :blank
+  # A picker id is a template's slug (built-ins) or its id (user templates).
+  defp template_for(_user, template_id) when template_id in [nil, ""], do: :blank
 
   defp template_for(user, template_id) do
-    # get_template_with_author/1 preloads :author, which can_access_template?/2 reads
-    case Canvas.get_template_with_author(template_id) do
-      nil ->
+    template =
+      Canvas.get_template_by_slug(template_id) || Canvas.get_template_with_author(template_id)
+
+    cond do
+      is_nil(template) ->
         {:error, :not_found}
 
-      template ->
-        if Canvas.can_access_template?(template, user.email) do
-          {:ok, template}
-        else
-          {:error, :unauthorized}
-        end
+      Canvas.can_access_template?(template, user.email) ->
+        {:ok, template}
+
+      true ->
+        {:error, :unauthorized}
     end
   end
+
+  defp template_id(template), do: template.slug || template.id
 
   # The picker card's states: the selected card carries the primary border and
   # tint, the rest stay quiet until hovered.
@@ -165,11 +160,11 @@ defmodule PscWeb.UnstrCanvasLive.Index do
             <div>
               <span class="label mb-1">Start from</span>
 
-              <%!-- The picker: the catalog first, then blank, then the built-in
-              PSC, then a card per template. The choice is made with the eyes —
-              a layout is the one thing a dropdown cannot show. The selected id
-              rides to the submit in the hidden input below, the way a select's
-              value would. --%>
+              <%!-- The picker: the catalog first, then blank, then a card per
+              template (the built-in defaults included). The choice is made with
+              the eyes — a layout is the one thing a dropdown cannot show. The
+              selected id rides to the submit in the hidden input below, the way
+              a select's value would. --%>
               <div id="template-picker" class="canvas-grid-scroll flex gap-3 overflow-x-auto pb-1">
                 <%!-- The catalog is a link, not a choice: a dashed card, like
                 every other action card in the app, and it opens in a new tab
@@ -211,31 +206,14 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                 </button>
 
                 <button
-                  type="button"
-                  id="template-picker-psc"
-                  phx-click="select_template"
-                  phx-value-id="psc"
-                  aria-pressed={to_string(@selected_template_id == "psc")}
-                  aria-label="Start from the PSC canvas"
-                  class={picker_card_class(@selected_template_id == "psc")}
-                >
-                  <.mini_preview layout_map={@psc_cells} />
-
-                  <span class="break-words text-sm font-medium text-base-content">
-                    PSC canvas
-                  </span>
-                  <span class="text-xs text-base-content/50">The built-in 12-cell grid</span>
-                </button>
-
-                <button
                   :for={template <- @templates}
                   type="button"
-                  id={"template-picker-#{template.id}"}
+                  id={"template-picker-#{template_id(template)}"}
                   phx-click="select_template"
-                  phx-value-id={template.id}
-                  aria-pressed={to_string(@selected_template_id == template.id)}
+                  phx-value-id={template_id(template)}
+                  aria-pressed={to_string(@selected_template_id == template_id(template))}
                   aria-label={"Start from #{template.name}"}
-                  class={picker_card_class(@selected_template_id == template.id)}
+                  class={picker_card_class(@selected_template_id == template_id(template))}
                 >
                   <.mini_preview layout_map={template.layout_map} />
 

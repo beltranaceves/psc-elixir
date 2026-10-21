@@ -1,6 +1,7 @@
 defmodule PscWeb.Router do
   use PscWeb, :router
 
+  import Backpex.Router
   import PscWeb.UserAuth
 
   pipeline :browser do
@@ -67,6 +68,32 @@ defmodule PscWeb.Router do
     get "/canvases/:id", RedirectController, :canvas
 
     post "/users/update-password", UserSessionController, :update_password
+  end
+
+  # The administration surface. Backpex owns the resource pages; the dashboard
+  # is a plain LiveView. Both are guarded twice: the plugs reject a dead render
+  # before the socket connects, and the on_mount hooks re-check the role on the
+  # live connection.
+  scope "/admin", PscWeb.Admin do
+    pipe_through [:browser, :require_authenticated_user, :require_admin]
+
+    # Backpex's preference endpoint (theme, sidebar, hidden columns) needs the
+    # browser pipeline and the same guards as the pages that write to it.
+    backpex_routes()
+
+    live_session :admin,
+      on_mount: [
+        {PscWeb.UserAuth, :require_authenticated},
+        {PscWeb.UserAuth, :require_admin},
+        {Backpex.InitAssigns, :default}
+      ] do
+      live "/", DashboardLive, :index
+
+      live_resources("/users", UserLive, only: [:index, :show, :edit])
+      live_resources("/templates", TemplateLive, only: [:index, :show, :edit])
+      live_resources("/canvases", CanvasLive, only: [:index, :show])
+      live_resources("/notes", NoteLive, only: [:index, :show])
+    end
   end
 
   scope "/", PscWeb do

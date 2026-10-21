@@ -23,6 +23,9 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/psc"
+// The admin panel ships its own hooks and a connect-params helper; the latter
+// carries the browser's stored table preferences across live navigations.
+import {Hooks as BackpexHooks, backpexParams} from "backpex"
 import MarkdownEditorHook from "./hooks/markdown_editor_hook"
 import CellHook from "./hooks/cell_hook"
 import MarkdownField from "./hooks/markdown_field"
@@ -48,8 +51,8 @@ import "./ui/components/toast-flash.js";
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, CellHook, MarkdownField, CellFocus, CanvasTabs, MarkdownEditorHook, SaladUI: SaladUI.SaladUIHook},
+  params: backpexParams({_csrf_token: csrfToken}),
+  hooks: {...colocatedHooks, CellHook, MarkdownField, CellFocus, CanvasTabs, MarkdownEditorHook, SaladUI: SaladUI.SaladUIHook, ...BackpexHooks},
 })
 
 // Close native <details> menus when clicking outside or pressing Escape.

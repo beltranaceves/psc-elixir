@@ -334,6 +334,8 @@ defmodule PscWeb.CatalogLive.Index do
   # A template's author is shown by the handle in front of their email: the
   # catalog is public to every signed-in user, and an email address is more of
   # them than a catalog needs to give away.
+  defp author_handle(%{built_in: true}), do: "PSC"
+
   defp author_handle(%{author: %{email: email}}) when is_binary(email) do
     email |> String.split("@") |> List.first()
   end

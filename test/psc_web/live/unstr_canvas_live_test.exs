@@ -9,6 +9,13 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
   setup :register_and_log_in_user
 
+  # The release seeds the built-in templates on boot; the picker and library
+  # tests should see the same rows the app shows in production.
+  setup do
+    Psc.Canvas.seed_builtin_templates()
+    :ok
+  end
+
   describe "index (canvases)" do
     test "uses the header for the page title without a duplicate body heading", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/canvas")

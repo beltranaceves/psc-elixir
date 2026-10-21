@@ -18,6 +18,12 @@ defmodule Psc.Canvas.Layout do
     field :fork_count, :integer, default: 0
     field :forked_from_id, :binary_id
 
+    # Seeded templates, managed from the admin. Both fields are system-set:
+    # `built_in` and `slug` stay out of the changeset's cast list so a form
+    # cannot turn a user template into a built-in (or claim a slug).
+    field :built_in, :boolean, default: false
+    field :slug, :string
+
     belongs_to :author, Psc.Accounts.User, type: :id
 
     timestamps()

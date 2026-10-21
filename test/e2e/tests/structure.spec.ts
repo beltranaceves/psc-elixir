@@ -27,7 +27,7 @@ async function createPscCanvasAndOpen(page: import('@playwright/test').Page, nam
   await page.goto('/canvas');
   await page.locator('.phx-connected').first().waitFor();
 
-  await page.getByRole('button', { name: 'Start from the PSC canvas' }).click();
+  await page.getByRole('button', { name: 'Start from Problem–Solution Canvas' }).click();
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
 

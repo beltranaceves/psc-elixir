@@ -4,6 +4,7 @@ defmodule Psc.Accounts do
   """
 
   import Ecto.Query, warn: false
+  require Logger
   alias Psc.Repo
 
   alias Psc.Accounts.{User, UserToken, UserNotifier}
@@ -86,6 +87,129 @@ defmodule Psc.Accounts do
   """
   def change_user_registration(%User{} = user, attrs \\ %{}) do
     User.registration_changeset(user, attrs, hash_password: false)
+  end
+
+  ## Administration
+
+  @doc """
+  Lists users for the admin surface, newest first.
+  """
+  def list_users do
+    from(u in User, order_by: [desc: u.inserted_at]) |> Repo.all()
+  end
+
+  @doc """
+  Gets a user for the admin surface (nil when missing).
+  """
+  def get_user(id), do: Repo.get(User, id)
+
+  @doc """
+  Whether the user may use the admin surface.
+  """
+  defdelegate admin?(user), to: User
+
+  @doc """
+  Promotes a user to admin.
+  """
+  def promote_admin(%User{} = user), do: update_user_role(user, :admin)
+
+  @doc """
+  Demotes a user to member.
+
+  The last admin cannot be demoted: losing every admin would leave the
+  instance without anyone able to promote another one.
+  """
+  def demote_admin(%User{} = user), do: update_user_role(user, :member)
+
+  @doc """
+  Sets a user's role.
+
+  Returns `{:error, :last_admin}` when the change would remove the final
+  admin, and `{:error, changeset}` for anything the role changeset rejects.
+  """
+  def update_user_role(%User{} = user, role) when role in [:admin, :member] do
+    Repo.transact(fn ->
+      if role == :member and user.role == :admin and admin_count() <= 1 do
+        Repo.rollback(:last_admin)
+      else
+        user
+        |> User.role_changeset(%{role: role})
+        |> Repo.update()
+      end
+    end)
+  end
+
+  @doc """
+  The number of admins in the instance.
+  """
+  def admin_count do
+    Repo.one(from(u in User, where: u.role == :admin, select: count(u.id)))
+  end
+
+  @doc """
+  The addresses configured through `ADMIN_EMAILS`.
+  """
+  def admin_emails do
+    System.get_env("ADMIN_EMAILS", "")
+    |> String.split([",", ";", " ", "\n", "\r", "\t"], trim: true)
+    |> Enum.map(&(&1 |> String.trim() |> String.downcase()))
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  @doc """
+  Bootstraps admins from the environment.
+
+  For every address in `ADMIN_EMAILS` this promotes the existing account, or
+  creates it when `ADMIN_PASSWORD` is also set. Creating the account here is
+  what makes the bootstrap safe: registration auto-confirms, so promoting an
+  address that someone else registered first would hand them the role.
+
+  Returns `{promoted, created, skipped}` counts. It is idempotent and runs on
+  every boot, so removing an address from the env does **not** demote it.
+  """
+  def bootstrap_admins do
+    password = System.get_env("ADMIN_PASSWORD")
+
+    Enum.reduce(admin_emails(), {0, 0, []}, fn email, {promoted, created, skipped} ->
+      case get_user_by_email(email) do
+        %User{role: :admin} ->
+          {promoted, created, skipped}
+
+        %User{} = user ->
+          _ = promote_admin(user)
+          {promoted + 1, created, skipped}
+
+        nil when password in [nil, ""] ->
+          {promoted, created, [email | skipped]}
+
+        nil ->
+          case register_bootstrap_user(email, password) do
+            {:ok, _user} ->
+              {promoted, created + 1, skipped}
+
+            {:error, reason} ->
+              Logger.warning("admin bootstrap could not create #{email}: #{inspect(reason)}")
+              {promoted, created, [email | skipped]}
+          end
+      end
+    end)
+    |> then(fn {promoted, created, skipped} -> {promoted, created, Enum.reverse(skipped)} end)
+  end
+
+  defp register_bootstrap_user(email, password) do
+    %User{}
+    |> User.registration_changeset(%{"email" => email, "password" => password})
+    |> Repo.insert()
+    |> case do
+      {:ok, user} ->
+        user
+        |> confirm_user!()
+        |> promote_admin()
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
   end
 
   ## Settings

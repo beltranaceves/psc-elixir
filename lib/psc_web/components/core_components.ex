@@ -564,6 +564,18 @@ defmodule PscWeb.CoreComponents do
   end
 
   @doc """
+  Translates a Backpex UI string.
+
+  Backpex calls this with `{msg, opts}`. The app ships no Backpex translations,
+  so this only interpolates the placeholders and returns the source string.
+  """
+  def translate_backpex({msg, opts}) do
+    Enum.reduce(opts, msg, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  @doc """
   Translates the errors for a field from a keyword list of errors.
   """
   def translate_errors(errors, field) when is_list(errors) do

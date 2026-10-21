@@ -66,7 +66,7 @@ async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
 
   // The helpers need a canvas with structure to edit: the PSC card, not the
   // default blank (which is empty until the owner builds it in place).
-  await page.getByRole('button', { name: 'Start from the PSC canvas' }).click();
+  await page.getByRole('button', { name: 'Start from Problem–Solution Canvas' }).click();
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
 
@@ -563,10 +563,12 @@ test.describe('canvas editor layout', () => {
     const descriptionBox = await description.boundingBox();
     expect(nameBox).not.toBeNull();
     expect(descriptionBox).not.toBeNull();
-    // Same row: vertical centres within a few pixels (not stacked).
+    // Same row: the name's centre falls inside the description's vertical
+    // span. A description inherited from a template may wrap to more than one
+    // line, so equal heights are not required — sharing the row is.
     const nameCentre = nameBox!.y + nameBox!.height / 2;
-    const descriptionCentre = descriptionBox!.y + descriptionBox!.height / 2;
-    expect(Math.abs(nameCentre - descriptionCentre)).toBeLessThan(10);
+    expect(nameCentre).toBeGreaterThanOrEqual(descriptionBox!.y);
+    expect(nameCentre).toBeLessThanOrEqual(descriptionBox!.y + descriptionBox!.height);
     expect(descriptionBox!.x).toBeGreaterThan(nameBox!.x);
 
     // The editable grid itself stays visible.
@@ -932,8 +934,26 @@ test.describe('template designer accents', () => {
 
     // On a phone the fullscreen cell shows the combination of both colours.
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForTimeout(400);
-    await page.locator('#cell-card-r1_c1').evaluate(el => {
+
+    // The first tap only expands a cell while the mobile query matches, and the
+    // hook must be mounted to receive it. Poll both instead of sleeping for a
+    // fixed 400 ms: under load the layout can settle later, and the click was
+    // then a no-op, which made this test intermittently fail.
+    await expect
+      .poll(() => page.evaluate(() => window.matchMedia('(max-width: 639px)').matches))
+      .toBe(true);
+
+    await page.waitForFunction(() => {
+      const cell = document.querySelector('#cell-card-r1_c1') as
+        | (Element & { _cellFocus?: unknown })
+        | null;
+      return Boolean(cell && cell._cellFocus);
+    });
+
+    // Resolve the cell inside the page: a handle captured before a LiveView
+    // patch can point at a detached node, and a click on it expands nothing.
+    await page.evaluate(() => {
+      const el = document.querySelector('#cell-card-r1_c1')!;
       const r = el.getBoundingClientRect();
       el.dispatchEvent(
         new MouseEvent('click', {

@@ -2,10 +2,10 @@
 #
 #     mix run priv/repo/seeds.exs
 #
-# Inside the script, you can read and write to any of your
-# repositories directly:
-#
-#     Psc.Repo.insert!(%Psc.SomeSchema{})
-#
-# We recommend using the bang functions (`insert!`, `update!`
-# and so on) as they will fail if something goes wrong.
+# The built-in templates are also seeded by the release task on every boot;
+# running this file keeps a fresh development database identical.
+
+alias Psc.Canvas
+
+{created, present} = Canvas.seed_builtin_templates()
+IO.puts("Built-in templates: #{created} created, #{present} already present.")

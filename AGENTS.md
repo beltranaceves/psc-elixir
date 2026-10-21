@@ -52,6 +52,21 @@ SaladUI components (`lib/psc_web/components/ui/`), `Req` for HTTP.
 - All aggregate writes go through the context modules (`Psc.Canvas`, `Psc.Notes`); LiveViews do
   not touch the repo directly.
 
+## Administration
+
+- Authorization is `users.role` (`:member | :admin`). Roles change only through
+  `Psc.Accounts` (`promote_admin/1`, `demote_admin/1`); the last admin cannot be demoted, and
+  a role is never cast from a registration or profile form.
+- `/admin` is guarded by the `:require_admin` plug and `on_mount`. It hosts a Backpex 0.22
+  panel (`PscWeb.Admin.*Live`) plus a plain dashboard. Backpex owns CRUD chrome; canvases
+  and notes are read-only there because their content belongs to the event log.
+- **Built-in templates are rows** (`canvas_layouts.built_in` + unique `slug`), seeded
+  create-if-missing by `Psc.Release.setup/0`. Everyone can use them; they cannot be deleted;
+  admins can rename or unpublish them in `/admin/templates`.
+- Boot order is migrate → `ADMIN_EMAILS` bootstrap → built-in seed. `ADMIN_PASSWORD` is only
+  needed for addresses that do not have an account yet; creating the account is what stops
+  someone else from registering the address first.
+
 ## Invariants that must not break
 
 - **Event sourcing with pruning.** Edits are rows in the event table; a save folds them into
@@ -121,7 +136,9 @@ results, not a summary of intentions.
 - Live at `psc.gigalixirapp.com` (app `psc`, free tier, `gigalixir-26`).
 - Deploy with `git push gigalixir main`, or `scripts\deploy.ps1` (refuses a dirty tree or a
   non-`main` branch, streams the build log, probes the login page).
-- Migrations run at boot via the `Procfile`; they are idempotent.
+- The `Procfile` runs `Psc.Release.setup()` before starting the server: migrate, bootstrap
+  the admins listed in `ADMIN_EMAILS` (creating accounts with `ADMIN_PASSWORD` when needed),
+  and seed the built-in templates. All three steps are idempotent.
 - Required files: `elixir_buildpack.config` (do **not** add `release=true`), `Procfile`
   (start `bin/psc`, never `bin/server`), and `def release` in `mix.exs`.
 - Only numeric `PSC_PORT`/`PORT` values are honored; otherwise listen on 4000. SSL for the
@@ -130,9 +147,9 @@ results, not a summary of intentions.
 
 ## Where things live
 
-- `lib/psc/` — contexts and schemas (`canvas.ex`, `notes.ex`, `text_store.ex`).
+- `lib/psc/` — contexts and schemas (`canvas.ex`, `notes.ex`, `text_store.ex`, `admin.ex`).
 - `lib/psc_web/live/` — LiveViews: `unstr_canvas_live/` (canvas), `canvas_layout_live/`
-  (designer), `catalog_live/`, `user_live/`.
+  (designer), `catalog_live/`, `user_live/`, `admin/` (Backpex resources + dashboard).
 - `lib/psc_web/components/` — shared components, including SaladUI under `ui/`.
 - `assets/js/hooks/` — client hooks; `assets/css/app.css` — Tailwind entry.
 - `priv/repo/migrations/`, `priv/repo/seeds.exs`, `priv/repo/e2e_seeds.exs`.

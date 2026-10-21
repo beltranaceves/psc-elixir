@@ -35,6 +35,18 @@ defmodule Psc.AccountsFixtures do
     |> Accounts.confirm_user!()
   end
 
+  @doc """
+  Creates a confirmed user with the admin role.
+
+  Roles are set through the context, never through registration params, so the
+  fixture mirrors the only supported path.
+  """
+  def admin_fixture(attrs \\ %{}) do
+    user = user_fixture(attrs)
+    {:ok, admin} = Accounts.promote_admin(user)
+    admin
+  end
+
   def user_scope_fixture do
     user = user_fixture()
     user_scope_fixture(user)

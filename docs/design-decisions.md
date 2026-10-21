@@ -43,6 +43,7 @@ it costs, and the evidence it was verified against.
 | [ADR-031](#adr-031--a-template-can-be-public-and-its-use-is-counted) | A template can be public, and its use is counted | Accepted | 2026-10-20 |
 | [ADR-032](#adr-032--the-canvas-picker-shows-the-templates-and-creating-enters-the-canvas) | The canvas picker shows the templates, and creating enters the canvas | Accepted | 2026-10-21 |
 | [ADR-033](#adr-033--a-canvass-structure-is-editable-in-place) | A canvas's structure is editable in place | Accepted | 2026-10-21 |
+| [ADR-034](#adr-034--administration-is-a-role-and-the-defaults-are-rows) | Administration is a role, and the defaults are rows | Accepted | 2026-10-22 |
 
 ---
 
@@ -1459,6 +1460,51 @@ is built in place. The cost is twelve apply clauses to keep deterministic, a con
 dialog on destructive removals, and one shift for existing users: the picker's default is
 now an empty canvas, with the PSC one click away. The event log stays bounded — structure
 operations fold and prune exactly like cell operations.
+
+---
+
+## ADR-034 — Administration is a role, and the defaults are rows
+
+**Context.** The platform needed two things at once: default templates every user can start
+from, and an admin surface to manage them and more. Both are bootstrap problems. The app has
+no shell on the free tier, registration auto-confirms (so nobody proves they own an email),
+and the pruned event tables mean an admin must never edit canvas content behind the CRDT's
+back.
+
+**Decision.**
+
+- **Authorization is a role.** `users.role` is an `Ecto.Enum` (`:member | :admin`), changed
+  only through `Psc.Accounts` (`role_changeset/2`, `promote_admin/1`, `demote_admin/1`). The
+  last admin cannot be demoted. The role never appears in a registration cast list.
+- **Guarded twice.** `/admin` sits behind the `:require_admin` plug for the dead render and
+  the `:require_admin` `on_mount` for the socket. Backpex's preference endpoint lives in the
+  same scope, so it inherits both.
+- **Backpex owns the CRUD.** Users, templates, canvases and notes are `LiveResource`s;
+  canvases and notes are read-only because their content belongs to the event log. A plain
+  LiveView renders the dashboard counts. Backpex is pinned (`~> 0.22.0`) and uses the app's
+  PubSub, layout and translators.
+- **Defaults are rows.** `canvas_layouts` gained `built_in` and a unique `slug`. The PSC grid
+  and a single-note scratchpad are seeded by `Psc.Release.setup/0` on every boot, *create if
+  missing only* — an admin rename or unpublish survives a restart. Built-ins are readable by
+  everyone, cannot be deleted, and are instantiated through the same context path as any
+  template (so `use_count` is counted).
+- **Bootstrap creates, not promotes.** `ADMIN_EMAILS` (plus `ADMIN_PASSWORD` for addresses
+  with no account) runs in the `Procfile` before the server starts. Creating the account is
+  what makes it safe: an address that someone else registered first cannot be promoted into
+  the role.
+
+**Alternatives considered.** A boolean `:admin` (rejected: a second role would need another
+migration); keeping the hardcoded PSC picker card (rejected: admins could not manage the
+defaults); seeding with upsert on every boot (rejected: silently undoes admin edits);
+first-user-becomes-admin (rejected: a public signup could claim it); promoting by email
+without creating the account (rejected: the auto-confirmed registration makes it a hijack
+path).
+
+**Consequences.** A boot now runs migrate → bootstrap → seed, so a bad `ADMIN_EMAILS` shows
+up in the release log. Adding an admin is an env change plus a redeploy; the Users table can
+demote but cannot create the first address it has never seen. The built-in rows share the
+10k-row table with user templates (two rows, bounded). Backpex brings its own JS hooks into
+the global bundle and is pre-1.0, so upgrades need review.
 
 ---
 

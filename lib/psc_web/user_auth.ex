@@ -245,6 +245,32 @@ defmodule PscWeb.UserAuth do
     end
   end
 
+  def on_mount(:require_admin, _params, session, socket) do
+    socket = mount_current_scope(socket, session)
+    user = socket.assigns.current_scope && socket.assigns.current_scope.user
+
+    cond do
+      is_nil(user) ->
+        socket =
+          socket
+          |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+          |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
+
+        {:halt, socket}
+
+      Accounts.admin?(user) ->
+        {:cont, socket}
+
+      true ->
+        socket =
+          socket
+          |> Phoenix.LiveView.put_flash(:error, "You do not have access to that page.")
+          |> Phoenix.LiveView.redirect(to: ~p"/canvas")
+
+        {:halt, socket}
+    end
+  end
+
   defp mount_current_scope(socket, session) do
     Phoenix.Component.assign_new(socket, :current_scope, fn ->
       {user, _} =
@@ -284,4 +310,32 @@ defmodule PscWeb.UserAuth do
   end
 
   defp maybe_store_return_to(conn), do: conn
+
+  @doc """
+  Plug for routes that require an admin.
+
+  Anonymous requests go to the login page (keeping the return path); signed-in
+  members are sent to their canvases with an error flash.
+  """
+  def require_admin(conn, _opts) do
+    user = conn.assigns.current_scope && conn.assigns.current_scope.user
+
+    cond do
+      is_nil(user) ->
+        conn
+        |> put_flash(:error, "You must log in to access this page.")
+        |> maybe_store_return_to()
+        |> redirect(to: ~p"/users/log-in")
+        |> halt()
+
+      Accounts.admin?(user) ->
+        conn
+
+      true ->
+        conn
+        |> put_flash(:error, "You do not have access to that page.")
+        |> redirect(to: ~p"/canvas")
+        |> halt()
+    end
+  end
 end

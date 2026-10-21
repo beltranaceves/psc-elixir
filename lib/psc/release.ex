@@ -13,6 +13,39 @@ defmodule Psc.Release do
     end
   end
 
+  @doc """
+  Everything a boot needs, in one release command: migrate, bootstrap the
+  admins configured in `ADMIN_EMAILS`, and seed the built-in templates.
+  """
+  def setup do
+    migrate()
+    bootstrap_admins()
+    seed_builtin_templates()
+  end
+
+  @doc """
+  Promotes (or creates) the admins listed in `ADMIN_EMAILS`.
+  """
+  def bootstrap_admins do
+    load_app()
+    run_with_repo(&Psc.Accounts.bootstrap_admins/0)
+  end
+
+  @doc """
+  Creates any missing built-in template.
+  """
+  def seed_builtin_templates do
+    load_app()
+    run_with_repo(&Psc.Canvas.seed_builtin_templates/0)
+  end
+
+  defp run_with_repo(fun) do
+    Enum.map(repos(), fn repo ->
+      {:ok, _pid, result} = Ecto.Migrator.with_repo(repo, fn _repo -> fun.() end)
+      result
+    end)
+  end
+
   def rollback(repo, version) do
     load_app()
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))

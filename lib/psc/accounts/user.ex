@@ -9,6 +9,10 @@ defmodule Psc.Accounts.User do
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
 
+    # Authorization. Never cast from user input: roles are changed through
+    # `Psc.Accounts.update_user_role/2` or the release bootstrap.
+    field :role, Ecto.Enum, values: [:member, :admin], default: :member
+
     timestamps(type: :utc_datetime)
   end
 
@@ -138,6 +142,26 @@ defmodule Psc.Accounts.User do
     now = DateTime.utc_now(:second)
     change(user, confirmed_at: now)
   end
+
+  @doc """
+  A changeset for changing a user's role.
+
+  Deliberately separate from the registration and email changesets: a role is
+  never accepted from a request payload that merely passes through `cast/3`
+  from a form.
+  """
+  def role_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:role])
+    |> validate_required([:role])
+    |> validate_inclusion(:role, [:member, :admin])
+  end
+
+  @doc """
+  Whether the user may use the admin surface.
+  """
+  def admin?(%__MODULE__{role: :admin}), do: true
+  def admin?(_user), do: false
 
   @doc """
   Verifies the password.

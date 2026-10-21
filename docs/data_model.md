@@ -35,6 +35,7 @@ erDiagram
         string email UK
         string hashed_password
         datetime confirmed_at
+        string role "member | admin"
     }
     users_tokens {
         bigint id PK
@@ -105,6 +106,8 @@ erDiagram
         int use_count
         int fork_count
         uuid forked_from_id FK
+        boolean built_in
+        string slug UK "unique when present"
         int author_id FK
     }
 ```
@@ -114,8 +117,8 @@ Notes on the two canvas representations:
 - The `unstr_canvases.cells` map holds the canvas's structure and content flat: `rows`,
   `columns` and `layout` (the matrix of cell keys) beside every cell's data at its own
   key. Its default is the **empty structure** — a canvas with no rows and no columns,
-  built in place with structure editing (ADR-033); the built-in 12-cell PSC grid is an
-  explicit choice (`Canvas.psc_cells/0`), not a default.
+  built in place with structure editing (ADR-033); the built-in 12-cell PSC grid is a
+  seeded built-in template (`slug: "psc"`, ADR-034), not a schema default.
 
 - `canvases` is the fixed 12-cell Problem–Solution Canvas; each cell is its own
   `embeds_one` schema (JSONB column) validated per cell.

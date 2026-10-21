@@ -5,6 +5,8 @@ defmodule PscWeb.Layouts do
   """
   use PscWeb, :html
 
+  alias Backpex.HTML.Layout, as: BLayout
+
   # Embed all files in layouts/* within this module.
   # The default root.html.heex file contains the HTML
   # skeleton of your application, namely HTML headers
@@ -131,6 +133,17 @@ defmodule PscWeb.Layouts do
             >
               Catalog
             </.link>
+            <.link
+              :if={admin_user?(@current_scope)}
+              navigate={~p"/admin"}
+              aria-current={nav_current(@header_title, @header_section, "Admin")}
+              class={[
+                "px-3 py-1.5 rounded-lg text-sm transition-colors",
+                nav_item_class(@header_title, @header_section, "Admin")
+              ]}
+            >
+              Admin
+            </.link>
           </nav>
 
           <div class="flex items-center gap-3 sm:gap-4">
@@ -188,6 +201,13 @@ defmodule PscWeb.Layouts do
                     class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content md:hidden"
                   >
                     Catalog
+                  </.link>
+                  <.link
+                    :if={admin_user?(@current_scope)}
+                    navigate={~p"/admin"}
+                    class="block rounded px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-content/5 hover:text-base-content md:hidden"
+                  >
+                    Admin
                   </.link>
                   <div class="my-1 h-px bg-base-content/10"></div>
                   <.theme_menu />
@@ -265,6 +285,82 @@ defmodule PscWeb.Layouts do
 
       <.flash_group flash={@flash} />
     </div>
+    """
+  end
+
+  @doc """
+  Renders the administration shell.
+
+  Backpex owns the sidebar, the table chrome and the user preferences; this
+  function supplies the chrome around it (branding, navigation, the way back
+  to the app, theme switch and flash messages). It is the layout returned by
+  every admin `LiveResource`, and it also wraps the dashboard, which is a
+  plain LiveView.
+  """
+  attr :flash, :map, required: true, doc: "the map of flash messages"
+  attr :socket, :any, required: true, doc: "the LiveView socket"
+
+  attr :current_scope, :map,
+    default: nil,
+    doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
+
+  attr :live_resource, :atom, default: nil, doc: "the Backpex resource being rendered"
+  attr :fluid?, :boolean, default: false, doc: "whether the resource uses the full width"
+  attr :current_url, :string, default: nil, doc: "the current URL, for active sidebar items"
+  attr :sidebar_open, :boolean, default: true, doc: "initial sidebar state"
+  attr :sidebar_section_states, :map, default: %{}, doc: "collapsed sidebar sections"
+  attr :preferences_manifest, :map, default: nil, doc: "Backpex's signed preference manifest"
+  slot :inner_block, required: true
+
+  def admin(assigns) do
+    ~H"""
+    <BLayout.app_shell
+      socket={@socket}
+      live_resource={@live_resource}
+      fluid={@fluid?}
+      sidebar_open={@sidebar_open}
+      preferences_manifest={@preferences_manifest}
+    >
+      <:sidebar_branding>
+        <BLayout.sidebar_branding title="PSC Admin" />
+      </:sidebar_branding>
+
+      <:sidebar>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin"}>
+          <.icon name="hero-squares-2x2" class="size-5" /> Dashboard
+        </BLayout.sidebar_item>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/users"}>
+          <.icon name="hero-users" class="size-5" /> Users
+        </BLayout.sidebar_item>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/templates"}>
+          <.icon name="hero-rectangle-group" class="size-5" /> Templates
+        </BLayout.sidebar_item>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/canvases"}>
+          <.icon name="hero-table-cells" class="size-5" /> Canvases
+        </BLayout.sidebar_item>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/notes"}>
+          <.icon name="hero-document-text" class="size-5" /> Notes
+        </BLayout.sidebar_item>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/canvas"}>
+          <.icon name="hero-arrow-left" class="size-5" /> Back to app
+        </BLayout.sidebar_item>
+      </:sidebar>
+
+      <:topbar>
+        <div class="flex flex-1 items-center justify-end gap-4">
+          <span
+            :if={@current_scope && @current_scope.user}
+            class="hidden text-sm text-base-content/60 sm:inline"
+          >
+            {@current_scope.user.email}
+          </span>
+          <.theme_toggle />
+        </div>
+      </:topbar>
+
+      <BLayout.flash_messages flash={@flash} />
+      {render_slot(@inner_block)}
+    </BLayout.app_shell>
     """
   end
 
@@ -386,6 +482,9 @@ defmodule PscWeb.Layouts do
   # The header title doubles as the active-section marker for the nav, unless a
   # page sets a more specific header_section (e.g. "Designer" in Templates).
   defp nav_section(header_title, header_section), do: header_section || header_title
+
+  defp admin_user?(%{user: %{role: :admin}}), do: true
+  defp admin_user?(_scope), do: false
 
   defp nav_item_class(header_title, header_section, section) do
     if nav_section(header_title, header_section) == section do

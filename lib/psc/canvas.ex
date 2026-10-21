@@ -5,6 +5,7 @@ defmodule Psc.Canvas do
   """
 
   import Ecto.Query, warn: false
+  require Logger
   alias Psc.Repo
   alias Psc.Canvas.UnstrCanvas
   alias Psc.Canvas.Layout
@@ -176,15 +177,25 @@ defmodule Psc.Canvas do
   # ─── Template functions ───
 
   @doc """
-  List all templates a user can access (authored or shared with them).
+  List all templates a user can access: their own, those shared with them, and
+  the built-in templates every user may start from.
   """
   def list_templates(user) do
     from(l in Layout,
-      where: l.author_id == ^user.id or fragment("? = ANY(?)", ^user.email, l.shared_with),
-      order_by: [desc: l.updated_at]
+      where:
+        l.built_in == true or l.author_id == ^user.id or
+          fragment("? = ANY(?)", ^user.email, l.shared_with),
+      order_by: [desc: l.built_in, desc: l.updated_at]
     )
     |> preload(:author)
     |> Repo.all()
+  end
+
+  @doc """
+  Get a built-in template by its stable slug.
+  """
+  def get_template_by_slug(slug) when is_binary(slug) do
+    Repo.get_by(Layout, slug: slug, built_in: true)
   end
 
   @doc """
@@ -216,9 +227,139 @@ defmodule Psc.Canvas do
 
   @doc """
   Delete a template.
+
+  Built-in templates are refused: other users start from them, and the seed
+  would recreate a missing one on the next boot anyway.
   """
-  def delete_template(template) do
-    Repo.delete(template)
+  def delete_template(%Layout{built_in: true}), do: {:error, :built_in}
+  def delete_template(template), do: Repo.delete(template)
+
+  # ─── Built-in templates ───
+
+  # Seeded on boot and on every `mix ecto.setup`. They belong to nobody and are
+  # readable by everyone; the admin surface can publish or rename them, and the
+  # seed only creates the ones that are missing, so an edit survives a restart.
+  @builtin_templates [
+    %{
+      slug: "psc",
+      name: "Problem–Solution Canvas",
+      description:
+        "The classic 12-cell framework: Perceive, Form, Consolidate and Learn " <>
+          "across Rationale, Strategy and Tactics."
+    },
+    %{
+      slug: "scratchpad",
+      name: "Scratchpad",
+      description: "One page and a single note, for free-form thinking."
+    }
+  ]
+
+  @doc """
+  The built-in templates the instance ships with.
+  """
+  def builtin_templates, do: Enum.map(@builtin_templates, & &1.slug)
+
+  @doc """
+  Create any missing built-in template. Idempotent by slug.
+
+  Existing rows are left untouched: an administrator may have renamed or
+  unpublished one, and a reboot must not undo that. Returns
+  `{created, already_present}`.
+  """
+  def seed_builtin_templates do
+    Enum.reduce(@builtin_templates, {0, 0}, fn definition, {created, present} ->
+      case Repo.get_by(Layout, slug: definition.slug) do
+        nil ->
+          attrs = %{
+            name: definition.name,
+            description: definition.description,
+            layout_map: builtin_layout_map(definition.slug),
+            public: true
+          }
+
+          %Layout{}
+          |> Layout.changeset(attrs)
+          # Both fields are system-set and stay out of `Layout.changeset/2`.
+          |> Ecto.Changeset.change(built_in: true, slug: definition.slug)
+          |> Repo.insert()
+          |> case do
+            {:ok, _template} ->
+              {created + 1, present}
+
+            {:error, changeset} ->
+              Logger.warning(
+                "could not seed the built-in template #{definition.slug}: #{inspect(changeset.errors)}"
+              )
+
+              {created, present}
+          end
+
+        _existing ->
+          {created, present + 1}
+      end
+    end)
+  end
+
+  defp builtin_layout_map("psc"), do: psc_layout_map()
+  defp builtin_layout_map("scratchpad"), do: scratchpad_layout_map()
+
+  @doc """
+  The Problem–Solution Canvas as a template definition.
+
+  Derived from `psc_cells/0`, so the built-in template and the picker's
+  structure cannot drift apart.
+  """
+  def psc_layout_map do
+    cells =
+      @psc_cells
+      |> Map.drop(["rows", "columns", "layout"])
+      |> Map.new(fn {key, data} ->
+        fields =
+          data
+          |> Map.keys()
+          |> Enum.reject(&(&1 in ["row", "column"]))
+          |> Enum.sort()
+
+        {key,
+         %{
+           "label" => humanize_key(key),
+           "fields" => fields,
+           "defaults" => Map.new(fields, fn field -> {field, ""} end)
+         }}
+      end)
+
+    %{
+      "rows" => @psc_cells["rows"],
+      "columns" => @psc_cells["columns"],
+      "layout" => @psc_cells["layout"],
+      "cells" => cells,
+      "notes_mode" => "multi"
+    }
+  end
+
+  @doc """
+  A one-page template that opens its canvas in single-note mode.
+  """
+  def scratchpad_layout_map do
+    %{
+      "rows" => [%{"id" => "r1", "label" => "Scratchpad"}],
+      "columns" => [%{"id" => "c1", "label" => "Notes"}],
+      "layout" => [["r1_c1"]],
+      "cells" => %{
+        "r1_c1" => %{
+          "label" => "Scratchpad",
+          "fields" => ["content"],
+          "defaults" => %{"content" => ""}
+        }
+      },
+      "notes_mode" => "single"
+    }
+  end
+
+  defp humanize_key(key) do
+    key
+    |> String.split("_")
+    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   @doc """
@@ -246,6 +387,7 @@ defmodule Psc.Canvas do
     author = template.author
 
     cond do
+      template.built_in -> true
       author && author.email == user_email -> true
       user_email in (template.shared_with || []) -> true
       true -> false

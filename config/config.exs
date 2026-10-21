@@ -55,6 +55,14 @@ config :phoenix_live_view, :colocated_assets, disable_symlink_warning: true
 # at the `config/runtime.exs`.
 config :psc, Psc.Mailer, adapter: Swoosh.Adapters.Local
 
+# Backpex publishes preference updates (theme, sidebar, hidden columns)
+# through the application's PubSub. Its UI strings go through the app's
+# translators so the fallback warning is not printed on every render.
+config :backpex,
+  pubsub_server: Psc.PubSub,
+  translator_function: {PscWeb.CoreComponents, :translate_backpex},
+  error_translator_function: {PscWeb.CoreComponents, :translate_error}
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",

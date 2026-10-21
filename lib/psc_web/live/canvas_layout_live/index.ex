@@ -215,10 +215,13 @@ defmodule PscWeb.CanvasLayoutLive.Index do
     >
       <div class="flex items-start justify-between gap-2 mb-2">
         <h3 class="font-medium text-base-content break-words">{@template.name}</h3>
-        <%= if @template.author_id == @current_user.id do %>
-          <UIBadge.badge variant="outline" class="shrink-0 text-xs">Owner</UIBadge.badge>
-        <% else %>
-          <UIBadge.badge variant="secondary" class="shrink-0 text-xs">Shared</UIBadge.badge>
+        <%= cond do %>
+          <% @template.built_in -> %>
+            <UIBadge.badge variant="outline" class="shrink-0 text-xs">Default</UIBadge.badge>
+          <% @template.author_id == @current_user.id -> %>
+            <UIBadge.badge variant="outline" class="shrink-0 text-xs">Owner</UIBadge.badge>
+          <% true -> %>
+            <UIBadge.badge variant="secondary" class="shrink-0 text-xs">Shared</UIBadge.badge>
         <% end %>
       </div>
 
@@ -248,7 +251,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           navigate={~p"/templates/#{@template.id}"}
           class={[UIHelpers.button_variant(%{variant: "outline", size: "sm"}), "gap-1.5"]}
         >
-          Edit
+          {if @template.built_in, do: "View", else: "Edit"}
         </.link>
         <%= if @template.author_id == @current_user.id do %>
           <UIButton.button

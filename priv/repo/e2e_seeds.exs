@@ -35,7 +35,15 @@ ensure_user = fn email, password ->
 end
 
 # Primary account (logged in via tests/auth.setup.ts storage state).
-ensure_user.("e2e@example.com", "e2e-password-123")
+primary = ensure_user.("e2e@example.com", "e2e-password-123")
+
+# The admin surface needs an administrator; the primary E2E user is it.
+{:ok, _admin} = Accounts.promote_admin(primary)
+
+# The release tasks seed the built-in templates on boot. The E2E database is
+# reset between runs, so seed them here too — the picker shows them.
+{created, _present} = Psc.Canvas.seed_builtin_templates()
+IO.puts("E2E built-in templates created: #{created}")
 
 # Second account for multiplayer/collaboration tests (logged in per-test
 # in a separate browser context — see tests/canvas.spec.ts).
