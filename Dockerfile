@@ -49,4 +49,8 @@ COPY --from=builder --chown=nobody:root /app/_build/prod/rel/psc ./
 
 USER nobody
 
-CMD ["/app/bin/server"]
+# The Docker entrypoint does not read the Procfile, so the release tasks that
+# Gigalixir runs at boot must run here too: migrations, the ADMIN_EMAILS
+# bootstrap and the built-in template seed. `setup/0` is idempotent, and
+# `exec` hands PID 1 to the server so stop/restart signals reach it.
+CMD ["/bin/sh", "-c", "/app/bin/psc eval \"Psc.Release.setup()\" && exec /app/bin/server"]
