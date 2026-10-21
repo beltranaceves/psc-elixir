@@ -24,6 +24,9 @@ async function createCanvasAndOpen(page: import('@playwright/test').Page, name: 
   await page.goto('/canvas');
   await page.locator('.phx-connected').first().waitFor();
 
+  // The helpers need a canvas with structure to edit: the PSC card, not the
+  // default blank (which is empty until the owner builds it in place).
+  await page.getByRole('button', { name: 'Start from the PSC canvas' }).click();
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
 
@@ -187,6 +190,7 @@ test.describe('canvas notes', () => {
 
     // Creating lands the user in the new canvas.
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+    await page.locator('.phx-connected').first().waitFor();
     await dismissFlash(page);
 
     await page.locator('#canvas-tab-notes').click();
@@ -222,6 +226,7 @@ test.describe('canvas notes', () => {
 
     // Creating lands the user in the new canvas.
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+    await page.locator('.phx-connected').first().waitFor();
     await dismissFlash(page);
 
     await page.locator('#canvas-tab-notes').click();

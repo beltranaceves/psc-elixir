@@ -64,6 +64,9 @@ async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
   await page.goto('/canvas');
   await page.locator('.phx-connected').first().waitFor();
 
+  // The helpers need a canvas with structure to edit: the PSC card, not the
+  // default blank (which is empty until the owner builds it in place).
+  await page.getByRole('button', { name: 'Start from the PSC canvas' }).click();
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
 
