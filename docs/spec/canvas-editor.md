@@ -194,6 +194,17 @@ a label input, per-field section-title inputs with a remove ×, and an add-field
 Content editing keeps working throughout. Removing a row or column that holds content
 opens a confirmation dialog; an empty one goes straight away.
 
+The **row-label column is a fixed 11 rem**, not one that grows with the longest label. A
+content-derived width resizes a beat *after* the typing (the label reaches the server
+through a debounce), so the column moves under the cursor; and because the column also
+holds the accent swatch and the remove button, a short label left the input about 17 px
+wide. A fixed width gives the input room at every viewport and never moves while typing.
+A long row label truncates in the read-only view (its full text is the cell's `title`).
+
+The edit-mode controls are **stacked on a phone** (the input on its own line, the swatch
+and the remove button below it) and side by side from `sm` up, with 28 px touch targets
+and a 16 px input font so iOS does not zoom the page on focus.
+
 Every change is a granular operation in the canvas's event log (`add_row`,
 `remove_column`, `update_cell_label`, …), applied by `UnstrCanvasCRDT.apply_operation/2`
 and folded into the snapshot by the same save path, so structure changes reach every

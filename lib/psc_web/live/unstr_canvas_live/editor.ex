@@ -1051,23 +1051,27 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # the viewport and scrolls horizontally.
   @min_column_width_rem 12
 
+  # The row-label column is a fixed width, not one that grows with the
+  # longest label.
+  #
+  # A content-derived width is a trap here: the label reaches the server
+  # through a debounced change, so the column would resize a beat after the
+  # typing - the width lags the text, and the input the user is typing in
+  # moves under their cursor. Worse, the width was sized for the *label*, so
+  # in Edit structure the input, the accent swatch and the remove button had
+  # to share it: a 5-character label left the input 17px wide.
+  #
+  # A fixed column gives the input room to type in at every viewport, and it
+  # does not move while typing.
+  @row_label_width_rem 11
+
   defp table_min_width(cells) do
     columns = length(cells["columns"] || [])
-    "calc(#{row_label_width(cells)} + #{columns * @min_column_width_rem}rem)"
+    "calc(#{row_label_width()}rem + #{columns * @min_column_width_rem}rem)"
   end
 
-  # The row-label column only takes as much room as its longest label needs
-  # (~0.85ch per character plus the cell's horizontal padding); labels are
-  # truncated rather than allowed to spill into the neighbouring cell.
-  defp row_label_width(cells) do
-    longest =
-      cells["rows"]
-      |> List.wrap()
-      |> Enum.map(fn row -> row |> Map.get("label", "") |> String.length() end)
-      |> Enum.max(fn -> 0 end)
-
-    "#{Float.ceil(longest * 0.85 + 4) |> trunc()}ch"
-  end
+  # The width of the row-label column, in rem.
+  defp row_label_width, do: @row_label_width_rem
 
   # A canvas with no rows or no columns has nothing to render as a table: the
   # empty state takes over, and the owner builds the structure in place.
@@ -1388,7 +1392,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                     style={"min-width: #{table_min_width(@cells)}"}
                   >
                     <colgroup>
-                      <col style={"width: #{row_label_width(@cells)}"} />
+                      <col style={"width: #{row_label_width()}rem"} />
                       <%= for _column <- @cells["columns"] || [] do %>
                         <col />
                       <% end %>
@@ -1405,7 +1409,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                               />
                               <div class="px-2 py-1">
                                 <%= if @edit_structure? do %>
-                                  <div class="flex items-center gap-1">
+                                  <%!-- Same treatment as the row header: the input
+                                  takes the full width, the controls sit beside it
+                                  on a pointer and below it on a phone. --%>
+                                  <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-1">
                                     <.form
                                       for={%{}}
                                       id={"column-" <> column["id"] <> "-label-form"}
@@ -1419,34 +1426,36 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         name="label"
                                         value={column["label"]}
                                         phx-debounce="300"
-                                        class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                        class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none sm:py-0.5"
                                       />
                                     </.form>
 
-                                    <button
-                                      type="button"
-                                      id={"accent-swatch-column-" <> column["id"]}
-                                      phx-click="toggle_structure_accent"
-                                      phx-value-group="column"
-                                      phx-value-id={column["id"]}
-                                      class={[
-                                        "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
-                                        swatch_class(column["accent"])
-                                      ]}
-                                      title="Accent color"
-                                      aria-label={"Accent color for column #{column["label"]}"}
-                                    ></button>
+                                    <div class="flex shrink-0 items-center gap-1.5 sm:gap-1">
+                                      <button
+                                        type="button"
+                                        id={"accent-swatch-column-" <> column["id"]}
+                                        phx-click="toggle_structure_accent"
+                                        phx-value-group="column"
+                                        phx-value-id={column["id"]}
+                                        class={[
+                                          "size-7 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition sm:size-3.5",
+                                          swatch_class(column["accent"])
+                                        ]}
+                                        title="Accent color"
+                                        aria-label={"Accent color for column #{column["label"]}"}
+                                      ></button>
 
-                                    <button
-                                      type="button"
-                                      phx-click="request_remove_column"
-                                      phx-value-id={column["id"]}
-                                      class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
-                                      title="Remove column"
-                                      aria-label={"Remove column #{column["label"]}"}
-                                    >
-                                      <.icon name="hero-x-mark" class="size-3" />
-                                    </button>
+                                      <button
+                                        type="button"
+                                        phx-click="request_remove_column"
+                                        phx-value-id={column["id"]}
+                                        class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10 sm:size-5"
+                                        title="Remove column"
+                                        aria-label={"Remove column #{column["label"]}"}
+                                      >
+                                        <.icon name="hero-x-mark" class="size-3.5 sm:size-3" />
+                                      </button>
+                                    </div>
                                   </div>
 
                                   <div
@@ -1460,7 +1469,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         phx-value-id={column["id"]}
                                         phx-value-accent={token}
                                         class={[
-                                          "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
+                                          "size-6 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition sm:size-3",
                                           swatch_class(token),
                                           column["accent"] == token &&
                                             "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
@@ -1499,7 +1508,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                             />
                             <div class="px-2 py-1">
                               <%= if @edit_structure? do %>
-                                <div class="flex items-center gap-1">
+                                <%!-- The input gets the full width of the column; the
+                                swatch and the remove button sit beside it on a
+                                pointer and below it on a phone, where a 14px
+                                swatch is not a target anyone can hit. --%>
+                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-1">
                                   <.form
                                     for={%{}}
                                     id={"row-" <> row["id"] <> "-label-form"}
@@ -1513,34 +1526,36 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                       name="label"
                                       value={row["label"]}
                                       phx-debounce="300"
-                                      class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                      class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none sm:py-0.5"
                                     />
                                   </.form>
 
-                                  <button
-                                    type="button"
-                                    id={"accent-swatch-row-" <> row["id"]}
-                                    phx-click="toggle_structure_accent"
-                                    phx-value-group="row"
-                                    phx-value-id={row["id"]}
-                                    class={[
-                                      "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
-                                      swatch_class(row["accent"])
-                                    ]}
-                                    title="Accent color"
-                                    aria-label={"Accent color for row #{row["label"]}"}
-                                  ></button>
+                                  <div class="flex shrink-0 items-center gap-1.5 sm:gap-1">
+                                    <button
+                                      type="button"
+                                      id={"accent-swatch-row-" <> row["id"]}
+                                      phx-click="toggle_structure_accent"
+                                      phx-value-group="row"
+                                      phx-value-id={row["id"]}
+                                      class={[
+                                        "size-7 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition sm:size-3.5",
+                                        swatch_class(row["accent"])
+                                      ]}
+                                      title="Accent color"
+                                      aria-label={"Accent color for row #{row["label"]}"}
+                                    ></button>
 
-                                  <button
-                                    type="button"
-                                    phx-click="request_remove_row"
-                                    phx-value-id={row["id"]}
-                                    class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
-                                    title="Remove row"
-                                    aria-label={"Remove row #{row["label"]}"}
-                                  >
-                                    <.icon name="hero-x-mark" class="size-3" />
-                                  </button>
+                                    <button
+                                      type="button"
+                                      phx-click="request_remove_row"
+                                      phx-value-id={row["id"]}
+                                      class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10 sm:size-5"
+                                      title="Remove row"
+                                      aria-label={"Remove row #{row["label"]}"}
+                                    >
+                                      <.icon name="hero-x-mark" class="size-3.5 sm:size-3" />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <div
@@ -1554,7 +1569,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                       phx-value-id={row["id"]}
                                       phx-value-accent={token}
                                       class={[
-                                        "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
+                                        "size-6 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition sm:size-3",
                                         swatch_class(token),
                                         row["accent"] == token &&
                                           "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
@@ -1574,7 +1589,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                   </button>
                                 </div>
                               <% else %>
-                                <div class="truncate font-medium text-base-content/70 text-sm">
+                                <div
+                                  class="truncate font-medium text-base-content/70 text-sm"
+                                  title={row["label"]}
+                                >
                                   {row["label"]}
                                 </div>
                               <% end %>
@@ -1627,7 +1645,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                           name="label"
                                           value={Map.get(cell_data, "label", "")}
                                           placeholder={cell_key}
-                                          class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                          class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
                                         />
                                       </.form>
                                     <% else %>

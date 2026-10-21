@@ -226,10 +226,13 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, _lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      # Content no longer drives column widths: 2x2 fixture → a label column
-      # sized from the longest row name + two 12rem minimum data columns.
+      # The row-label column is a fixed width, not one that grows with the
+      # longest label: a content-derived width would resize a beat after the
+      # typing (the label reaches the server through a debounce) and would
+      # leave the input squeezed between the accent swatch and the remove
+      # button. Two 12rem minimum data columns follow it.
       assert html =~ "table-fixed"
-      assert html =~ "min-width: calc("
+      assert html =~ "min-width: calc(11rem + 24rem)"
 
       # The grid takes the remaining viewport height through flex, not a
       # viewport-unit calculation.
