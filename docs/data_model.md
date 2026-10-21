@@ -111,6 +111,12 @@ erDiagram
 
 Notes on the two canvas representations:
 
+- The `unstr_canvases.cells` map holds the canvas's structure and content flat: `rows`,
+  `columns` and `layout` (the matrix of cell keys) beside every cell's data at its own
+  key. Its default is the **empty structure** — a canvas with no rows and no columns,
+  built in place with structure editing (ADR-033); the built-in 12-cell PSC grid is an
+  explicit choice (`Canvas.psc_cells/0`), not a default.
+
 - `canvases` is the fixed 12-cell Problem–Solution Canvas; each cell is its own
   `embeds_one` schema (JSONB column) validated per cell.
 - `unstr_canvases` is the configurable canvas: rows, columns, the 2D `layout`, and

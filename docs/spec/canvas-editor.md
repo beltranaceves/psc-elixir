@@ -181,6 +181,28 @@ paints outside it: names break on word boundaries, and descriptions break long
 tokens and are clamped to two lines so the grid rows stay even. The same rule
 applies to the template cards in the template library.
 
+### Structure editing (Edit structure)
+
+The canvas's structure is editable in place ([canvas-structure.md](canvas-structure.md),
+ADR-033). An **owner-only** toolbar above the grid carries the **Edit structure** toggle
+and — while it is on — **Add Column** / **Add Row**. Shared users see no toolbar and their
+structure events are refused server-side.
+
+While the toggle is on, the grid carries the designer's controls: row and column headers
+become label inputs with an accent swatch (inline palette) and a remove ×; each cell gains
+a label input, per-field section-title inputs with a remove ×, and an add-field form.
+Content editing keeps working throughout. Removing a row or column that holds content
+opens a confirmation dialog; an empty one goes straight away.
+
+Every change is a granular operation in the canvas's event log (`add_row`,
+`remove_column`, `update_cell_label`, …), applied by `UnstrCanvasCRDT.apply_operation/2`
+and folded into the snapshot by the same save path, so structure changes reach every
+connected client and survive a reload.
+
+A canvas with no rows or no columns renders an **empty state** instead of a table: the
+owner gets **Add row** / **Add column** actions (a blank canvas is built here), a shared
+user gets "The owner hasn't built this canvas yet."
+
 ### Grid rendering
 
 The editor renders a CSS grid based on `cells.rows` and `cells.columns`:

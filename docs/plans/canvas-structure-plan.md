@@ -1,6 +1,6 @@
 # Canvas structure editing — implementation plan
 
-> **Status:** not started.
+> **Status:** all four tasks done (2026-10-21).
 > **Spec:** [canvas-structure.md](../spec/canvas-structure.md).
 > **Decision to record:** ADR-033 — a canvas's structure is editable in place (written in
 > Task 1, when the behaviour lands).
@@ -31,7 +31,7 @@ Four things have to happen, in this order, because each one depends on the one b
 
 ## Task 1 — The structure operations
 
-**Status: pending.**
+**Status: done.**
 
 - `Psc.Canvas.UnstrCanvasCRDT.apply_operation/2` gains the twelve clauses from the spec's
   table. Each is a pure function of `(operation, cells) → cells`:
@@ -74,7 +74,7 @@ designer's latent bug; do not copy it.
 
 ## Task 2 — Blank and PSC in the picker
 
-**Status: pending.**
+**Status: done.**
 
 - `PscWeb.UnstrCanvasLive.Index` renders three kinds of card: **Blank canvas** (empty
   preview, default-selected, id `""`), **PSC canvas** (the built-in grid, id `"psc"`),
@@ -104,7 +104,7 @@ tests so nobody "simplifies" it later.
 
 ## Task 3 — Edit mode in the editor
 
-**Status: pending.**
+**Status: done.**
 
 - An owner-only toolbar above the grid: the **Edit structure** toggle, and — while on —
   **Add Column** / **Add Row**. Shared users see nothing.
@@ -145,7 +145,7 @@ not a stale assign.
 
 ## Task 4 — E2E regression
 
-**Status: pending.**
+**Status: done.**
 
 - `test/e2e/tests/structure.spec.ts`:
   - create a blank canvas, build it in place (add rows/columns, rename, add a field),
@@ -166,6 +166,13 @@ not a stale assign.
 wait for `.phx-connected` first (the house rule that saved the tab strip); and the blank
 canvas's editor has no table, so anything that waits for grid selectors must wait for the
 empty state instead.
+
+**Found while building it** — the edit-mode inputs need **stable ids** (the designer's
+inputs all have them). Without one, a patch re-renders the input as a new node, and a
+pending `phx-debounce` dies with the old node: the row-rename's patch (which resizes the
+label column) silently ate the column rename typed a moment later. The change event's
+debounce callback checks `document.body.contains(el)` and drops the change when the
+element was detached. Every edit-mode input now carries the designer's id scheme.
 
 ---
 

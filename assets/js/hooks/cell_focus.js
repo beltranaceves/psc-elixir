@@ -123,6 +123,24 @@ export default {
     this.el.removeEventListener("touchend", this.handleTouchEnd)
     document.removeEventListener("keydown", this.handleKeydown)
     if (this.el._cellFocus === this) delete this.el._cellFocus
+
+    // A fullscreen cell can be destroyed by a LiveView patch — structure
+    // editing removed its row. The fullscreen visual dies with the element,
+    // but the body scroll lock and the URL fragment would outlive it: drop
+    // both, so the user is back on the grid instead of a locked page.
+    if (this.isExpanded()) {
+      document.body.classList.remove("overflow-hidden")
+
+      if (fullscreenHashPushed) {
+        fullscreenHashPushed = false
+        const url = new URL(window.location.href)
+        if (url.hash.startsWith(CELL_HASH_PREFIX)) {
+          url.hash = ""
+          window.history.replaceState(window.history.state, "", url)
+        }
+      }
+    }
+
     clearTimeout(this.closeTimer)
     clearTimeout(this.swipeTimer)
     this.releaseBody()
