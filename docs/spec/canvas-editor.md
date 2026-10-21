@@ -267,12 +267,18 @@ Unchanged from existing implementation:
 
 The **Start a canvas** card at the top of the index page holds the creation form:
 
-- **Template picker** — a row of cards, a **PSC canvas** card first, then one per
-  template the user can access (own + shared). Each card shows a schematic preview of the
-  template's grid (`PscWeb.Components.TemplatePreview.mini_preview`), its name and its
-  dimensions; the selected card carries the primary border and tint. The choice is made
-  with the eyes: a layout is the one thing a dropdown cannot show. The selected id rides
-  to the submit in a hidden input, and only ids the picker offered are accepted.
+- **Template picker** — a row of cards. The first is a **catalog link** ("Browse the
+  catalog / Public templates"), then a **Blank canvas** card (the empty structure, built in
+  place), a **PSC canvas** card (the built-in 12-cell grid), then one card per template the
+  user can access (own + shared). Each card shows a schematic preview of the grid
+  (`PscWeb.Components.TemplatePreview.mini_preview`), its name and its dimensions; the
+  selected card carries the primary border and tint. The choice is made with the eyes: a
+  layout is the one thing a dropdown cannot show. The selected id rides to the submit in a
+  hidden input, and only ids the picker offered are accepted.
+
+  The catalog card is a **link, not a choice**: it has no `aria-pressed`, it is drawn
+  dashed like every other action card in the app, and it opens in a **new tab** so a name
+  already typed in the form is not lost.
 - **Name** text input, **Description** textarea.
 - **Create** button — calls `instantiate_template` (if a template is selected) or
   `create_unstr_canvas` (if not), then **navigates to the new canvas's editor**. Creating

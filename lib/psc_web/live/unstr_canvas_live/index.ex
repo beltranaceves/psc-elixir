@@ -165,12 +165,34 @@ defmodule PscWeb.UnstrCanvasLive.Index do
             <div>
               <span class="label mb-1">Start from</span>
 
-              <%!-- The picker: blank first, then the built-in PSC, then a card
-              per template. The choice is made with the eyes — a layout is the
-              one thing a dropdown cannot show. The selected id rides to the
-              submit in the hidden input below, the way a select's value
-              would. --%>
+              <%!-- The picker: the catalog first, then blank, then the built-in
+              PSC, then a card per template. The choice is made with the eyes —
+              a layout is the one thing a dropdown cannot show. The selected id
+              rides to the submit in the hidden input below, the way a select's
+              value would. --%>
               <div id="template-picker" class="canvas-grid-scroll flex gap-3 overflow-x-auto pb-1">
+                <%!-- The catalog is a link, not a choice: a dashed card, like
+                every other action card in the app, and it opens in a new tab
+                so a name already typed is not lost. --%>
+                <a
+                  id="template-picker-catalog"
+                  href={~p"/catalog"}
+                  target="_blank"
+                  rel="noopener"
+                  class="flex w-40 shrink-0 flex-col gap-2 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-3 text-left transition-colors hover:border-base-content/45 hover:bg-base-content/5"
+                >
+                  <span class="flex h-16 items-center justify-center">
+                    <span class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <.icon name="hero-book-open" class="size-5" />
+                    </span>
+                  </span>
+
+                  <span class="break-words text-sm font-medium text-base-content">
+                    Browse the catalog
+                  </span>
+                  <span class="text-xs text-base-content/50">Public templates</span>
+                </a>
+
                 <button
                   type="button"
                   id="template-picker-blank"

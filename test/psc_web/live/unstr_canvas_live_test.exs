@@ -48,12 +48,26 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert options_html =~ shared.id
       refute options_html =~ private.id
 
-      # The picker is cards, not a select: blank first, then the built-in PSC,
-      # then one per template.
+      # The picker is cards, not a select: the catalog link first, then blank,
+      # then the built-in PSC, then one per template.
+      assert has_element?(lv, ~s|#template-picker-catalog[href="/catalog"]|)
       assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
       assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='false']|)
       assert has_element?(lv, ~s|#template-picker-#{own.id}[aria-pressed='false']|)
       assert has_element?(lv, ~s|#template-picker-#{shared.id}[aria-pressed='false']|)
+    end
+
+    test "the catalog card leads the picker and opens in a new tab", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      # It is a link, not a choice: no aria-pressed, and a new tab so a name
+      # already typed is not lost.
+      assert has_element?(lv, ~s|#template-picker-catalog[target="_blank"]|)
+      refute has_element?(lv, ~s|#template-picker-catalog[aria-pressed]|)
+
+      # And it is the first card in the row.
+      picker_html = lv |> element("#template-picker") |> render()
+      assert picker_html =~ ~s|template-picker-catalog|
     end
 
     test "picking a template card selects it", %{conn: conn, user: user} do
