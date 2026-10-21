@@ -6,11 +6,9 @@ defmodule PscWeb.UnstrCanvasLive.Index do
   import PscWeb.Components.TemplatePreview
 
   alias Psc.Canvas
-  alias Psc.Canvas.UnstrCanvas
 
-  # The built-in canvas's own structure, for its picker card's preview: the
-  # default PSC grid a canvas starts with when no template is chosen.
-  @blank_cells %UnstrCanvas{}.cells
+  # The built-in PSC grid, for its picker card's preview.
+  @psc_cells Canvas.psc_cells()
 
   @impl true
   def mount(_params, _session, socket) do
@@ -28,17 +26,18 @@ defmodule PscWeb.UnstrCanvasLive.Index do
      |> assign(:shared_canvases, shared_canvases)
      |> assign(:new_canvas_form, to_form(%{}))
      |> assign(:templates, templates)
-     |> assign(:blank_cells, @blank_cells)
+     |> assign(:psc_cells, @psc_cells)
      |> assign(:selected_template_id, "")}
   end
 
-  # Picking a template is a click on its card. The id lands in the form's
+  # Picking a starting point is a click on its card. The id lands in the form's
   # hidden input, so the submit carries it like a select's value would. Only
-  # ids the picker offered are accepted, so a forged one cannot sit in the
-  # draft waiting for a submit.
+  # ids the picker offered are accepted - blank, the built-in PSC, or one of
+  # the user's templates - so a forged one cannot sit in the draft waiting for
+  # a submit.
   @impl true
   def handle_event("select_template", %{"id" => id}, socket) do
-    if id == "" or Enum.any?(socket.assigns.templates, &(&1.id == id)) do
+    if id in ["", "psc"] or Enum.any?(socket.assigns.templates, &(&1.id == id)) do
       {:noreply, assign(socket, :selected_template_id, id)}
     else
       {:noreply, socket}
@@ -88,27 +87,36 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     end
   end
 
-  # A template is instantiated through the context, which transforms the
-  # template's nested cell metadata into the flat cell shape a canvas expects —
-  # copying the template's layout_map verbatim is rejected by the canvas
-  # changeset. The name/description typed in the form win over the template's.
+  # The creation paths, routed by the picker's id: blank (the empty
+  # structure), the built-in PSC, or a template instantiated through the
+  # context — which transforms the template's nested cell metadata into the
+  # flat cell shape a canvas expects; copying the template's layout_map
+  # verbatim is rejected by the canvas changeset. The name/description typed
+  # in the form win over the template's.
   defp create_canvas(user, name, description, template_id) do
-    case template_for(user, template_id) do
-      {:ok, template} ->
-        Canvas.instantiate_template(template, user.id, %{
-          "name" => name,
-          "description" => description || ""
-        })
+    attrs = %{"name" => name, "description" => description || ""}
 
-      :blank ->
-        Canvas.create_unstr_canvas(user.id, %{"name" => name, "description" => description})
+    case template_id do
+      "" ->
+        Canvas.create_unstr_canvas(user.id, Map.put(attrs, "cells", Canvas.blank_cells()))
 
-      {:error, reason} ->
-        {:error, reason}
+      "psc" ->
+        Canvas.create_unstr_canvas(user.id, Map.put(attrs, "cells", Canvas.psc_cells()))
+
+      other ->
+        case template_for(user, other) do
+          {:ok, template} ->
+            Canvas.instantiate_template(template, user.id, attrs)
+
+          {:error, reason} ->
+            {:error, reason}
+        end
     end
   end
 
-  defp template_for(_user, template_id) when template_id in [nil, ""], do: :blank
+  # "psc" is the picker's built-in choice, never a template id; blank is the
+  # empty structure.
+  defp template_for(_user, template_id) when template_id in [nil, "", "psc"], do: :blank
 
   defp template_for(user, template_id) do
     # get_template_with_author/1 preloads :author, which can_access_template?/2 reads
@@ -157,21 +165,39 @@ defmodule PscWeb.UnstrCanvasLive.Index do
             <div>
               <span class="label mb-1">Start from</span>
 
-              <%!-- The picker: a card per template, blank first. The choice is
-              made with the eyes — a layout is the one thing a dropdown cannot
-              show. The selected id rides to the submit in the hidden input
-              below, the way a select's value would. --%>
+              <%!-- The picker: blank first, then the built-in PSC, then a card
+              per template. The choice is made with the eyes — a layout is the
+              one thing a dropdown cannot show. The selected id rides to the
+              submit in the hidden input below, the way a select's value
+              would. --%>
               <div id="template-picker" class="canvas-grid-scroll flex gap-3 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  id="template-picker-blank"
+                  phx-click="select_template"
+                  phx-value-id=""
+                  aria-pressed={to_string(@selected_template_id == "")}
+                  aria-label="Start from a blank canvas"
+                  class={picker_card_class(@selected_template_id == "")}
+                >
+                  <.mini_preview layout_map={%{"rows" => [], "columns" => []}} />
+
+                  <span class="break-words text-sm font-medium text-base-content">
+                    Blank canvas
+                  </span>
+                  <span class="text-xs text-base-content/50">Build it in place</span>
+                </button>
+
                 <button
                   type="button"
                   id="template-picker-psc"
                   phx-click="select_template"
-                  phx-value-id=""
-                  aria-pressed={to_string(@selected_template_id == "")}
+                  phx-value-id="psc"
+                  aria-pressed={to_string(@selected_template_id == "psc")}
                   aria-label="Start from the PSC canvas"
-                  class={picker_card_class(@selected_template_id == "")}
+                  class={picker_card_class(@selected_template_id == "psc")}
                 >
-                  <.mini_preview layout_map={@blank_cells} />
+                  <.mini_preview layout_map={@psc_cells} />
 
                   <span class="break-words text-sm font-medium text-base-content">
                     PSC canvas

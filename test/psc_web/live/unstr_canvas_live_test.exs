@@ -48,8 +48,10 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert options_html =~ shared.id
       refute options_html =~ private.id
 
-      # The picker is cards, not a select: blank first, then one per template.
-      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='true']|)
+      # The picker is cards, not a select: blank first, then the built-in PSC,
+      # then one per template.
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='false']|)
       assert has_element?(lv, ~s|#template-picker-#{own.id}[aria-pressed='false']|)
       assert has_element?(lv, ~s|#template-picker-#{shared.id}[aria-pressed='false']|)
     end
@@ -61,16 +63,28 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
       # Blank starts selected.
-      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
 
       lv |> element("#template-picker-#{template.id}") |> render_click()
 
       assert has_element?(lv, ~s|#template-picker-#{template.id}[aria-pressed='true']|)
-      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='false']|)
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='false']|)
 
       # The hidden input carries the choice to the submit.
       form_html = lv |> element("#new-canvas-form") |> render()
       assert form_html =~ ~s|name="template_id" value="#{template.id}"|
+    end
+
+    test "picking the built-in PSC card selects it", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      lv |> element("#template-picker-psc") |> render_click()
+
+      assert has_element?(lv, ~s|#template-picker-psc[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='false']|)
+
+      form_html = lv |> element("#new-canvas-form") |> render()
+      assert form_html =~ ~s|name="template_id" value="psc"|
     end
 
     test "a forged picker id is not accepted", %{conn: conn} do
@@ -165,8 +179,25 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert canvas.name == "Blank one"
       assert to == "/canvas/#{canvas.id}"
 
-      # The default PSC structure
-      assert canvas.cells["rows"]
+      # Truly blank: no rows, no columns — the owner builds it in place.
+      assert canvas.cells["rows"] == []
+      assert canvas.cells["columns"] == []
+    end
+
+    test "creating from the PSC card yields the built-in 12-cell grid", %{conn: conn, user: user} do
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      lv |> element("#template-picker-psc") |> render_click()
+
+      assert {:error, {:redirect, %{to: to}}} =
+               lv |> form("#new-canvas-form", %{"name" => "Classic PSC"}) |> render_submit()
+
+      assert [canvas] = Canvas.list_user_unstr_canvases(user.id)
+      assert to == "/canvas/#{canvas.id}"
+
+      assert length(canvas.cells["rows"]) == 3
+      assert length(canvas.cells["columns"]) == 4
+      assert Map.has_key?(canvas.cells, "problem")
     end
 
     test "refuses a template the user cannot access", %{conn: conn, user: user} do
