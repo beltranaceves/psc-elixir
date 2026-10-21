@@ -1,18 +1,15 @@
 # Canvas notes — implementation plan
 
-> **Status:** all six tasks done (2026-10-20).
+> **Status:** all six tasks done (2026-10-20). Historical record — not a work queue.
 > **Spec:** [canvas-notes.md](../spec/canvas-notes.md).
 > **Decisions:** [ADR-027](../design-decisions.md#adr-027--a-note-is-a-child-of-its-canvas),
 > [ADR-028](../design-decisions.md#adr-028--the-status-pill-is-a-shared-component).
-> **Backlog:** [ui-task-list.md](ui-task-list.md) is the active list; this file is
-> the breakdown for one feature.
 
 The **Notes** tab of the canvas editor becomes a real surface: collaborative
 Markdown notes that belong to the canvas and inherit its access rules.
 
-Work through the tasks in order. Each one is a commit. Every task ends with the
-verification matrix from [AGENTS.md](../../AGENTS.md) green, and updates this
-document and the spec if the behaviour moved.
+This is a record of how the feature was built, task by task; it is not a list of
+things to do.
 
 ## The shape of the work
 

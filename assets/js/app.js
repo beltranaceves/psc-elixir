@@ -78,6 +78,15 @@ liveSocket.connect()
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
 
+// Install as an app: the service worker is what gives the browser an install
+// prompt, and it serves the offline fallback page. Registration waits for the
+// load event so it never competes with the first LiveView connection.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {})
+  })
+}
+
 // The lines below enable quality of life phoenix_live_reload
 // development features:
 //

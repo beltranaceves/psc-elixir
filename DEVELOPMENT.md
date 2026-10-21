@@ -1,27 +1,24 @@
 # Development Workflow
 
-This document defines **how** development happens in this repository. It is the operational
-workflow for agentic development: a single workflow document that any coding agent reads and
-follows. It is deliberately **not** a list of conventions — those live in `AGENTS.md`.
+This document describes the environment and conventions for working in this repository. It is
+reference material for a human or an agent; reading it is not an instruction to begin work. It
+is deliberately **not** a list of coding conventions — those live in `AGENTS.md`.
 
-- `DEVELOPMENT.md` — **HOW**: the workflow (this file)
-- `AGENTS.md` — **RULES**: conventions every agent must follow
+- `DEVELOPMENT.md` — **HOW**: environment, tooling, and verification (this file)
+- `AGENTS.md` — **CONTEXT**: how to behave, and the project's conventions
 - `docs/spec/` — **WHAT**: one structured spec per feature pillar
-- `docs/plans/` — **PLAN**: implementation checklists derived from specs, one file per topic
+- `docs/plans/` — **HISTORY**: records of past implementation work, not a work queue
 
 ---
 
-## Philosophy: Agentic Test/Spec Driven Development
+## Philosophy: evidence, not autonomous loops
 
-Development follows a **spec → plan → implement → verify** loop:
+When the user asks for a change, a sensible loop is **understand → implement → verify**:
 
-1. **Spec** — a structured document describing *what* to build, including machine-checkable
-   acceptance criteria and the verification method for each criterion.
-2. **Plan** — an implementation checklist derived from the spec (data model, context API,
-   LiveView wiring, test plan). The test plan is derived *from* the acceptance criteria.
-3. **Implement** — code written against the plan, with tests written alongside the code.
-4. **Verify** — the implementation is proven to work through a fixed verification matrix
-   (cheapest first). Evidence is reported **in the chat** for the user to review.
+1. **Understand** — read the relevant spec, ADR, or code; ask if scope is unclear.
+2. **Implement** — make the smallest change that satisfies the request, with tests alongside.
+3. **Verify** — prove it works with the narrowest relevant command, and report the real output
+   **in the chat** for the user to review.
 
 **No full autonomous loops.** Verification is a discrete step with evidence. The agent reports
 what was checked, how, and the results. The user reviews the evidence and decides what happens
@@ -33,7 +30,7 @@ next. There is no silent auto-retry.
 
 ```
 DEVELOPMENT.md                    # HOW — this workflow document
-AGENTS.md                         # RULES — conventions (auth scopes, streams, forms, tests)
+AGENTS.md                         # CONTEXT — behaviour and conventions (auth scopes, streams, forms, tests)
 docs/spec/                        # WHAT — one structured spec per feature area
   template-designer.md            #   template designer (templates, cells, relations)
   canvas-editor.md                #   canvas editor (grid, cells, presence)

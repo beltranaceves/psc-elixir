@@ -1,14 +1,13 @@
 # UI polish task list — checkpoint (2026-10-19)
 
-**Status:** descriptions only — **no implementation yet**. Each item was reproduced in the
-running dev app (`localhost:4000`, signed in, dark theme unless noted) at commit `a56d820`.
-Measurements below come from the live DOM, not from reading code alone.
+> **Historical record — not a backlog and not a work queue.** This document records UI
+> observations, measurements, and outcomes from a past polish pass. Nothing here is
+> scheduled, assigned, or awaiting an agent. Do not pick a task from it; work only from what
+> the user explicitly asks for.
 
-**Supersedes** [agent-task-list.md](agent-task-list.md) for the current UI pass (that document
-remains the longer-term MVP backlog).
-
-Each task is written to be picked up independently. Every task ends with *Acceptance* (what
-"done" means) and, where the ask was ambiguous, *Decision needed*.
+**Status:** descriptions and outcomes. Each item was reproduced in the running dev app
+(`localhost:4000`, signed in, dark theme unless noted) at commit `a56d820`. Measurements below
+come from the live DOM, not from reading code alone.
 
 ---
 

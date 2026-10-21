@@ -1,669 +1,146 @@
-This is a web application written using the Phoenix web framework.
-
-## Project guidelines
-
-- Use `mix precommit` alias when you are done with all changes and fix any pending issues
-- Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
-- **Planning:** the agent-consumable backlog lives in `docs/plans/agent-task-list.md`. Pick one
-  task, follow its acceptance criteria, and update the document (and the matching ADR) in the
-  same commit.
-
-### Environment & tooling (Windows)
-
-The essentials — see `DEVELOPMENT.md` ("Environment & tooling guide") for detail and rationale.
-
-- Run commands as **`mix.bat` / `npm.cmd` / `npx.cmd`**, or wrap in `cmd /c "…"` — PowerShell
-  blocks the `.ps1` shims via execution policy. Verify with `Get-Command` if something that
-  worked a moment ago is suddenly "not recognized".
-- **Long git output is paginated and will hang a command** — always `git --no-pager log/diff/show`.
-- **If the terminal stops producing output, switch to a VS Code task with output redirected to a
-  file**, then read the file. ⚠️ `create_and_run_task` **appends** to `.vscode/tasks.json`, so run
-  `git checkout -- .vscode/tasks.json` afterwards to drop the throwaway entries.
-- In PowerShell, **`sc` is an alias for `Set-Content`** — `sc query x` *creates a file*. Use
-  `Get-Service` or `sc.exe`. Also `Set-Content -Encoding utf8` writes a BOM (PS 5.1) and breaks
-  JSON; write files with
-  `[System.IO.File]::WriteAllText($p, $s, (New-Object System.Text.UTF8Encoding($false)))`.
-- **The browser is a research tool, not just a UI checker.** It reaches the public internet
-  (docs, blogs, release notes) — read a page with `run_playwright_code` +
-  `document.body.innerText`. Still prefer the local `deps/` source for API truth.
-- **Screenshots are authoritative over accessibility snapshots.** A snapshot read immediately
-  after an action can still show the *previous* state; when the two disagree, trust the screenshot.
-- **Driving LiveView:** wait for `.phx-connected` before typing into a form, or the first server
-  diff wipes the values. Scope to a form id and address inputs by `name`.
-- **Playwright failures leave artifacts** in `test/e2e/test-results/`: `test-failed-1.png` (view it)
-  and `error-context.md` (a11y snapshot + test source) — often enough to diagnose without re-running.
-- **Isolated run** without touching `psc_dev`:
-  `set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && set PSC_PORT=4001 && mix phx.server`.
-  Ad-hoc scripts: `mix run scripts/x.exs` — **not** `--no-start` (leaves the repo unstarted).
-- **Delegate broad exploration to a subagent** — it returns a summary, so the main context stays small.
-
-### Verification workflow
-
-- **Always** follow the workflow in `DEVELOPMENT.md`: spec → plan → implement → verify
-- Before declaring work done, run the verification matrix (cheapest first):
-  0. `mix verify` — the fast gate: zero warnings + tests, stops at the first failure
-  1. `mix test` (unit/context) — business logic, changesets, CRDT ops
-  2. `mix test` (LiveView) — component interaction, events, streams, forms
-  3. Ad-hoc browser verification — use the built-in browser tools to open the running app,
-     click through the UI, and capture screenshots (the images enter the LLM context)
-  4. `npx playwright test` — the committed E2E regression suite in `test/e2e/` (auto-starts
-     Phoenix, reuses an already-running server)
-- Report evidence for each step **in the chat** (test output, screenshots, what was checked).
-  Do not silently retry or auto-fix; surface failures to the user for review.
-
-### Deployment (Gigalixir)
-
-**Status 2026-10-17: LIVE** at `psc.gigalixirapp.com` (app `psc`, free tier, GCP us-central1,
-stack `gigalixir-26`, free Postgres). Local commits may lag the deployed SHA — check
-`gigalixir ps` `sha` vs `git log`.
-
-Deploy = `git push gigalixir main` (HTTPS remote; credentials cached — the push streams the
-remote build log; PowerShell mangles stderr, redirect: `git push gigalixir main 2>&1 | Out-File tmp\agent-logs\deploy.log`).
-
-Repeatable wrapper (same steps, plus health check): `powershell -ExecutionPolicy Bypass -File
-scripts\deploy.ps1`. It refuses a dirty tree or a non-`main` branch, streams the build log to
-`tmp\agent-logs\deploy.log`, waits for the release, prints `gigalixir ps`, and probes
-`https://psc.gigalixirapp.com/users/log-in`.
-
-**Migrations run at boot** — no SSH, no `ps:migrate`:
-`Procfile` → `web: bin/psc eval "Psc.Release.migrate()" && PHX_SERVER=true bin/psc start`
-(idempotent; logs "Migrations already up" on later boots).
-
-**`ps:migrate` also works** (verified 2026-10-17) as a fallback — it SSHes into the running
-node and runs the migrator in a remote console against the *currently deployed* code. It
-needed two things, both now in place: the key registered on the account
-(`account:ssh_keys:add` — ours is the non-default `lightning_rsa`, so plain `ssh` won't offer
-it by default) and a `~/.ssh/config` block so ssh knows to use it for Gigalixir hosts:
-
-```sshconfig
-Host *.gigalixir.com
-  IdentityFile C:\Users\Beltran\.ssh\lightning_rsa
-  IdentitiesOnly yes
-```
-
-Without that block the symptom is `root@us-central1.gcp.ssh.gigalixir.com: Permission denied (publickey)`
-even though the key IS registered. When nothing is pending it exits silently (boot already
-applied everything); it prints migration output only when it actually applies something.
-
-**Required deploy files (all committed):**
-- `elixir_buildpack.config` — `elixir_version=1.20.4`, `erlang_version=29.1` (work on
-  `gigalixir-26`). **Do NOT add `release=true`** — the releases buildpack owns the release;
-  a second one from the elixir buildpack conflicts (docs-explicit). `hook_post_compile="mix
-  assets.deploy"` builds + digests assets on the build server (no Node needed).
-- `Procfile` (root; also mirrored in `rel/overlays/`) — **start `bin/psc` directly, never
-  `bin/server`**: overlay scripts (copied from git on Windows) lose the exec bit in the
-  release tarball → boot dies with `bin/server: Permission denied`. `bin/psc` is generated
-  on Linux by `mix release` and always executable.
-- `def release` in `mix.exs` (the releases buildpack runs `mix release`; missing → build fails).
-
-**Port/env landmines (all hit and fixed in `config/runtime.exs`):**
-- **Gigalixir injects a `tcp://<pod-ip>:80` URL** into port-ish env vars, and — because the
-  app is named *psc* — sets **`PSC_PORT`** (colliding with our E2E numeric override!). Only
-  honor *numeric* values of `PSC_PORT`/`PORT`; otherwise **listen on 4000** (their health
-  check + proxy port). Symptoms if wrong: boot crash
-  `binary_to_integer("tcp://…")` or pod stuck "isn't listening on port 4000 yet".
-- **The database's SSL is decided by its host**, not hard-coded: a public host (Gigalixir's
-  managed Postgres) gets `ssl: [verify: :verify_none]`, a local or private one does not.
-  A container next to the app usually has no SSL to offer, and the slim Elixir image has
-  no `:ssl` application at all — forcing SSL there kills the connection with
-  `Postgrex.Error) ssl not available`. `PSC_DB_SSL=true|false` overrides the decision.
-  Gigalixir needs SSL: without it the app boots Healthy but every DB call hangs ("push
-  timeout" on LiveView events).
-- `SECRET_KEY_BASE` via `config:set` — generate with `mix.bat phx.gen.secret` **from the
-  project dir** (a temp-dir run silently yields an EMPTY secret).
-
-**Other facts:**
-- CLI: `%LOCALAPPDATA%\Programs\gigalixir\gigalixir.exe` (often NOT on PATH); commands are
-  `config`/`config:set` (not `env:set`), `ps`, `pg`, `releases`, `logs`, `apps`; many need
-  `-a <app>`; interactive confirmations → pipe `Write-Output "y" |`.
-- App names are **immutable**; free tier = 1 app, 1 DB, 10k rows/table, 2 connections, idle
-  conns killed after 5 min, inactive DBs destroyed. Teardown order: `ps:scale --replicas=0` →
-  wait ~1 min → `pg:destroy -a <app> --database-id <id>` → `apps:destroy -a <app>`.
-- **Auth is plain email + password** (no email confirmation, no mailer needed — confirmation
-  is a much-later feature). Registration auto-confirms and auto-logs-in via a one-time token
-  URL (`/users/log-in/:token`, handled by the Confirmation LiveView with auto-submit).
-  Unconfirmed users cannot log in via that path (auth layer rejects magic-link login for
-  unconfirmed users with passwords — by design here).
-- Keep the event pruning in `save_unstr_canvas_content_to_db` / `save_content_to_db` — the
-  free tier's 10k-row/table limit depends on it.
-
-### Retrieval over recall — never guess an API
-
-This project vendors its dependencies in `deps/`, so the **exact source of the exact versions
-in use** is always available locally. Read it instead of relying on memory:
-
-- Unsure of a function signature, option, or component attribute? Read `deps/<app>/lib/…`
-  (e.g. `deps/phoenix_live_view/lib/phoenix_component.ex`) or fetch the docs.
-- **Never guess** a function name, arity, option, or attribute. Guessing produces plausible-
-  looking code that fails at compile time or, worse, silently at runtime.
-
-Worked example: a `<.form>` was missing its required `for` attribute. Instead of guessing a fix,
-reading `deps/phoenix_live_view/lib/phoenix_component.ex` showed `form/1` explicitly handles
-nils (`case assigns[:for] do nil -> %{}`), so `for={nil}` was correct and behaviour-neutral —
-whereas refactoring to `to_form/1` would have changed the submitted parameter shape and broken
-the event handler.
-
-### Output discipline — keep the context small
-
-Long command output and whole-file dumps are expensive and bury the signal. Always:
-
-- Run **one test file** while iterating (`mix test test/path/to/file_test.exs`), not the full suite.
-- Filter noisy output — compile warnings, logs, and progress bars are not results.
-- Read **specific line ranges** (`read_file` with `startLine`/`endLine`) instead of whole files.
-- Never paste an entire file into the chat to "show" a change; make the edit and summarise it.
-
-### Line endings & formatting
-
-Tracked text files are normalized to **LF** by `.gitattributes` (`* text=auto eol=lf`), which
-matches the Elixir formatter. Consequences:
-
-- `format` is part of both the `verify` and `precommit` aliases — **keep it there**.
-- Never commit CRLF into tracked text files. `git ls-files --eol <file>` should report `i/lf`.
-- `rel/overlays/bin/*.bat` are the deliberate exception (`eol=crlf`), since Windows scripts need
-  CRLF to execute reliably.
-
-See `DEVELOPMENT.md` ("Line endings & formatting").
-
-### Phoenix v1.8 guidelines
-
-- **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
-- The `MyAppWeb.Layouts` module is aliased in the `my_app_web.ex` file, so you can use it without needing to alias it again
-- Anytime you run into errors with no `current_scope` assign:
-  - You failed to follow the Authenticated Routes guidelines, or you failed to pass `current_scope` to `<Layouts.app>`
-  - **Always** fix the `current_scope` error by moving your routes to the proper `live_session` and ensure you pass `current_scope` as needed
-- Phoenix v1.8 moved the `<.flash_group>` component to the `Layouts` module. You are **forbidden** from calling `<.flash_group>` outside of the `layouts.ex` module
-- Out of the box, `core_components.ex` imports an `<.icon name="hero-x-mark" class="w-5 h-5"/>` component for hero icons. **Always** use the `<.icon>` component for icons, **never** use `Heroicons` modules or similar
-- **Always** use the imported `<.input>` component for form inputs from `core_components.ex` when available. `<.input>` is imported and using it will save steps and prevent errors
-- If you override the default input classes (`<.input class="myclass px-2 py-1 rounded-lg">)`) class with your own values, no default classes are inherited, so your
-custom classes must fully style the input
-
-### JS and CSS guidelines
-
-- **Use Tailwind CSS classes and custom CSS rules** to create polished, responsive, and visually stunning interfaces.
-- Tailwindcss v4 **no longer needs a tailwind.config.js** and uses a new import syntax in `app.css`:
-
-      @import "tailwindcss" source(none);
-      @source "../css";
-      @source "../js";
-      @source "../../lib/my_app_web";
-
-- **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
-- **Never** use `@apply` when writing raw css
-- **Always** manually write your own tailwind-based components instead of using daisyUI for a unique, world-class design
-- Out of the box **only the app.js and app.css bundles are supported**
-  - You cannot reference an external vendor'd script `src` or link `href` in the layouts
-  - You must import the vendor deps into app.js and app.css to use them
-  - **Never write inline <script>custom js</script> tags within templates**
-
-### UI/UX & design guidelines
-
-- **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
-- Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
-- Ensure **clean typography, spacing, and layout balance** for a refined, premium look
-- Focus on **delightful details** like hover effects, loading states, and smooth page transitions
-
-
-<!-- phoenix-gen-auth-start -->
-## Authentication
-
-- **Always** handle authentication flow at the router level with proper redirects
-- **Always** be mindful of where to place routes. `phx.gen.auth` creates multiple router plugs and `live_session` scopes:
-  - A plug `:fetch_current_scope_for_user` that is included in the default browser pipeline
-  - A plug `:require_authenticated_user` that redirects to the log in page when the user is not authenticated
-  - A `live_session :current_user` scope - for routes that need the current user but don't require authentication, similar to `:fetch_current_scope_for_user`
-  - A `live_session :require_authenticated_user` scope - for routes that require authentication, similar to the plug with the same name
-  - In both cases, a `@current_scope` is assigned to the Plug connection and LiveView socket
-  - A plug `redirect_if_user_is_authenticated` that redirects to a default path in case the user is authenticated - useful for a registration page that should only be shown to unauthenticated users
-- **Always let the user know in which router scopes, `live_session`, and pipeline you are placing the route, AND SAY WHY**
-- `phx.gen.auth` assigns the `current_scope` assign - it **does not assign a `current_user` assign**
-- Always pass the assign `current_scope` to context modules as first argument. When performing queries, use `current_scope.user` to filter the query results
-- To derive/access `current_user` in templates, **always use the `@current_scope.user`**, never use **`@current_user`** in templates or LiveViews
-- **Never** duplicate `live_session` names. A `live_session :current_user` can only be defined __once__ in the router, so all routes for the `live_session :current_user`  must be grouped in a single block
-- Anytime you hit `current_scope` errors or the logged in session isn't displaying the right content, **always double check the router and ensure you are using the correct plug and `live_session` as described below**
-
-### Routes that require authentication
-
-LiveViews that require login should **always be placed inside the __existing__ `live_session :require_authenticated_user` block**:
-
-    scope "/", AppWeb do
-      pipe_through [:browser, :require_authenticated_user]
-
-      live_session :require_authenticated_user,
-        on_mount: [{PscWeb.UserAuth, :require_authenticated}] do
-        # phx.gen.auth generated routes
-        live "/users/settings", UserLive.Settings, :edit
-        live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
-        # our own routes that require logged in user
-        live "/", MyLiveThatRequiresAuth, :index
-      end
-    end
-
-Controller routes must be placed in a scope that sets the `:require_authenticated_user` plug:
-
-    scope "/", AppWeb do
-      pipe_through [:browser, :require_authenticated_user]
-
-      get "/", MyControllerThatRequiresAuth, :index
-    end
-
-### Routes that work with or without authentication
-
-LiveViews that can work with or without authentication, **always use the __existing__ `:current_user` scope**, ie:
-
-    scope "/", MyAppWeb do
-      pipe_through [:browser]
-
-      live_session :current_user,
-        on_mount: [{PscWeb.UserAuth, :mount_current_scope}] do
-        # our own routes that work with or without authentication
-        live "/", PublicLive
-      end
-    end
-
-Controllers automatically have the `current_scope` available if they use the `:browser` pipeline.
-
-<!-- phoenix-gen-auth-end -->
-
-<!-- usage-rules-start -->
-
-<!-- phoenix:elixir-start -->
-## Elixir guidelines
-
-- Elixir lists **do not support index based access via the access syntax**
-
-  **Never do this (invalid)**:
-
-      i = 0
-      mylist = ["blue", "green"]
-      mylist[i]
-
-  Instead, **always** use `Enum.at`, pattern matching, or `List` for index based list access, ie:
-
-      i = 0
-      mylist = ["blue", "green"]
-      Enum.at(mylist, i)
-
-- Elixir variables are immutable, but can be rebound, so for block expressions like `if`, `case`, `cond`, etc
-  you *must* bind the result of the expression to a variable if you want to use it and you CANNOT rebind the result inside the expression, ie:
-
-      # INVALID: we are rebinding inside the `if` and the result never gets assigned
-      if connected?(socket) do
-        socket = assign(socket, :val, val)
-      end
-
-      # VALID: we rebind the result of the `if` to a new variable
-      socket =
-        if connected?(socket) do
-          assign(socket, :val, val)
-        end
-
-- **Never** nest multiple modules in the same file as it can cause cyclic dependencies and compilation errors
-- **Never** use map access syntax (`changeset[:field]`) on structs as they do not implement the Access behaviour by default. For regular structs, you **must** access the fields directly, such as `my_struct.field` or use higher level APIs that are available on the struct if they exist, `Ecto.Changeset.get_field/2` for changesets
-- Elixir's standard library has everything necessary for date and time manipulation. Familiarize yourself with the common `Time`, `Date`, `DateTime`, and `Calendar` interfaces by accessing their documentation as necessary. **Never** install additional dependencies unless asked or for date/time parsing (which you can use the `date_time_parser` package)
-- Don't use `String.to_atom/1` on user input (memory leak risk)
-- Predicate function names should not start with `is_` and should end in a question mark. Names like `is_thing` should be reserved for guards
-- Elixir's builtin OTP primitives like `DynamicSupervisor` and `Registry`, require names in the child spec, such as `{DynamicSupervisor, name: MyApp.MyDynamicSup}`, then you can use `DynamicSupervisor.start_child(MyApp.MyDynamicSup, child_spec)`
-- Use `Task.async_stream(collection, callback, options)` for concurrent enumeration with back-pressure. The majority of times you will want to pass `timeout: :infinity` as option
-
-## Mix guidelines
-
-- Read the docs and options before using tasks (by using `mix help task_name`)
-- To debug test failures, run tests in a specific file with `mix test test/my_test.exs` or run all previously failed tests with `mix test --failed`
-- `mix deps.clean --all` is **almost never needed**. **Avoid** using it unless you have good reason
-
-## Test guidelines
-
-- **Always use `start_supervised!/1`** to start processes in tests as it guarantees cleanup between tests
-- **Avoid** `Process.sleep/1` and `Process.alive?/1` in tests
-  - Instead of sleeping to wait for a process to finish, **always** use `Process.monitor/1` and assert on the DOWN message:
-
-      ref = Process.monitor(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
-
-   - Instead of sleeping to synchronize before the next call, **always** use `_ = :sys.get_state/1` to ensure the process has handled prior messages
-<!-- phoenix:elixir-end -->
-
-<!-- phoenix:phoenix-start -->
-## Phoenix guidelines
-
-- Remember Phoenix router `scope` blocks include an optional alias which is prefixed for all routes within the scope. **Always** be mindful of this when creating routes within a scope to avoid duplicate module prefixes.
-
-- You **never** need to create your own `alias` for route definitions! The `scope` provides the alias, ie:
-
-      scope "/admin", AppWeb.Admin do
-        pipe_through :browser
-
-        live "/users", UserLive, :index
-      end
-
-  the UserLive route would point to the `AppWeb.Admin.UserLive` module
-
-- `Phoenix.View` no longer is needed or included with Phoenix, don't use it
-<!-- phoenix:phoenix-end -->
-
-<!-- phoenix:ecto-start -->
-## Ecto Guidelines
-
-- **Always** preload Ecto associations in queries when they'll be accessed in templates, ie a message that needs to reference the `message.user.email`
-- Remember `import Ecto.Query` and other supporting modules when you write `seeds.exs`
-- `Ecto.Schema` fields always use the `:string` type, even for `:text`, columns, ie: `field :name, :string`
-- `Ecto.Changeset.validate_number/2` **DOES NOT SUPPORT the `:allow_nil` option**. By default, Ecto validations only run if a change for the given field exists and the change value is not nil, so such as option is never needed
-- You **must** use `Ecto.Changeset.get_field(changeset, :field)` to access changeset fields
-- Fields which are set programmatically, such as `user_id`, must not be listed in `cast` calls or similar for security purposes. Instead they must be explicitly set when creating the struct
-- **Always** invoke `mix ecto.gen.migration migration_name_using_underscores` when generating migration files, so the correct timestamp and conventions are applied
-<!-- phoenix:ecto-end -->
-
-<!-- phoenix:html-start -->
-## Phoenix HTML guidelines
-
-- Phoenix templates **always** use `~H` or .html.heex files (known as HEEx), **never** use `~E`
-- **Always** use the imported `Phoenix.Component.form/1` and `Phoenix.Component.inputs_for/1` function to build forms. **Never** use `Phoenix.HTML.form_for` or `Phoenix.HTML.inputs_for` as they are outdated
-- When building forms **always** use the already imported `Phoenix.Component.to_form/2` (`assign(socket, form: to_form(...))` and `<.form for={@form} id="msg-form">`), then access those forms in the template via `@form[:field]`
-- **Always** add unique DOM IDs to key elements (like forms, buttons, etc) when writing templates, these IDs can later be used in tests (`<.form for={@form} id="product-form">`)
-- For "app wide" template imports, you can import/alias into the `my_app_web.ex`'s `html_helpers` block, so they will be available to all LiveViews, LiveComponent's, and all modules that do `use MyAppWeb, :html` (replace "my_app" by the actual app name)
-
-- Elixir supports `if/else` but **does NOT support `if/else if` or `if/elsif`**. **Never use `else if` or `elseif` in Elixir**, **always** use `cond` or `case` for multiple conditionals.
-
-  **Never do this (invalid)**:
-
-      <%= if condition do %>
-        ...
-      <% else if other_condition %>
-        ...
-      <% end %>
-
-  Instead **always** do this:
-
-      <%= cond do %>
-        <% condition -> %>
-          ...
-        <% condition2 -> %>
-          ...
-        <% true -> %>
-          ...
-      <% end %>
-
-- HEEx require special tag annotation if you want to insert literal curly's like `{` or `}`. If you want to show a textual code snippet on the page in a `<pre>` or `<code>` block you *must* annotate the parent tag with `phx-no-curly-interpolation`:
-
-      <code phx-no-curly-interpolation>
-        let obj = {key: "val"}
-      </code>
-
-  Within `phx-no-curly-interpolation` annotated tags, you can use `{` and `}` without escaping them, and dynamic Elixir expressions can still be used with `<%= ... %>` syntax
-
-- HEEx class attrs support lists, but you must **always** use list `[...]` syntax. You can use the class list syntax to conditionally add classes, **always do this for multiple class values**:
-
-      <a class={[
-        "px-2 text-white",
-        @some_flag && "py-5",
-        if(@other_condition, do: "border-red-500", else: "border-blue-100"),
-        ...
-      ]}>Text</a>
-
-  and **always** wrap `if`'s inside `{...}` expressions with parens, like done above (`if(@other_condition, do: "...", else: "...")`)
-
-  and **never** do this, since it's invalid (note the missing `[` and `]`):
-
-      <a class={
-        "px-2 text-white",
-        @some_flag && "py-5"
-      }> ...
-      => Raises compile syntax error on invalid HEEx attr syntax
-
-- **Never** use `<% Enum.each %>` or non-for comprehensions for generating template content, instead **always** use `<%= for item <- @collection do %>`
-- HEEx HTML comments use `<%!-- comment --%>`. **Always** use the HEEx HTML comment syntax for template comments (`<%!-- comment --%>`)
-- HEEx allows interpolation via `{...}` and `<%= ... %>`, but the `<%= %>` **only** works within tag bodies. **Always** use the `{...}` syntax for interpolation within tag attributes, and for interpolation of values within tag bodies. **Always** interpolate block constructs (if, cond, case, for) within tag bodies using `<%= ... %>`.
-
-  **Always** do this:
-
-      <div id={@id}>
-        {@my_assign}
-        <%= if @some_block_condition do %>
-          {@another_assign}
-        <% end %>
-      </div>
-
-  and **Never** do this – the program will terminate with a syntax error:
-
-      <%!-- THIS IS INVALID NEVER EVER DO THIS --%>
-      <div id="<%= @invalid_interpolation %>">
-        {if @invalid_block_construct do}
-        {end}
-      </div>
-<!-- phoenix:html-end -->
-
-<!-- phoenix:liveview-start -->
-## Phoenix LiveView guidelines
-
-- **Never** use the deprecated `live_redirect` and `live_patch` functions, instead **always** use the `<.link navigate={href}>` and  `<.link patch={href}>` in templates, and `push_navigate` and `push_patch` functions LiveViews
-- **Avoid LiveComponent's** unless you have a strong, specific need for them
-- LiveViews should be named like `AppWeb.WeatherLive`, with a `Live` suffix. When you go to add LiveView routes to the router, the default `:browser` scope is **already aliased** with the `AppWeb` module, so you can just do `live "/weather", WeatherLive`
-
-### LiveView streams
-
-- **Always** use LiveView streams for collections for assigning regular lists to avoid memory ballooning and runtime termination with the following operations:
-  - basic append of N items - `stream(socket, :messages, [new_msg])`
-  - resetting stream with new items - `stream(socket, :messages, [new_msg], reset: true)` (e.g. for filtering items)
-  - prepend to stream - `stream(socket, :messages, [new_msg], at: -1)`
-  - deleting items - `stream_delete(socket, :messages, msg)`
-
-- When using the `stream/3` interfaces in the LiveView, the LiveView template must 1) always set `phx-update="stream"` on the parent element, with a DOM id on the parent element like `id="messages"` and 2) consume the `@streams.stream_name` collection and use the id as the DOM id for each child. For a call like `stream(socket, :messages, [new_msg])` in the LiveView, the template would be:
-
-      <div id="messages" phx-update="stream">
-        <div :for={{id, msg} <- @streams.messages} id={id}>
-          {msg.text}
-        </div>
-      </div>
-
-- LiveView streams are *not* enumerable, so you cannot use `Enum.filter/2` or `Enum.reject/2` on them. Instead, if you want to filter, prune, or refresh a list of items on the UI, you **must refetch the data and re-stream the entire stream collection, passing reset: true**:
-
-      def handle_event("filter", %{"filter" => filter}, socket) do
-        # re-fetch the messages based on the filter
-        messages = list_messages(filter)
-
-        {:noreply,
-         socket
-         |> assign(:messages_empty?, messages == [])
-         # reset the stream with the new messages
-         |> stream(:messages, messages, reset: true)}
-      end
-
-- LiveView streams *do not support counting or empty states*. If you need to display a count, you must track it using a separate assign. For empty states, you can use Tailwind classes:
-
-      <div id="tasks" phx-update="stream">
-        <div class="hidden only:block">No tasks yet</div>
-        <div :for={{id, task} <- @streams.tasks} id={id}>
-          {task.name}
-        </div>
-      </div>
-
-  The above only works if the empty state is the only HTML block alongside the stream for-comprehension.
-
-- When updating an assign that should change content inside any streamed item(s), you MUST re-stream the items
-  along with the updated assign:
-
-      def handle_event("edit_message", %{"message_id" => message_id}, socket) do
-        message = Chat.get_message!(message_id)
-        edit_form = to_form(Chat.change_message(message, %{content: message.content}))
-
-        # re-insert message so @editing_message_id toggle logic takes effect for that stream item
-        {:noreply,
-         socket
-         |> stream_insert(:messages, message)
-         |> assign(:editing_message_id, String.to_integer(message_id))
-         |> assign(:edit_form, edit_form)}
-      end
-
-  And in the template:
-
-      <div id="messages" phx-update="stream">
-        <div :for={{id, message} <- @streams.messages} id={id} class="flex group">
-          {message.username}
-          <%= if @editing_message_id == message.id do %>
-            <%!-- Edit mode --%>
-            <.form for={@edit_form} id="edit-form-#{message.id}" phx-submit="save_edit">
-              ...
-            </.form>
-          <% end %>
-        </div>
-      </div>
-
-- **Never** use the deprecated `phx-update="append"` or `phx-update="prepend"` for collections
-
-### LiveView JavaScript interop
-
-- Remember anytime you use `phx-hook="MyHook"` and that JS hook manages its own DOM, you **must** also set the `phx-update="ignore"` attribute
-- **Always** provide an unique DOM id alongside `phx-hook` otherwise a compiler error will be raised
-
-LiveView hooks come in two flavors, 1) colocated js hooks for "inline" scripts defined inside HEEx,
-and 2) external `phx-hook` annotations where JavaScript object literals are defined and passed to the `LiveSocket` constructor.
-
-#### Inline colocated js hooks
-
-**Never** write raw embedded `<script>` tags in heex as they are incompatible with LiveView.
-Instead, **always use a colocated js hook script tag (`:type={Phoenix.LiveView.ColocatedHook}`)
-when writing scripts inside the template**:
-
-    <input type="text" name="user[phone_number]" id="user-phone-number" phx-hook=".PhoneNumber" />
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".PhoneNumber">
-      export default {
-        mounted() {
-          this.el.addEventListener("input", e => {
-            let match = this.el.value.replace(/\D/g, "").match(/^(\d{3})(\d{3})(\d{4})$/)
-            if(match) {
-              this.el.value = `${match[1]}-${match[2]}-${match[3]}`
-            }
-          })
-        }
-      }
-    </script>
-
-- colocated hooks are automatically integrated into the app.js bundle
-- colocated hooks names **MUST ALWAYS** start with a `.` prefix, i.e. `.PhoneNumber`
-
-#### External phx-hook
-
-External JS hooks (`<div id="myhook" phx-hook="MyHook">`) must be placed in `assets/js/` and passed to the
-LiveSocket constructor:
-
-    const MyHook = {
-      mounted() { ... }
-    }
-    let liveSocket = new LiveSocket("/live", Socket, {
-      hooks: { MyHook }
-    });
-
-#### Pushing events between client and server
-
-Use LiveView's `push_event/3` when you need to push events/data to the client for a phx-hook to handle.
-**Always** return or rebind the socket on `push_event/3` when pushing events:
-
-    # re-bind socket so we maintain event state to be pushed
-    socket = push_event(socket, "my_event", %{...})
-
-    # or return the modified socket directly:
-    def handle_event("some_event", _, socket) do
-      {:noreply, push_event(socket, "my_event", %{...})}
-    end
-
-Pushed events can then be picked up in a JS hook with `this.handleEvent`:
-
-    mounted() {
-      this.handleEvent("my_event", data => console.log("from server:", data));
-    }
-
-Clients can also push an event to the server and receive a reply with `this.pushEvent`:
-
-    mounted() {
-      this.el.addEventListener("click", e => {
-        this.pushEvent("my_event", { one: 1 }, reply => console.log("got reply from server:", reply));
-      })
-    }
-
-Where the server handled it via:
-
-    def handle_event("my_event", %{"one" => 1}, socket) do
-      {:reply, %{two: 2}, socket}
-    end
-
-### LiveView tests
-
-- `Phoenix.LiveViewTest` module and `LazyHTML` (included) for making your assertions
-- Form tests are driven by `Phoenix.LiveViewTest`'s `render_submit/2` and `render_change/2` functions
-- Come up with a step-by-step test plan that splits major test cases into small, isolated files. You may start with simpler tests that verify content exists, gradually add interaction tests
-- **Always reference the key element IDs you added in the LiveView templates in your tests** for `Phoenix.LiveViewTest` functions like `element/2`, `has_element/2`, selectors, etc
-- **Never** tests again raw HTML, **always** use `element/2`, `has_element/2`, and similar: `assert has_element?(view, "#my-form")`
-- Instead of relying on testing text content, which can change, favor testing for the presence of key elements
-- Focus on testing outcomes rather than implementation details
-- Be aware that `Phoenix.Component` functions like `<.form>` might produce different HTML than expected. Test against the output HTML structure, not your mental model of what you expect it to be
-- When facing test failures with element selectors, add debug statements to print the actual HTML, but use `LazyHTML` selectors to limit the output, ie:
-
-      html = render(view)
-      document = LazyHTML.from_fragment(html)
-      matches = LazyHTML.filter(document, "your-complex-selector")
-      IO.inspect(matches, label: "Matches")
-
-### Form handling
-
-#### Creating a form from params
-
-If you want to create a form based on `handle_event` params:
-
-    def handle_event("submitted", params, socket) do
-      {:noreply, assign(socket, form: to_form(params))}
-    end
-
-When you pass a map to `to_form/1`, it assumes said map contains the form params, which are expected to have string keys.
-
-You can also specify a name to nest the params:
-
-    def handle_event("submitted", %{"user" => user_params}, socket) do
-      {:noreply, assign(socket, form: to_form(user_params, as: :user))}
-    end
-
-#### Creating a form from changesets
-
-When using changesets, the underlying data, form params, and errors are retrieved from it. The `:as` option is automatically computed too. E.g. if you have a user schema:
-
-    defmodule MyApp.Users.User do
-      use Ecto.Schema
-      ...
-    end
-
-And then you create a changeset that you pass to `to_form`:
-
-    %MyApp.Users.User{}
-    |> Ecto.Changeset.change()
-    |> to_form()
-
-Once the form is submitted, the params will be available under `%{"user" => user_params}`.
-
-In the template, the form form assign can be passed to the `<.form>` function component:
-
-    <.form for={@form} id="todo-form" phx-change="validate" phx-submit="save">
-      <.input field={@form[:field]} type="text" />
-    </.form>
-
-Always give the form an explicit, unique DOM ID, like `id="todo-form"`.
-
-#### Avoiding form errors
-
-**Always** use a form assigned via `to_form/2` in the LiveView, and the `<.input>` component in the template. In the template **always access forms this**:
-
-    <%!-- ALWAYS do this (valid) --%>
-    <.form for={@form} id="my-form">
-      <.input field={@form[:field]} type="text" />
-    </.form>
-
-And **never** do this:
-
-    <%!-- NEVER do this (invalid) --%>
-    <.form for={@changeset} id="my-form">
-      <.input field={@changeset[:field]} type="text" />
-    </.form>
-
-- You are FORBIDDEN from accessing the changeset in the template as it will cause errors
-- **Never** use `<.form let={f} ...>` in the template, instead **always use `<.form for={@form} ...>`**, then drive all form references from the form assign as in `@form[:field]`. The UI should **always** be driven by a `to_form/2` assigned in the LiveView module that is derived from a changeset
-<!-- phoenix:liveview-end -->
-
-<!-- usage-rules-end -->
+# AGENTS.md — project context for coding agents
+
+**This file is context, not a work order.** If you are reading it because the user referenced
+it, that reference is not a request to start, plan, resume, or schedule any task. Do exactly
+what was asked, and nothing more.
+
+## How to behave
+
+- **Answer the request that was made.** A question wants an answer; a bug report wants a
+  diagnosis or a fix; naming a file may mean nothing more than reading it.
+- **Resolve scope before acting.** If it is unclear what should change, ask one short
+  question. Do not infer a larger workstream from a mention.
+- **Do not invent work.** No picking tasks out of documents, no "while I am here" refactors,
+  no unrequested plans or roadmaps. Ignore TODOs and historical notes unless they block the
+  request.
+- **Change as little as the request allows.** Prefer surgical edits. Do not restyle, rename,
+  or reformat code you were not asked to touch.
+- **Say what you did and what you verified.** Report the commands you ran and their real
+  output. Never claim a check passed without running it. If something fails, surface it
+  instead of retrying silently or working around it.
+- **Never guess an API.** The exact dependency sources are vendored in `deps/`; read them or
+  the docs instead of relying on memory. Guessed names fail at compile time or, worse,
+  silently at runtime.
+- **Keep output small.** Read line ranges instead of whole files, run one test file while
+  iterating, and filter noisy logs.
+
+## What the project is
+
+A Phoenix 1.8 / LiveView application for collaborative structured canvases. Users author
+reusable **templates**, instantiate them as **canvases**, edit them together in real time, and
+attach Markdown **notes**. Deployed to Gigalixir (free tier), with Postgres.
+
+Stack: Elixir 1.20, Phoenix 1.8.5, LiveView 1.2, Ecto, Bandit, Tailwind v4 + esbuild,
+SaladUI components (`lib/psc_web/components/ui/`), `Req` for HTTP.
+
+## The domain model
+
+| Concept | Table | Module | Where |
+|---|---|---|---|
+| Template | `canvas_layouts` | `Psc.Canvas.Layout` | designed at `/templates/:id` |
+| Canvas | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | edited at `/canvas/:id` |
+| Canvas event | `unstr_canvas_events` | `Psc.Canvas.UnstrCanvasEvent` | append-only edit log |
+| Note | `notes` | `Psc.Notes.Note` | Markdown child of a canvas |
+| Note event | `note_events` | `Psc.Notes.NoteEvent` | append-only edit log |
+
+- A **template** holds `layout_map`: rows, columns, a cell matrix, per-cell fields and optional
+  section titles, row/column accents, and a `notes_mode`. It can be `public` and is then listed
+  in `/catalog`.
+- A **canvas** is created from a template (or blank, or the built-in PSC). Creation goes
+  through `Psc.Canvas.instantiate_template/3`; the cells and notes are a copy, never a link.
+- A **note** inherits its canvas's access rules. There is no per-note sharing.
+- All aggregate writes go through the context modules (`Psc.Canvas`, `Psc.Notes`); LiveViews do
+  not touch the repo directly.
+
+## Invariants that must not break
+
+- **Event sourcing with pruning.** Edits are rows in the event table; a save folds them into
+  the snapshot (`cells` / `content`), advances `snapshot_seq`, then deletes rows covered by
+  it. Never move `snapshot_seq` backwards and never delete unfolded events.
+- **Free-tier ceiling.** Postgres is limited to ~10k rows per table, so any per-edit row must
+  be pruned or aggregated.
+- **Per-field last-write-wins.** A canvas operation carries a whole field value; there is no
+  character-level merge on canvases.
+- **Template → canvas is a copy.** Editing a template never mutates existing canvases.
+- **Auth is `current_scope`-based.** Pass `current_scope` into contexts and read
+  `current_scope.user`; there is no `current_user` assign.
+- **Test hooks are a contract.** `#canvas-header`, `#canvas-grid`, `#cell-card-<key>`,
+  `#md-<key>-<field>`, `#active-users-tooltip`, `#cell-r1_c1` are used by LiveView and
+  Playwright tests. Grep before renaming one.
+
+## Code conventions (the essentials)
+
+- Use the app layout: `<Layouts.app flash={@flash} current_scope={@current_scope}>`.
+- LiveView streams for collections: `stream/3`, `phx-update="stream"`, `@streams.name`.
+  Re-stream with `reset: true` to filter; use `stream_insert/3` when an item changes.
+- Never use `live_redirect` / `live_patch`; use `<.link navigate>` / `push_navigate`.
+- Forms: build with `to_form/2` in the LiveView, render with `<.form for={@form} id="...">`,
+  and read fields as `@form[:field]`. Never pass a changeset to `<.form>` and never use
+  `let={f}`.
+- Use the imported `<.input>` and `<.icon>` components rather than hand-rolled markup.
+- HEEx: `{...}` for values inside tags and bodies, `<%= %>` for block constructs; class lists
+  need `[...]`; comments are `<%!-- --%>`.
+- Colocated hooks must be written as a **literal** string starting with a dot:
+  `phx-hook=".MyHook"`. A conditional expression is not rewritten and fails at runtime.
+- Tailwind v4: keep the `@import "tailwindcss" source(none);` + `@source` block in `app.css`.
+  Do not `@apply`; do not add a `tailwind.config.js`.
+- Ecto: preload associations used in templates; use `Ecto.Changeset.get_field/2`; keep
+  programmatically-set fields (`user_id`, counters) out of `cast/3`.
+- Elixir: no index access on lists (`Enum.at/2` instead); no `else if` (use `cond`); no nested
+  modules in one file; use `start_supervised!/1` in tests and avoid `Process.sleep/1`.
+
+## Environment (Windows)
+
+- Run `mix.bat`, `npm.cmd`, `npx.cmd` (or wrap in `cmd /c "..."`); PowerShell blocks the
+  `.ps1` shims.
+- Long git output paginates and hangs: always `git --no-pager log/diff/show`.
+- `sc` is an alias for `Set-Content`; use `Get-Service` or `sc.exe`.
+- `Set-Content -Encoding utf8` writes a BOM; write JSON with
+  `[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))`.
+- Tracked text files are LF (`.gitattributes`); the exception is `rel/overlays/bin/*.bat`.
+- Two servers, two databases: dev is port 4000 / `psc_dev`; Playwright uses 4001 / `psc_e2e`.
+  Never point E2E at the dev database. An isolated manual run:
+  `set MIX_ENV=dev && set PSC_DB_NAME=psc_e2e && set PSC_PORT=4001 && mix.bat phx.server`.
+- Ad-hoc scripts: `mix.bat run scripts/x.exs`, not `--no-start`.
+
+## Verification
+
+Run the narrowest check that covers your change, then widen only if needed:
+
+1. `mix.bat test path/to/file_test.exs` while iterating.
+2. `mix.bat verify` — format, compile with warnings as errors, tests.
+3. Browser check for anything visual or interactive.
+4. `npx.cmd playwright test` (from `test/e2e`) for end-to-end flows; it reuses a running
+   server.
+
+`mix.bat precommit` is the strict full check (formatting must already be applied). Report the
+results, not a summary of intentions.
+
+## Deployment (Gigalixir)
+
+- Live at `psc.gigalixirapp.com` (app `psc`, free tier, `gigalixir-26`).
+- Deploy with `git push gigalixir main`, or `scripts\deploy.ps1` (refuses a dirty tree or a
+  non-`main` branch, streams the build log, probes the login page).
+- Migrations run at boot via the `Procfile`; they are idempotent.
+- Required files: `elixir_buildpack.config` (do **not** add `release=true`), `Procfile`
+  (start `bin/psc`, never `bin/server`), and `def release` in `mix.exs`.
+- Only numeric `PSC_PORT`/`PORT` values are honored; otherwise listen on 4000. SSL for the
+  database follows its host; `PSC_DB_SSL=true|false` overrides.
+- The free tier allows 1 app, 1 database, ~10k rows per table, 2 connections.
+
+## Where things live
+
+- `lib/psc/` — contexts and schemas (`canvas.ex`, `notes.ex`, `text_store.ex`).
+- `lib/psc_web/live/` — LiveViews: `unstr_canvas_live/` (canvas), `canvas_layout_live/`
+  (designer), `catalog_live/`, `user_live/`.
+- `lib/psc_web/components/` — shared components, including SaladUI under `ui/`.
+- `assets/js/hooks/` — client hooks; `assets/css/app.css` — Tailwind entry.
+- `priv/repo/migrations/`, `priv/repo/seeds.exs`, `priv/repo/e2e_seeds.exs`.
+- `test/` — ExUnit; `test/e2e/` — Playwright.
+
+## Documents are reference, not a queue
+
+`docs/spec/`, `docs/design-decisions.md` (ADRs), `docs/data_model.md`,
+`docs/routing_map.md`, and `docs/plans/` record how the product works and what was decided.
+They are background reading. Nothing in them is scheduled, assigned, or awaiting an agent;
+do not treat any of it as work to start unless the user asks for it.

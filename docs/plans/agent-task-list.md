@@ -1,35 +1,26 @@
 # Agent task list — MVP completion and hardening
 
-> **Superseded for the current UI pass.** The active, shorter backlog is
-> [ui-task-list.md](ui-task-list.md). This document stays as the longer-term MVP roadmap
-> (pivots, CI, password reset, research extensions); do not start it unless the UI list is
-> clear or the work is explicitly requested.
+> **Historical record — not a backlog and not a work queue.** This document is kept as a
+> description of known gaps and their rationale at the time it was written. Nothing here is
+> scheduled, assigned, or awaiting an agent. Do not pick a task from it; work only from what
+> the user explicitly asks for.
 
 **Prepared:** 2026-10-19 against `a56d820` (deployed as Gigalixir release 10, Healthy).
-**Audience:** an autonomous coding agent (or a human pair) picking up **one task at a time**.
-**Companion docs:** [AGENTS.md](../../AGENTS.md) (how to work), [DEVELOPMENT.md](../../DEVELOPMENT.md)
-(workflow + environment), [design-decisions.md](../design-decisions.md) (ADRs 001–021),
-[template-designer.md](../spec/template-designer.md), [canvas-editor.md](../spec/canvas-editor.md),
-[project_proposal.md](../project_proposal.md) (MVP milestones).
+**Companion docs:** [AGENTS.md](../../AGENTS.md) (context and conventions),
+[DEVELOPMENT.md](../../DEVELOPMENT.md) (environment), [design-decisions.md](../design-decisions.md)
+(ADRs 001–021), [template-designer.md](../spec/template-designer.md),
+[canvas-editor.md](../spec/canvas-editor.md), [project_proposal.md](../project_proposal.md).
 
 ---
 
-## How to use this document
+## How to read this document
 
-1. **Read the ground rules below and the ADRs they cite.** They are invariants; several are
-   load-bearing for the free-tier database.
-2. **Pick one task.** Work it end to end — implementation, tests, docs — before starting another.
-   Tasks list their dependencies; do not start a task whose blocker is open.
-3. **Follow the verification matrix** in AGENTS.md (cheapest first):
-   `mix verify` → targeted `mix test` → browser check → `npx playwright test`.
-   A task is not done until its own *Verification* section passes.
-4. **Commit one task per commit**, message style from `git log`
-   (`feat: …`, `fix(scope): …`, `docs: …`, `test: …`), with the
-   `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` trailer.
-5. **Do not** amend or force-push. **Do not** commit secrets. **Do not** rewrite an ADR —
-   add a new one and mark the old one Superseded.
-6. When a task changes behaviour, update the matching file under `docs/spec/` and add an ADR
-   entry to `docs/design-decisions.md` (Index table + section).
+1. **It is reference.** The *Why*, *Scope*, and *Pitfalls* sections explain how a part of the
+   system works and what was learned; they are useful when a user's request touches that area.
+2. **Statuses are snapshots, not assignments.** `todo` means "observed as missing at the time
+   of writing", not "someone should start this now".
+3. **Nothing here is an instruction.** Follow the user's request first; consult the matching
+   section only if it helps answer that request.
 
 ### Definition of done (applies to every task)
 
