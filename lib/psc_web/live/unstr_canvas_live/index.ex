@@ -3,8 +3,14 @@ defmodule PscWeb.UnstrCanvasLive.Index do
 
   import PscWeb.CoreComponents, except: [button: 1]
   import PscWeb.Components.UI.Button
+  import PscWeb.Components.TemplatePreview
 
   alias Psc.Canvas
+  alias Psc.Canvas.UnstrCanvas
+
+  # The blank canvas's own structure, for its picker card's preview: the
+  # default PSC grid a blank canvas starts with.
+  @blank_cells %UnstrCanvas{}.cells
 
   @impl true
   def mount(_params, _session, socket) do
@@ -15,7 +21,6 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     shared_canvases = Canvas.list_shared_unstr_canvases(user_email)
     # Only templates this user may use: their own plus ones shared with them.
     templates = Canvas.list_templates(socket.assigns.current_scope.user)
-    template_options = [{"Blank canvas", ""} | Enum.map(templates, &{&1.name, &1.id})]
 
     {:ok,
      socket
@@ -23,7 +28,21 @@ defmodule PscWeb.UnstrCanvasLive.Index do
      |> assign(:shared_canvases, shared_canvases)
      |> assign(:new_canvas_form, to_form(%{}))
      |> assign(:templates, templates)
-     |> assign(:template_options, template_options)}
+     |> assign(:blank_cells, @blank_cells)
+     |> assign(:selected_template_id, "")}
+  end
+
+  # Picking a template is a click on its card. The id lands in the form's
+  # hidden input, so the submit carries it like a select's value would. Only
+  # ids the picker offered are accepted, so a forged one cannot sit in the
+  # draft waiting for a submit.
+  @impl true
+  def handle_event("select_template", %{"id" => id}, socket) do
+    if id == "" or Enum.any?(socket.assigns.templates, &(&1.id == id)) do
+      {:noreply, assign(socket, :selected_template_id, id)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -35,13 +54,13 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     user = socket.assigns.current_scope.user
 
     case create_canvas(user, name, description, template_id) do
-      {:ok, _canvas} ->
-        my_canvases = Canvas.list_user_unstr_canvases(user.id)
-
+      {:ok, canvas} ->
+        # Creating is the start of work, not a list update: land the user in
+        # the canvas they just asked for, the way the catalog's Use does.
         {:noreply,
          socket
-         |> assign(:my_canvases, my_canvases)
-         |> put_flash(:success, "Canvas created successfully")}
+         |> put_flash(:success, "Canvas created successfully")
+         |> redirect(to: ~p"/canvas/#{canvas.id}")}
 
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You do not have access to that template")}
@@ -106,6 +125,16 @@ defmodule PscWeb.UnstrCanvasLive.Index do
     end
   end
 
+  # The picker card's states: the selected card carries the primary border and
+  # tint, the rest stay quiet until hovered.
+  defp picker_card_class(selected?) do
+    [
+      "flex w-40 shrink-0 flex-col gap-2 rounded-xl border p-3 text-left transition-colors",
+      selected? && "border-primary/60 bg-primary/10",
+      not selected? && "border-base-content/10 bg-base-200 hover:border-base-content/25"
+    ]
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -125,12 +154,57 @@ defmodule PscWeb.UnstrCanvasLive.Index do
             phx-submit="create_canvas"
             class="space-y-4"
           >
-            <.input
-              field={@new_canvas_form[:template_id]}
-              type="select"
-              options={@template_options}
-              label="Start from"
-            />
+            <div>
+              <span class="label mb-1">Start from</span>
+
+              <%!-- The picker: a card per template, blank first. The choice is
+              made with the eyes — a layout is the one thing a dropdown cannot
+              show. The selected id rides to the submit in the hidden input
+              below, the way a select's value would. --%>
+              <div id="template-picker" class="canvas-grid-scroll flex gap-3 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  id="template-picker-blank"
+                  phx-click="select_template"
+                  phx-value-id=""
+                  aria-pressed={to_string(@selected_template_id == "")}
+                  aria-label="Start from a blank canvas"
+                  class={picker_card_class(@selected_template_id == "")}
+                >
+                  <.mini_preview layout_map={@blank_cells} />
+
+                  <span class="break-words text-sm font-medium text-base-content">
+                    Blank canvas
+                  </span>
+                  <span class="text-xs text-base-content/50">Start empty</span>
+                </button>
+
+                <button
+                  :for={template <- @templates}
+                  type="button"
+                  id={"template-picker-#{template.id}"}
+                  phx-click="select_template"
+                  phx-value-id={template.id}
+                  aria-pressed={to_string(@selected_template_id == template.id)}
+                  aria-label={"Start from #{template.name}"}
+                  class={picker_card_class(@selected_template_id == template.id)}
+                >
+                  <.mini_preview layout_map={template.layout_map} />
+
+                  <span class="break-words text-sm font-medium text-base-content">
+                    {template.name}
+                  </span>
+                  <span class="text-xs text-base-content/50">
+                    {length(template.layout_map["rows"] || [])} × {length(
+                      template.layout_map["columns"] || []
+                    )}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <input type="hidden" name="template_id" value={@selected_template_id} />
+
             <.input
               field={@new_canvas_form[:name]}
               type="text"
@@ -144,7 +218,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               label="Description"
               placeholder="Enter canvas description..."
             />
-            <.button type="submit">
+            <.button type="submit" phx-disable-with="Creating…">
               Create Canvas
             </.button>
           </.form>

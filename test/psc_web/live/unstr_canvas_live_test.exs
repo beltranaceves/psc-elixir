@@ -47,6 +47,45 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert options_html =~ own.id
       assert options_html =~ shared.id
       refute options_html =~ private.id
+
+      # The picker is cards, not a select: blank first, then one per template.
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-#{own.id}[aria-pressed='false']|)
+      assert has_element?(lv, ~s|#template-picker-#{shared.id}[aria-pressed='false']|)
+    end
+
+    test "picking a template card selects it", %{conn: conn, user: user} do
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Pickable template"})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      # Blank starts selected.
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='true']|)
+
+      lv |> element("#template-picker-#{template.id}") |> render_click()
+
+      assert has_element?(lv, ~s|#template-picker-#{template.id}[aria-pressed='true']|)
+      assert has_element?(lv, ~s|#template-picker-blank[aria-pressed='false']|)
+
+      # The hidden input carries the choice to the submit.
+      form_html = lv |> element("#new-canvas-form") |> render()
+      assert form_html =~ ~s|name="template_id" value="#{template.id}"|
+    end
+
+    test "a forged picker id is not accepted", %{conn: conn} do
+      other = AccountsFixtures.user_fixture()
+
+      private =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: other.id, name: "Private template"})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      render_click(lv, "select_template", %{"id" => private.id})
+
+      # The draft stays blank: the id was never offered by the picker.
+      form_html = lv |> element("#new-canvas-form") |> render()
+      assert form_html =~ ~s|name="template_id" value=""|
     end
 
     test "creates a canvas from a template with the template's structure", %{
@@ -58,11 +97,13 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
+      # The card is how a template id reaches the submit.
+      lv |> element("#template-picker-#{template.id}") |> render_click()
+
       lv
       |> form("#new-canvas-form", %{
         "name" => "From a template",
-        "description" => "made in a test",
-        "template_id" => template.id
+        "description" => "made in a test"
       })
       |> render_submit()
 
@@ -86,15 +127,44 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       end
     end
 
-    test "creates a blank canvas when no template is chosen", %{conn: conn, user: user} do
+    test "creating from a picked card uses the card's template and opens the canvas", %{
+      conn: conn,
+      user: user
+    } do
+      template =
+        CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Card template"})
+
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
-      lv
-      |> form("#new-canvas-form", %{"name" => "Blank one", "template_id" => ""})
-      |> render_submit()
+      lv |> element("#template-picker-#{template.id}") |> render_click()
+
+      assert {:error, {:redirect, %{to: to}}} =
+               lv
+               |> form("#new-canvas-form", %{"name" => "From the card"})
+               |> render_submit()
+
+      assert to == "/canvas/#{template.id}" or String.starts_with?(to, "/canvas/")
+
+      assert [canvas] = Canvas.list_user_unstr_canvases(user.id)
+      assert canvas.name == "From the card"
+      assert to == "/canvas/#{canvas.id}"
+
+      # The card's template is what was instantiated.
+      assert length(canvas.cells["rows"]) == length(template.layout_map["rows"])
+    end
+
+    test "creating a blank canvas opens it too", %{conn: conn, user: user} do
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      assert {:error, {:redirect, %{to: to}}} =
+               lv
+               |> form("#new-canvas-form", %{"name" => "Blank one", "template_id" => ""})
+               |> render_submit()
 
       assert [canvas] = Canvas.list_user_unstr_canvases(user.id)
       assert canvas.name == "Blank one"
+      assert to == "/canvas/#{canvas.id}"
+
       # The default PSC structure
       assert canvas.cells["rows"]
     end

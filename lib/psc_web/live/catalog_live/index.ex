@@ -16,6 +16,7 @@ defmodule PscWeb.CatalogLive.Index do
   alias PscWeb.Components.UI.Dialog, as: UIDialog
 
   import PscWeb.Components.EmptySection
+  import PscWeb.Components.TemplatePreview
 
   @impl true
   def mount(_params, _session, socket) do
@@ -257,7 +258,7 @@ defmodule PscWeb.CatalogLive.Index do
           designer tell the same story about the same template. --%>
           <div class="flex min-w-0 flex-col gap-5">
             <.preview_section title="Grid">
-              <.grid_preview template={@open_template} />
+              <.grid_preview layout_map={@open_template.layout_map} />
             </.preview_section>
 
             <.preview_section
@@ -361,44 +362,6 @@ defmodule PscWeb.CatalogLive.Index do
 
   defp truncated?(templates), do: length(templates) >= Canvas.catalog_limit()
 
-  # A picture of what a canvas from this template will look like: the grid with
-  # its cell labels. The designer's table is an editor; this is the detail a
-  # user needs before choosing between two templates.
-  attr :template, :map, required: true
-
-  defp grid_preview(assigns) do
-    ~H"""
-    <div class="min-w-0 overflow-auto rounded-lg border border-base-content/10 bg-base-200/60">
-      <table class="w-full table-fixed border-collapse text-xs sm:text-sm">
-        <thead>
-          <tr>
-            <th class="w-16 border border-base-content/10 p-1 sm:w-24 sm:p-2"></th>
-            <th
-              :for={column <- @template.layout_map["columns"] || []}
-              class="border border-base-content/10 bg-base-content/5 p-1 font-medium text-base-content/70 sm:p-2"
-            >
-              {column["label"]}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr :for={{row, ri} <- Enum.with_index(@template.layout_map["rows"] || [])}>
-            <th class="border border-base-content/10 bg-base-content/5 p-1 text-left font-medium text-base-content/70 sm:p-2">
-              {row["label"]}
-            </th>
-            <td
-              :for={cell_key <- cell_keys(@template, ri)}
-              class="border border-base-content/10 p-1 align-top text-base-content/80 sm:p-2"
-            >
-              {cell_label(@template, cell_key)}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    """
-  end
-
   # A section of the preview, headed the way the designer heads it, so the
   # modal and the designer read as the same template.
   attr :title, :string, required: true
@@ -430,18 +393,4 @@ defmodule PscWeb.CatalogLive.Index do
 
   defp note_title(%{"title" => title}) when is_binary(title) and title != "", do: title
   defp note_title(_note), do: "Untitled note"
-
-  defp cell_keys(template, row_index) do
-    template.layout_map |> Map.get("layout", []) |> Enum.at(row_index, [])
-  end
-
-  defp cell_label(template, cell_key) do
-    label =
-      template.layout_map
-      |> Map.get("cells", %{})
-      |> Map.get(cell_key, %{})
-      |> Map.get("label", "")
-
-    if label in [nil, ""], do: cell_key, else: label
-  end
 end

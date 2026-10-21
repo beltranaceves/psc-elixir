@@ -41,6 +41,7 @@ it costs, and the evidence it was verified against.
 | [ADR-029](#adr-029--a-template-picks-its-note-mode) | A template picks its note mode | Accepted | 2026-10-20 |
 | [ADR-030](#adr-030--the-designer-is-collapsible-sections-with-a-shared-note-editor) | The designer is collapsible sections, with a shared note editor | Accepted | 2026-10-20 |
 | [ADR-031](#adr-031--a-template-can-be-public-and-its-use-is-counted) | A template can be public, and its use is counted | Accepted | 2026-10-20 |
+| [ADR-032](#adr-032--the-canvas-picker-shows-the-templates-and-creating-enters-the-canvas) | The canvas picker shows the templates, and creating enters the canvas | Accepted | 2026-10-21 |
 
 ---
 
@@ -1343,6 +1344,50 @@ they stay out of the changeset's cast list. And a fork that cannot be named —
 template names are unique — retries with a numbered suffix, one transaction per
 attempt, because a name that is already taken aborts the transaction it was tried
 in.
+
+---
+
+## ADR-032 — The canvas picker shows the templates, and creating enters the canvas
+
+**Context.** Starting a canvas from a template meant picking its name out of a
+`<select>`. A template *is* a layout — the one thing a dropdown cannot show — so the
+user committed to a structure they could not see: no preview, no dimensions, nothing
+but a name. And once the canvas was created the app stayed on the index with a
+flash, leaving the user to find the new card and click Edit before any work could
+start.
+
+**Decision.**
+
+- The **Start from** picker becomes a row of cards: a **Blank canvas** card first,
+  then one per template the user can access. Each card shows a schematic preview of
+  the grid (`PscWeb.Components.TemplatePreview.mini_preview`), the name and the
+  dimensions; the selected card carries the primary border and tint. The preview
+  draws the template's row and column accents as thin bars on its first row and
+  column — the same bars the designer authors and the editor renders — so a
+  template's colour identity is part of the choice.
+- The selected id rides to the submit in a **hidden input**, the way a select's
+  value would, and the `select_template` event accepts only ids the picker offered,
+  so a forged one cannot sit in the draft waiting for a submit. The submit path's
+  own access check (`can_access_template?/2`) is unchanged and still the last line
+  of defence.
+- **Creating navigates to the new canvas's editor.** Creating is the start of work,
+  not a list update; the flash comes along to the editor, the same way the catalog's
+  *Use template* does.
+
+**Alternatives considered.** Keeping the select (the complaint); a creation modal
+(one more click before every creation, and the form is the page's reason to exist);
+quick-create buttons that skip the form with an auto-generated name (two creation
+paths on one page, which ADR-022 had just eliminated, and junk names); putting the
+catalog's public templates in the picker now (a separate decision — the picker's
+groups are ready for it, but it changes which templates a canvas can be started
+from, and that deserves its own record).
+
+**Consequences.** The structure is chosen with the eyes, and the user lands where
+the work happens. The cost is one shared component (the preview, which the catalog's
+modal also uses now) and one e2e habit to keep: the editor is entered by a full
+redirect, so the specs that drive it must wait for `.phx-connected` before clicking
+a tab — the tab strip switches client-side, and a click before the socket is up gets
+the first render's Editor tab patched back over the choice.
 
 ## Measurement summary
 
