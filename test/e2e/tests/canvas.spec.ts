@@ -67,19 +67,15 @@ async function createCanvasAndOpen(page: Page, name: string): Promise<string> {
   await page.getByPlaceholder('Enter canvas name...').fill(name);
   await page.getByRole('button', { name: 'Create Canvas' }).click();
 
-  // The flash auto-dismisses, so it is not a reliable assertion here.
-  // Wait for the new card instead — that proves the creation round trip
-  // landed and the canvas is listed.
-  // h3 is a direct child of the card div that owns the Edit link.
-  const card = page.locator(`h3:text-is("${name}")`).locator('..');
-  await expect(card).toBeVisible({ timeout: 15_000 });
-
-  await dismissFlash(page);
-
-  await card.getByRole('link', { name: 'Edit' }).click();
-
+  // Creating lands the user in the canvas they asked for.
   await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
   await expect(page.locator('#canvas-name-form')).toBeVisible();
+  // The tab strip switches client-side and patches the server; clicking a tab
+  // before the socket is up gets the first render's Editor tab patched back
+  // over the choice.
+  await page.locator('.phx-connected').first().waitFor();
+
+  await dismissFlash(page);
   return page.url();
 }
 
@@ -857,16 +853,12 @@ test.describe('canvas accents', () => {
     await page.locator('.phx-connected').first().waitFor();
     const canvasName = uniqueName('Read-only canvas');
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
-    await page.getByLabel('Start from').selectOption({ label: templateName });
+    await page.getByRole('button', { name: `Start from ${templateName}` }).click();
     await page.getByRole('button', { name: 'Create Canvas' }).click();
 
-    // The success flash auto-dismisses, so wait for the new card instead.
-    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
-    await expect(canvasCard).toBeVisible({ timeout: 15_000 });
-    await dismissFlash(page);
-
-    await canvasCard.getByRole('link', { name: 'Edit' }).click();
+    // Creating lands the user in the new canvas.
     await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+    await dismissFlash(page);
 
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-sky-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-amber-400/);
@@ -920,16 +912,13 @@ test.describe('template designer accents', () => {
     await page.locator('.phx-connected').first().waitFor();
     const canvasName = uniqueName('Inherited Accents');
     await page.getByPlaceholder('Enter canvas name...').fill(canvasName);
-    await page.getByLabel('Start from').selectOption({ label: templateName });
+    await page.getByRole('button', { name: `Start from ${templateName}` }).click();
     await page.getByRole('button', { name: 'Create Canvas' }).click();
 
-    // The success flash auto-dismisses, so wait for the new card instead.
-    const canvasCard = page.locator(`h3:text-is("${canvasName}")`).locator('..');
-    await expect(canvasCard).toBeVisible({ timeout: 15_000 });
+    // Creating lands the user in the new canvas.
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
     await dismissFlash(page);
 
-    await canvasCard.getByRole('link', { name: 'Edit' }).click();
-    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
     await expect(page.locator('#accent-bar-column-c1')).toHaveClass(/bg-violet-400/);
     await expect(page.locator('#accent-bar-row-r1')).toHaveClass(/bg-teal-400/);
 
@@ -974,8 +963,9 @@ test.describe('mobile flash placement', () => {
     await page.getByRole('button', { name: 'Create Canvas' }).click();
 
     const flash = page.locator('#flash-group');
-    // The card rides along with the patch that adds the new canvas, and the
-    // index page can be slow, so give it room before measuring it.
+    // Creating lands the user in the new canvas, whose editor also carries a
+    // bottom tab bar on phones — the flash has to clear it there too.
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
     await expect(flash).toContainText('Canvas created successfully', { timeout: 30_000 });
     const box = await flash.boundingBox();
     expect(box).not.toBeNull();
@@ -996,11 +986,15 @@ test.describe('canvas library', () => {
     await page.getByPlaceholder('Enter canvas description...').fill(longWord);
     await page.getByRole('button', { name: 'Create Canvas' }).click();
 
+    // Creating lands the user in the editor; the card is measured back on the
+    // library, where it is listed.
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
     const card = page.getByRole('heading', { name }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
     const description = card.locator('p').first();
 
-    // The card is rendered by the LiveView patch that follows the creation,
-    // so wait for it before measuring.
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(description).toBeVisible();
     await dismissFlash(page);
