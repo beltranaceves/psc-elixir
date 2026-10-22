@@ -10,17 +10,13 @@ defmodule PscWeb.NoteCollaborationTest do
 
   setup :register_and_log_in_user
 
-  # Known bug: the push never arrives, so notes are NOT collaborative today even
-  # though the store broadcasts and the hook listens. Verified neutral: the
-  # operation shape applies (Psc.Text.apply_operation/2) and
-  # TextStore.broadcast/5 publishes {:note_operation, …} on Notes.pubsub_topic/1.
-  # Suspect: the LiveView's subscription (subscribe_to_note/1) or the handler's
-  # `socket.assigns.note` guard. Unskip when fixed - this test is the proof.
-  # Narrowed: a direct broadcast on the note topic now reaches the editor (the
-  # next test passes), so subscription + handler + payload are correct. This one
-  # goes through Notes.apply_operation/3 and still does not arrive, which points
-  # at the context/store path (sequence or insert) rather than the LiveView.
-  @tag :skip
+  # Delivery is a PubSub broadcast, so the push is asynchronous. ExUnit's
+  # default 100 ms is not enough for the first push in a fresh VM (module
+  # loading makes it ~105 ms cold, ~2 ms warm).
+  @push_timeout 2_000
+
+  # The acceptance test for collaboration: an operation applied through the
+  # context by another user must reach the open note.
   test "an edit by another user reaches the open note", %{conn: conn, user: owner} do
     layout = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
 
@@ -29,15 +25,52 @@ defmodule PscWeb.NoteCollaborationTest do
 
     note = NotesFixtures.note_fixture(%{user: owner, canvas: canvas, title: "Shared note"})
     other = AccountsFixtures.user_fixture()
+    other_id = other.id
 
     {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}")
 
     # Exactly what the other user's editor does when they type: turn the text
     # delta into operations, apply them through the context, which broadcasts.
     [operation] = Notes.text_to_operations("", "hello from the other user")
-    Notes.apply_operation(note.id, other.id, operation)
+    Notes.apply_operation(note.id, other_id, operation)
 
-    assert_push_event(view, "note_content_updated", %{content: "hello from the other user"})
+    assert_push_event(
+      view,
+      "note_content_updated",
+      %{content: "hello from the other user", from_user_id: ^other_id},
+      @push_timeout
+    )
+  end
+
+  # A scratchpad canvas has one note and no note list; opening the Notes view
+  # creates and subscribes it. It used to open without subscribing at all, so
+  # a remote edit went nowhere.
+  test "an edit by another user reaches a scratchpad note", %{conn: conn, user: owner} do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(owner.id, %{
+        "name" => "Scratch",
+        "layout_id" => layout.id,
+        "notes_mode" => "single"
+      })
+
+    other = AccountsFixtures.user_fixture()
+    other_id = other.id
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes")
+
+    assert [note] = Notes.list_notes(canvas.id)
+
+    [operation] = Notes.text_to_operations("", "scratch from afar")
+    Notes.apply_operation(note.id, other_id, operation)
+
+    assert_push_event(
+      view,
+      "note_content_updated",
+      %{content: "scratch from afar", from_user_id: ^other_id},
+      @push_timeout
+    )
   end
 
   test "the note topic is subscribed when the note is open", %{conn: conn, user: owner} do
@@ -58,7 +91,7 @@ defmodule PscWeb.NoteCollaborationTest do
       {:note_operation, other.id, %{"type" => "insert", "pos" => 0, "text" => "direct"}, 1}
     )
 
-    assert_push_event(view, "note_content_updated", %{content: "direct"})
+    assert_push_event(view, "note_content_updated", %{content: "direct"}, @push_timeout)
   end
 
   test "the same user's own operations are not echoed back", %{conn: conn, user: owner} do
@@ -75,5 +108,54 @@ defmodule PscWeb.NoteCollaborationTest do
     Notes.apply_operation(note.id, owner.id, operation)
 
     refute_push_event(view, "note_content_updated", %{content: "typed here"}, 100)
+  end
+
+  test "the note header says who else has the note open", %{conn: conn, user: owner} do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(owner.id, %{"name" => "Together", "layout_id" => layout.id})
+
+    note = NotesFixtures.note_fixture(%{user: owner, canvas: canvas, title: "Shared"})
+    other = AccountsFixtures.user_fixture()
+    {:ok, _canvas} = Psc.Canvas.share_unstr_canvas_with(canvas, other.email)
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}")
+    refute render(view) =~ "is editing"
+
+    # The other user opens the same note. Presence is tracked in the live
+    # process, so the first view hears about it on its own note topic.
+    conn_b = log_in_user(Phoenix.ConnTest.build_conn(), other)
+    {:ok, _view_b, _html_b} = live(conn_b, ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}")
+
+    assert render(view) =~ "#{other.email} is editing"
+  end
+
+  # The textarea belongs to the client hook (`phx-update="ignore"`), so the
+  # server cannot hand it content with a re-render. Opening a note that
+  # already has text must push that text, marked as a resync (`-1`), or the
+  # editor would come up empty until someone else typed.
+  test "opening a note with content pushes it to the editor", %{conn: conn, user: owner} do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(owner.id, %{"name" => "Filled", "layout_id" => layout.id})
+
+    note =
+      NotesFixtures.note_fixture(%{
+        user: owner,
+        canvas: canvas,
+        title: "Written elsewhere",
+        content: "already here"
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}")
+
+    assert_push_event(
+      view,
+      "note_content_updated",
+      %{content: "already here", from_user_id: -1},
+      @push_timeout
+    )
   end
 end
