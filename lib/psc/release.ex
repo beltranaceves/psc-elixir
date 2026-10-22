@@ -56,11 +56,20 @@ defmodule Psc.Release do
   end
 
   defp load_app do
-    # Some platforms require SSL when connecting to the database, so the
-    # application is started when it is there. It is not an error when it is
-    # not: a database next to the app is reached in plain text, and the slim
-    # Elixir image has no :ssl application at all.
-    Application.ensure_all_started(:ssl)
     Application.ensure_loaded(@app)
+
+    # Some platforms require SSL when connecting to the database. Do not start
+    # it for a plain-text database: OTP loads the system trust store while
+    # starting TLS, which is unnecessary for a database next to the app.
+    if repo_uses_ssl?() do
+      Application.ensure_all_started(:ssl)
+    end
+  end
+
+  defp repo_uses_ssl? do
+    @app
+    |> Application.get_env(Psc.Repo, [])
+    |> Keyword.get(:ssl)
+    |> then(&(&1 not in [nil, false]))
   end
 end
