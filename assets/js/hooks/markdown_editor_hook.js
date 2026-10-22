@@ -4,21 +4,55 @@
 // than one editor can live on the same page — a note inside the canvas
 // editor, for instance, next to a canvas cell.
 //
-// The two server events it listens to are configurable, because they belong
-// to the LiveView that owns the editor:
+// The server events it listens to are configurable, because they belong to
+// the LiveView that owns the editor:
 //
-//   <render event> — { content, html }   the server re-rendered the Markdown
-//   <update event> — { newContent, fromUserId }  a remote edit
-//   <preview event> — { content }         the client asks for a re-render
+//   <render event> — { content, html }         the server re-rendered the Markdown
+//   <update event> — { content, from_user_id }  a remote edit
+//   <preview event> — { content }               the client asks for a re-render
 //
-// `fromUserId` of -1 means the server is resynchronising a diverged client.
+// `from_user_id` of -1 means the server is resynchronising a diverged client.
+
+// The length of the longest shared start of the two strings.
+function commonPrefixLength(current, incoming) {
+  const max = Math.min(current.length, incoming.length)
+  let length = 0
+  while (length < max && current[length] === incoming[length]) length++
+  return length
+}
+
+// The length of the longest shared end, without overlapping the prefix: the
+// two sides of the patch have to stay disjoint.
+function commonSuffixLength(current, incoming, prefix) {
+  const max = Math.min(current.length, incoming.length) - prefix
+  let length = 0
+
+  while (
+    length < max &&
+    current[current.length - 1 - length] === incoming[incoming.length - 1 - length]
+  ) {
+    length++
+  }
+
+  return length
+}
+
+// Where a caret position in the old text lands in the patched text: before
+// the patch it stays put, after it moves by the patch's length change, and
+// inside it lands at the end of what was inserted.
+function remapPosition(position, patchStart, patchEnd, insertedLength) {
+  if (position <= patchStart) return position
+  if (position >= patchEnd) return position + insertedLength - (patchEnd - patchStart)
+  return patchStart + insertedLength
+}
+
 export default {
   mounted() {
     this.form = this.el.querySelector('[data-editor-form]')
     this.input = this.el.querySelector('[data-editor-input]')
     this.preview = this.el.querySelector('[data-editor-preview]')
     this.previewContent = this.el.querySelector('[data-editor-content]')
-    this.currentUserId = this.input?.dataset.currentUserId
+    this.currentUserId = Number(this.input?.dataset.currentUserId)
     this.pendingPreviewContent = null
 
     this.renderEvent = this.el.dataset.renderEvent || 'document_rendered'
@@ -53,28 +87,51 @@ export default {
       }
     })
 
-    this.handleEvent(this.updateEvent, ({ newContent, fromUserId }) => {
-      const isServerResync = fromUserId == -1
+    this.handleEvent(this.updateEvent, ({ content, from_user_id }) => {
+      const isServerResync = from_user_id === -1
 
+      // Our own edit echoed back while we type: the textarea already has it.
       if (
         !isServerResync &&
-        this.currentUserId == fromUserId &&
+        Number(from_user_id) === this.currentUserId &&
         document.activeElement === this.input
       ) {
         return
       }
 
-      const cursorPos = this.input.selectionStart || 0
-      this.input.value = newContent || ''
-
-      if (cursorPos <= this.input.value.length) {
-        this.input.setSelectionRange(cursorPos, cursorPos)
-      }
-
+      this.applyRemoteContent(content || '')
       this.resize()
     })
 
     this.showPreview()
+  },
+
+  // Apply a remote edit as the smallest replacement we can, instead of
+  // overwriting the textarea. Replacing the whole value threw the local caret
+  // to the end on every keystroke from the other user, so two people could
+  // not type in the same note. Patching the one run that changed leaves the
+  // text around it alone, and the caret is remapped so it stays where the
+  // local user left it.
+  applyRemoteContent(content) {
+    const current = this.input.value
+    if (content === current) return
+
+    const start = this.input.selectionStart
+    const end = this.input.selectionEnd
+
+    const prefix = commonPrefixLength(current, content)
+    const suffix = commonSuffixLength(current, content, prefix)
+    const currentEnd = current.length - suffix
+    const inserted = content.slice(prefix, content.length - suffix)
+
+    this.input.setRangeText(inserted, prefix, currentEnd, 'preserve')
+
+    if (start !== null && end !== null) {
+      this.input.setSelectionRange(
+        remapPosition(start, prefix, currentEnd, inserted.length),
+        remapPosition(end, prefix, currentEnd, inserted.length),
+      )
+    }
   },
 
   edit() {

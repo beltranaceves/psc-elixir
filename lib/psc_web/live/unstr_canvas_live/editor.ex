@@ -98,6 +98,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:note_save_state, :saved)
         |> assign(:note_save_stats, @initial_save_stats)
         |> assign(:note_topic, nil)
+        |> assign(:note_presence, %{})
         |> assign(:is_owner, canvas.author_id == socket.assigns.current_scope.user.id)
         |> assign(:edit_structure?, false)
         |> assign(:structure_accent_picker, nil)
@@ -1053,6 +1054,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         # Single-note canvases never went through load_note_by_id/2, so they
         # never subscribed: remote operations were broadcast to nobody.
         |> subscribe_to_note(note.id)
+        |> push_note_resync()
 
       [] ->
         case Notes.create_note(
@@ -1069,6 +1071,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             |> assign(:note_save_state, :saved)
             |> assign(:note_save_stats, @initial_save_stats)
             |> subscribe_to_note(note.id)
+            |> push_note_resync()
 
           {:error, _changeset} ->
             socket
@@ -1108,6 +1111,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:note_save_state, :saved)
         |> assign(:note_save_stats, @initial_save_stats)
         |> subscribe_to_note(note.id)
+        |> push_note_resync()
 
       _other ->
         socket
@@ -1122,20 +1126,48 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp leave_note(socket) do
     if socket.assigns[:note_topic] do
       Phoenix.PubSub.unsubscribe(Psc.PubSub, socket.assigns.note_topic)
+      Presence.untrack(self(), socket.assigns.note_topic, socket.assigns.user_id)
     end
 
     if socket.assigns[:note_idle_timer_ref] do
       Process.cancel_timer(socket.assigns.note_idle_timer_ref)
     end
 
-    assign(socket, note_topic: nil, note_idle_timer_ref: nil)
+    assign(socket, note_topic: nil, note_presence: %{}, note_idle_timer_ref: nil)
   end
 
   defp subscribe_to_note(socket, note_id) do
     if connected?(socket) do
       topic = Notes.pubsub_topic(note_id)
       :ok = Phoenix.PubSub.subscribe(Psc.PubSub, topic)
-      assign(socket, :note_topic, topic)
+
+      # The canvas's presence says who is on the canvas; this one says who has
+      # *this note* open, which is what the note header reports. It shares the
+      # note's topic, so the diffs arrive on the subscription above.
+      Presence.track(self(), topic, socket.assigns.user_id, %{
+        username: socket.assigns.username
+      })
+
+      assign(socket,
+        note_topic: topic,
+        note_presence: Presence.list(topic)
+      )
+    else
+      socket
+    end
+  end
+
+  # The editor's textarea is owned by the client hook (`phx-update="ignore"`),
+  # so it never picks up the server's content from a re-render — it only gets
+  # what is pushed. A `-1` marks a resync rather than somebody's edit. Without
+  # it, a note opened after an edit (or between its static render and its
+  # socket connecting) showed stale text until the next keystroke elsewhere.
+  defp push_note_resync(socket) do
+    if connected?(socket) and socket.assigns.note do
+      push_event(socket, "note_content_updated", %{
+        content: socket.assigns.note_content,
+        from_user_id: -1
+      })
     else
       socket
     end
@@ -1267,8 +1299,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
-  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
-    {:noreply, handle_presence_change(socket, socket.assigns.canvas_id)}
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff", topic: topic}, socket) do
+    # The same process listens to two presence topics: the canvas's, and the
+    # open note's (which shares the note's operation topic).
+    if topic == socket.assigns.note_topic do
+      {:noreply, assign(socket, :note_presence, Presence.list(topic))}
+    else
+      {:noreply, handle_presence_change(socket, socket.assigns.canvas_id)}
+    end
   end
 
   @impl true
@@ -2172,6 +2210,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               note_content={@note_content}
               note_save_state={@note_save_state}
               note_save_stats={@note_save_stats}
+              note_presence={@note_presence}
               user_id={@user_id}
               is_owner={@canvas.author_id == @user_id}
               scratchpad?={NotesMode.single?(@canvas.notes_mode)}
@@ -2567,6 +2606,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   attr :note_content, :string, default: ""
   attr :note_save_state, :atom, required: true
   attr :note_save_stats, :map, required: true
+  attr :note_presence, :map, default: %{}
   attr :user_id, :integer, required: true
   attr :is_owner, :boolean, required: true
   attr :scratchpad?, :boolean, default: false
@@ -2672,6 +2712,23 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               />
             </.form>
 
+            <%!-- Who else has this note open. The canvas's Active Users says
+            who is on the canvas; this says who is in the same note. --%>
+            <span
+              :if={note_editors(@note_presence, @user_id) != []}
+              id="canvas-note-presence"
+              title={note_editors_label(note_editors(@note_presence, @user_id))}
+              class="inline-flex max-w-48 items-center gap-1.5 rounded-full border border-base-content/10 bg-base-content/5 px-2.5 py-1 text-xs text-base-content/70"
+            >
+              <span class="relative flex size-2 shrink-0">
+                <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
+                <span class="relative inline-flex size-2 rounded-full bg-success"></span>
+              </span>
+              <span class="truncate">
+                {note_editors_label(note_editors(@note_presence, @user_id))}
+              </span>
+            </span>
+
             <%= if @is_owner and not @scratchpad? do %>
               <UIButton.button
                 type="button"
@@ -2729,6 +2786,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> String.trim()
     |> String.slice(0, 90)
   end
+
+  # The other people who have this note open. Presence keys come back from the
+  # CRDT as strings, so the id is compared as one.
+  defp note_editors(presence, user_id) do
+    for {id, %{metas: [meta | _]}} <- presence, to_string(id) != to_string(user_id) do
+      meta[:username]
+    end
+  end
+
+  defp note_editors_label([username]), do: "#{username} is editing"
+  defp note_editors_label(usernames), do: "#{length(usernames)} others are editing"
 
   # On phones the canvas header gives its vertical space back to the grid: the
   # presence, the save state and Share move into the app header as icons.
