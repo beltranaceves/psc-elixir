@@ -145,6 +145,29 @@ results, not a summary of intentions.
   database follows its host; `PSC_DB_SSL=true|false` overrides.
 - The free tier allows 1 app, 1 database, ~10k rows per table, 2 connections.
 
+## Agent tab and MCP
+
+- The canvas editor's **Agent** tab is a chat over that canvas. **Sessions persist,
+  agents do not**: every turn starts a throwaway `Jido.AgentServer`
+  (`Psc.Agent.Turn`), streams events over `Psc.PubSub` on
+  `agent_session:<id>`, writes the result and exits. Sessions hang off
+  `agent_sessions.canvas_id`, so a canvas owns its own transcript.
+- Tools live in `Psc.Agent.Tools.*` as `Jido.Action` modules and call
+  `Psc.Canvas` / `Psc.Notes` with the caller's `current_scope`. They are
+  read-only by construction; the same modules back `/mcp`
+  (`PscWeb.MCP.Plug`, JSON-RPC, bearer token) for external agents.
+- `Psc.Agent.Turn.run/4` takes `script: [...]` so tests replay a turn without a
+  model. No test may hit a network.
+- The tab is gated per user: it needs a provider key saved in settings
+  (`users.agent_api_key`) and a model (`users.agent_model`, e.g.
+  `"anthropic:claude-haiku-4-5"`). Without a personal model the deployment
+  `AGENT_MODEL` alias is used; without either, the tab links to settings instead
+  of calling anything. `/mcp` 404s unless `PSC_MCP_TOKEN` and `PSC_MCP_USER` are
+  set.
+- Prompt caching depends on a byte-stable prefix: the system prompt is constant,
+  tools are listed in a fixed order, and history is replayed append-only (never
+  re-serialise `jsonb` into the prompt).
+
 ## Where things live
 
 - `lib/psc/` — contexts and schemas (`canvas.ex`, `notes.ex`, `text_store.ex`, `admin.ex`).

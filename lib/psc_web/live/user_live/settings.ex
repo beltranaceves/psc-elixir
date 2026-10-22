@@ -103,9 +103,130 @@ defmodule PscWeb.UserLive.Settings do
           </UIButton.button>
         </.form>
       </div>
+
+      <div class="mt-6 rounded-xl border border-base-content/10 bg-base-200 p-6">
+        <h3 class="text-lg font-medium text-base-content">Agent</h3>
+        <p class="mt-1 text-sm text-base-content/60">
+          The canvas agent calls a language model you choose, with a key of your own.
+          The key is stored for your account only and never shown again after you save it.
+        </p>
+
+        <p :if={@agent_key?} class="mt-3 text-sm text-success">
+          A key is saved{@agent_model_label}. Saving a new one replaces it.
+        </p>
+
+        <.form for={@agent_key_form} id="agent-key-form" phx-submit="save_agent_key" class="mt-4">
+          <UIForm.form_item>
+            <UIForm.form_label field={@agent_key_form[:provider]}>Provider</UIForm.form_label>
+            <UIForm.form_control>
+              <select
+                name="user[provider]"
+                id="agent-provider"
+                class="w-full rounded-lg border border-base-content/20 bg-base-100 px-3 py-2 text-sm"
+              >
+                <option
+                  :for={provider <- @agent_providers}
+                  value={provider}
+                  selected={provider == @agent_provider}
+                >
+                  {provider}
+                </option>
+              </select>
+            </UIForm.form_control>
+          </UIForm.form_item>
+
+          <UIForm.form_item>
+            <UIForm.form_label field={@agent_key_form[:model_id]}>Model</UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                name="user[model_id]"
+                id="agent-model-id"
+                value={@agent_model_id}
+                autocomplete="off"
+                spellcheck="false"
+                placeholder={@agent_default_model}
+              />
+            </UIForm.form_control>
+            <p class="mt-1 text-xs text-base-content/50">
+              Leave blank to use this instance's default ({@agent_default_model}).
+            </p>
+          </UIForm.form_item>
+
+          <UIForm.form_item>
+            <UIForm.form_label field={@agent_key_form[:agent_api_key]}>
+              API key
+            </UIForm.form_label>
+            <UIForm.form_control>
+              <UIInput.input
+                field={@agent_key_form[:agent_api_key]}
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder={if @agent_key?, do: "•••••••• (saved)", else: "sk-…"}
+              />
+            </UIForm.form_control>
+            <UIForm.form_message field={@agent_key_form[:agent_api_key]} />
+          </UIForm.form_item>
+
+          <UIButton.button phx-disable-with="Saving..." class="w-full mt-3">
+            Save agent settings
+          </UIButton.button>
+        </.form>
+
+        <button
+          :if={@agent_key?}
+          type="button"
+          phx-click="clear_agent_key"
+          data-confirm="Remove your saved API key?"
+          class="mt-3 w-full rounded-lg border border-error/40 px-3 py-1.5 text-sm text-error hover:bg-error/10"
+        >
+          Remove saved key
+        </button>
+      </div>
     </Layouts.app>
     """
   end
+
+  # A blank key field means "keep the saved one": only an explicit removal
+  # clears it, so editing the model cannot silently wipe the credential.
+  defp maybe_put_key(attrs, key) when is_binary(key) do
+    if String.trim(key) == "", do: attrs, else: Map.put(attrs, "agent_api_key", key)
+  end
+
+  defp maybe_put_key(attrs, _key), do: attrs
+
+  defp build_agent_model(%{"provider" => provider, "model_id" => model_id}) do
+    model_id = String.trim(to_string(model_id || ""))
+
+    if provider in Psc.Accounts.User.agent_providers() and model_id != "" do
+      "#{provider}:#{model_id}"
+    end
+  end
+
+  defp build_agent_model(_params), do: nil
+
+  defp agent_provider(%{agent_model: nil}), do: "openai"
+
+  defp agent_provider(%{agent_model: model}) do
+    model |> String.split(":", parts: 2) |> hd()
+  end
+
+  defp agent_model_id(%{agent_model: nil}), do: ""
+
+  defp agent_model_id(%{agent_model: model}) do
+    model |> String.split(":", parts: 2) |> List.last()
+  end
+
+  defp default_agent_model do
+    case Application.get_env(:jido_ai, :model_aliases, %{}) do
+      %{default: model} when is_binary(model) -> model
+      _other -> "AGENT_MODEL"
+    end
+  end
+
+  defp agent_model_label(%{agent_model: nil}), do: ""
+
+  defp agent_model_label(%{agent_model: model}), do: " for #{model}"
 
   @impl true
   def mount(%{"token" => token}, _session, socket) do
@@ -131,6 +252,13 @@ defmodule PscWeb.UserLive.Settings do
       |> assign(:current_email, user.email)
       |> assign(:email_form, to_form(email_changeset))
       |> assign(:password_form, to_form(password_changeset))
+      |> assign(:agent_key_form, to_form(Accounts.change_agent_key(user, %{})))
+      |> assign(:agent_key?, Psc.Accounts.User.agent_key?(user))
+      |> assign(:agent_providers, Psc.Accounts.User.agent_providers())
+      |> assign(:agent_provider, agent_provider(user))
+      |> assign(:agent_model_id, agent_model_id(user))
+      |> assign(:agent_default_model, default_agent_model())
+      |> assign(:agent_model_label, agent_model_label(user))
       |> assign(:trigger_submit, false)
 
     {:ok, socket}
@@ -167,6 +295,46 @@ defmodule PscWeb.UserLive.Settings do
 
       changeset ->
         {:noreply, assign(socket, :email_form, to_form(changeset, action: :insert))}
+    end
+  end
+
+  def handle_event("save_agent_key", params, socket) do
+    user_params = params["user"] || %{}
+    user = socket.assigns.current_scope.user
+
+    attrs =
+      %{"agent_model" => build_agent_model(user_params)}
+      |> maybe_put_key(user_params["agent_api_key"])
+
+    case Accounts.update_agent_key(user, attrs) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:agent_key_form, to_form(Accounts.change_agent_key(user, %{})))
+         |> assign(:agent_key?, Psc.Accounts.User.agent_key?(user))
+         |> assign(:agent_provider, agent_provider(user))
+         |> assign(:agent_model_id, agent_model_id(user))
+         |> assign(:agent_model_label, agent_model_label(user))
+         |> put_flash(:info, "Agent settings saved.")}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :agent_key_form, to_form(changeset, action: :insert))}
+    end
+  end
+
+  def handle_event("clear_agent_key", _params, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Accounts.update_agent_key(user, %{"agent_api_key" => ""}) do
+      {:ok, user} ->
+        {:noreply,
+         socket
+         |> assign(:agent_key?, false)
+         |> assign(:agent_model_label, agent_model_label(user))
+         |> put_flash(:info, "Agent API key removed.")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not remove the key.")}
     end
   end
 

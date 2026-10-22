@@ -79,6 +79,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:share_open, false)
         |> assign(:active_tab, "editor")
         |> assign(:tabs, @tabs)
+        |> assign(:agent_session, nil)
+        |> assign(:agent_messages, [])
+        |> assign(:agent_turn_pid, nil)
+        |> assign(:agent_subscribed, nil)
+        |> assign(:agent_sessions, [])
+        |> assign(:agent_list_open, false)
+        |> assign(:agent_menu_session, nil)
+        |> assign(:agent_phase, nil)
+        |> assign(:focus_cell, nil)
+        |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))
+        |> assign(:agent_enabled?, Psc.Agent.enabled?())
         |> assign(:notes, [])
         |> assign(:note, nil)
         |> assign(:note_content, "")
@@ -157,6 +168,215 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> assign(:c_desc, c_desc)
     |> assign(:idle_timer_ref, idle_timer_ref)
     |> assign(:save_state, :unsaved)
+  end
+
+  @impl true
+  def handle_event("agent_new", _params, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Psc.Agent.create_session(user.id, %{canvas_id: socket.assigns.canvas.id}) do
+      {:ok, session} ->
+        {:noreply,
+         socket
+         |> subscribe_agent(session)
+         |> assign(:agent_session, session)
+         |> assign(
+           :agent_sessions,
+           Psc.Agent.list_sessions_for_canvas(session.canvas_id, session.user_id)
+         )
+         |> assign(:agent_messages, [])
+         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not start a chat.")}
+    end
+  end
+
+  def handle_event("agent_send", %{"message" => %{"content" => content}}, socket) do
+    content = String.trim(content)
+    session = socket.assigns.agent_session
+
+    cond do
+      content == "" ->
+        {:noreply, socket}
+
+      is_nil(session) ->
+        {:noreply, put_flash(socket, :error, "Start a chat first.")}
+
+      not Psc.Agent.enabled?(socket.assigns.current_scope.user) ->
+        {:noreply, put_flash(socket, :error, "Add your API key in settings first.")}
+
+      socket.assigns.agent_turn_pid ->
+        {:noreply, put_flash(socket, :error, "Wait for the current answer to finish.")}
+
+      true ->
+        # Settings live in another tab: the socket's user was loaded at mount, so
+        # a key or model saved since then is not on this struct. Re-read it so a
+        # change takes effect without reloading the canvas.
+        scope = fresh_scope(socket.assigns.current_scope)
+        session = session
+
+        # Subscribe before the turn starts: the first deltas can arrive within
+        # milliseconds, and a late subscription loses them.
+        socket = subscribe_agent(socket, session)
+
+        {:ok, user_message} = Psc.Agent.append_user_message(session, content)
+        {:ok, assistant} = Psc.Agent.start_assistant_message(session)
+        {:ok, pid} = Psc.Agent.Turn.start(session, assistant, scope)
+
+        {:noreply,
+         socket
+         |> assign(:agent_session, Psc.Agent.get_session(session.id, session.user_id))
+         |> assign(:agent_messages, socket.assigns.agent_messages ++ [user_message, assistant])
+         |> assign(:agent_turn_pid, pid)
+         |> assign(:agent_enabled?, Psc.Agent.enabled?(scope.user))
+         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
+    end
+  end
+
+  def handle_event("agent_chat_menu", %{"session" => session_id}, socket) do
+    open = if socket.assigns.agent_menu_session == session_id, do: nil, else: session_id
+    {:noreply, assign(socket, :agent_menu_session, open)}
+  end
+
+  def handle_event("agent_rename", %{"session" => session_id, "title" => title}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Psc.Agent.get_session(session_id, user.id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "That chat is no longer available.")}
+
+      session ->
+        case Psc.Agent.rename_session(session, title) do
+          {:ok, renamed} ->
+            current =
+              if socket.assigns.agent_session && socket.assigns.agent_session.id == renamed.id,
+                do: renamed,
+                else: socket.assigns.agent_session
+
+            {:noreply,
+             socket
+             |> assign(:agent_session, current)
+             |> assign(
+               :agent_sessions,
+               Psc.Agent.list_sessions_for_canvas(renamed.canvas_id, user.id)
+             )
+             |> assign(:agent_menu_session, nil)}
+
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "A title is required.")}
+        end
+    end
+  end
+
+  def handle_event("agent_duplicate", %{"session" => session_id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Psc.Agent.get_session(session_id, user.id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "That chat is no longer available.")}
+
+      session ->
+        {:ok, copy} = Psc.Agent.duplicate_session(session)
+
+        {:noreply,
+         socket
+         |> subscribe_agent(copy)
+         |> assign(:agent_session, copy)
+         |> assign(:agent_messages, Psc.Agent.list_messages(copy))
+         |> assign(:agent_sessions, Psc.Agent.list_sessions_for_canvas(copy.canvas_id, user.id))
+         |> assign(:agent_turn_pid, nil)
+         |> assign(:agent_phase, nil)
+         |> assign(:agent_menu_session, nil)}
+    end
+  end
+
+  def handle_event("agent_delete", %{"session" => session_id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Psc.Agent.get_session(session_id, user.id) do
+      nil ->
+        {:noreply, socket}
+
+      session ->
+        {:ok, _} = Psc.Agent.delete_session(session)
+        sessions = Psc.Agent.list_sessions_for_canvas(session.canvas_id, user.id)
+
+        deleted_current? =
+          socket.assigns.agent_session && socket.assigns.agent_session.id == session.id
+
+        socket =
+          if deleted_current? do
+            case List.first(sessions) do
+              nil ->
+                socket
+                |> assign(:agent_session, nil)
+                |> assign(:agent_messages, [])
+
+              next ->
+                socket
+                |> subscribe_agent(next)
+                |> assign(:agent_session, next)
+                |> assign(:agent_messages, Psc.Agent.list_messages(next))
+            end
+          else
+            socket
+          end
+
+        {:noreply,
+         socket
+         |> assign(:agent_sessions, sessions)
+         |> assign(:agent_menu_session, nil)
+         |> assign(:agent_turn_pid, nil)
+         |> assign(:agent_phase, nil)}
+    end
+  end
+
+  def handle_event("agent_close_lists", _params, socket) do
+    {:noreply, assign(socket, agent_list_open: false, agent_menu_session: nil)}
+  end
+
+  def handle_event("agent_toggle_list", _params, socket) do
+    {:noreply, assign(socket, :agent_list_open, not socket.assigns.agent_list_open)}
+  end
+
+  def handle_event("agent_select", %{"session" => session_id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case Psc.Agent.get_session(session_id, user.id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "That chat is no longer available.")}
+
+      session ->
+        Psc.Agent.cancel_stale_streaming(session)
+
+        {:noreply,
+         socket
+         |> subscribe_agent(session)
+         |> assign(:agent_session, session)
+         |> assign(:agent_messages, Psc.Agent.list_messages(session))
+         |> assign(:agent_phase, nil)
+         |> assign(:agent_turn_pid, nil)
+         |> assign(:agent_list_open, false)}
+    end
+  end
+
+  def handle_event("agent_stop", _params, socket) do
+    case socket.assigns.agent_turn_pid do
+      nil ->
+        {:noreply, socket}
+
+      pid ->
+        Task.Supervisor.terminate_child(Psc.Agent.TurnSupervisor, pid)
+
+        socket =
+          case Enum.find(socket.assigns.agent_messages, &(&1.status == :streaming)) do
+            nil -> socket
+            message -> update_agent_message(socket, message.id, &Psc.Agent.cancel_message/1)
+          end
+
+        {:noreply, assign(socket, :agent_turn_pid, nil)}
+    end
   end
 
   @impl true
@@ -663,21 +883,142 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end)
   end
 
+  defp fresh_scope(scope) do
+    case Psc.Accounts.get_user_by_email(scope.user.email) do
+      nil -> scope
+      user -> Psc.Accounts.Scope.for_user(user)
+    end
+  end
+
+  defp load_agent(socket) do
+    user = socket.assigns.current_scope.user
+    enabled? = Psc.Agent.enabled?(user)
+    sessions = Psc.Agent.list_sessions_for_canvas(socket.assigns.canvas.id, user.id)
+
+    case Psc.Agent.latest_session(socket.assigns.canvas.id, user.id) do
+      nil ->
+        socket
+        |> assign(:agent_session, nil)
+        |> assign(:agent_sessions, sessions)
+        |> assign(:agent_messages, [])
+        |> assign(:agent_enabled?, enabled?)
+
+      session ->
+        Psc.Agent.cancel_stale_streaming(session)
+
+        socket
+        |> subscribe_agent(session)
+        |> assign(:agent_session, session)
+        |> assign(:agent_sessions, sessions)
+        |> assign(:agent_messages, Psc.Agent.list_messages(session))
+        |> assign(:agent_enabled?, enabled?)
+    end
+  end
+
+  # A turn's stream only reaches the socket if it subscribed to the session's
+  # topic. Starting a chat from the tab creates the session *after* mount, so
+  # this has to run there too - otherwise every delta and the completion are
+  # broadcast into the void and the bubble stays empty forever.
+  defp subscribe_agent(socket, %{id: id}) do
+    case socket.assigns[:agent_subscribed] do
+      ^id ->
+        socket
+
+      nil ->
+        subscribe_to(socket, id)
+
+      previous ->
+        Phoenix.PubSub.unsubscribe(Psc.PubSub, Psc.Agent.Turn.topic(previous))
+        subscribe_to(socket, id)
+    end
+  end
+
+  defp subscribe_to(socket, id) do
+    if connected?(socket), do: Phoenix.PubSub.subscribe(Psc.PubSub, Psc.Agent.Turn.topic(id))
+    assign(socket, :agent_subscribed, id)
+  end
+
+  # Links the tools returned with their results. Built server-side from ids the
+  # access check already approved, so a chip cannot point somewhere the user
+  # could not open.
+  defp agent_refs(message) do
+    message.tool_calls
+    |> Enum.flat_map(fn call ->
+      case call["result"] do
+        %{"refs" => refs} when is_list(refs) -> Enum.filter(refs, &is_map_key(&1, "url"))
+        _other -> []
+      end
+    end)
+    |> Enum.uniq_by(& &1["url"])
+  end
+
+  defp agent_cell_refs(message), do: Enum.filter(agent_refs(message), &(&1["kind"] == "cell"))
+
+  defp agent_other_refs(message),
+    do: Enum.reject(agent_refs(message), &(&1["kind"] == "cell"))
+
+  defp agent_session_selected?(current, session), do: current.id == session.id
+
+  # A turn is a user message plus the answer it produced; the counter stores both.
+  defp turn_count(session), do: max(div(session.message_count + 1, 2), 0)
+
+  defp agent_date(nil), do: "—"
+
+  defp agent_date(%NaiveDateTime{} = at), do: Calendar.strftime(at, "%d %b")
+  defp agent_date(%DateTime{} = at), do: Calendar.strftime(at, "%d %b")
+
+  defp agent_relative_time(nil), do: "never used"
+
+  defp agent_relative_time(%_{} = at) do
+    seconds = DateTime.diff(DateTime.utc_now(), to_utc(at))
+
+    cond do
+      seconds < 60 -> "just now"
+      seconds < 3_600 -> "#{div(seconds, 60)}m ago"
+      seconds < 86_400 -> "#{div(seconds, 3_600)}h ago"
+      seconds < 2_592_000 -> "#{div(seconds, 86_400)}d ago"
+      true -> "on #{agent_date(at)}"
+    end
+  end
+
+  defp to_utc(%DateTime{} = at), do: at
+  defp to_utc(%NaiveDateTime{} = at), do: DateTime.from_naive!(at, "Etc/UTC")
+
+  defp update_agent_message(socket, id, fun) do
+    messages =
+      Enum.map(socket.assigns.agent_messages, fn message ->
+        if message.id == id, do: fun.(message), else: message
+      end)
+
+    assign(socket, :agent_messages, messages)
+  end
+
   defp normalize_accent(""), do: nil
   defp normalize_accent(accent), do: accent
 
   @impl true
   def handle_params(params, _url, socket) do
     tab = find_tab(params["tab"]) |> elem(0)
+
+    # A snippet chip links to ?tab=editor&cell=r1_c1: open the editor tab and mark
+    # the cell so it is obvious which one the agent meant.
+    tab = if params["cell"], do: "editor", else: tab
+
     socket = assign(socket, :active_tab, tab)
+    socket = assign(socket, :focus_cell, params["cell"])
 
     socket =
-      if tab == "notes" do
-        socket
-        |> load_notes()
-        |> load_note(params["note"])
-      else
-        socket
+      cond do
+        tab == "notes" ->
+          socket
+          |> load_notes()
+          |> load_note(params["note"])
+
+        tab == "agent" ->
+          load_agent(socket)
+
+        true ->
+          socket
       end
 
     {:noreply, socket}
@@ -705,9 +1046,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     case socket.assigns.notes do
       [note | _] ->
         socket
+        |> leave_note()
         |> assign(:note, note)
         |> assign(:note_content, Notes.get_note_content(note.id))
         |> assign(:note_last_saved_content, Notes.get_note_content(note.id))
+        # Single-note canvases never went through load_note_by_id/2, so they
+        # never subscribed: remote operations were broadcast to nobody.
+        |> subscribe_to_note(note.id)
 
       [] ->
         case Notes.create_note(
@@ -797,6 +1142,42 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
+  def handle_info({:status, _message_id, phase}, socket) do
+    {:noreply, assign(socket, :agent_phase, phase)}
+  end
+
+  def handle_info({:delta, message_id, text}, socket) do
+    {:noreply, update_agent_message(socket, message_id, &%{&1 | content: &1.content <> text})}
+  end
+
+  def handle_info({:tool_started, message_id, call}, socket) do
+    {:noreply,
+     update_agent_message(socket, message_id, &%{&1 | tool_calls: &1.tool_calls ++ [call]})}
+  end
+
+  def handle_info({:tool_finished, message_id, call}, socket) do
+    {:noreply,
+     update_agent_message(socket, message_id, fn message ->
+       %{message | tool_calls: List.update_at(message.tool_calls, -1, &Map.merge(&1, call))}
+     end)}
+  end
+
+  def handle_info({:completed, message_id, %{content: content}}, socket) do
+    {:noreply,
+     socket
+     |> update_agent_message(message_id, &%{&1 | content: content, status: :complete})
+     |> assign(:agent_turn_pid, nil)
+     |> assign(:agent_phase, nil)}
+  end
+
+  def handle_info({:failed, message_id, reason}, socket) do
+    {:noreply,
+     socket
+     |> update_agent_message(message_id, &%{&1 | status: :error, error: to_string(reason)})
+     |> assign(:agent_turn_pid, nil)
+     |> assign(:agent_phase, nil)}
+  end
+
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
     # New broadcasts include a per-client id so multiple tabs by same user get updates
     if client_id != socket.assigns.client_id do
@@ -946,8 +1327,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
        socket
        |> assign(:note_content, new_content)
        |> push_event("note_content_updated", %{
-         newContent: new_content,
-         fromUserId: user_id
+         content: new_content,
+         from_user_id: user_id
        })}
     else
       {:noreply, socket}
@@ -1156,6 +1537,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <:header_nav>
         <.tab_strip tabs={@tabs} active_tab={@active_tab} />
       </:header_nav>
+
       <:header_actions>
         <.header_actions
           presence={@presence}
@@ -1163,6 +1545,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           can_share?={@canvas.author_id == @user_id}
         />
       </:header_actions>
+
       <div
         id="canvas-workspace"
         class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2"
@@ -1214,7 +1597,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 rows="1"
               ><%= @c_desc %></textarea>
             </.form>
-
             <%!-- Active users: truncated, with the full list in a hover tooltip --%>
             <div id="canvas-presence" class="order-4 hidden sm:order-3 sm:block">
               <UITooltip.tooltip id="active-users-tooltip">
@@ -1233,10 +1615,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                     </span>
                   </button>
                 </UITooltip.tooltip_trigger>
-
                 <.active_users_list presence={@presence} />
               </UITooltip.tooltip>
             </div>
+
             <%= if @canvas.author_id == @user_id do %>
               <div class="order-5 ml-auto hidden sm:ml-0 sm:block">
                 <.share_button id="share-canvas-button" label="Share" />
@@ -1256,7 +1638,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           remove_event="remove_access"
           on_close="share_closed"
         />
-
         <%!-- Removing a row or column that holds content asks first: the
         operation is destructive, and the event log keeps the old values only
         until pruning folds them. --%>
@@ -1271,15 +1652,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <UIDialog.dialog_title>
                 Remove this {structure_remove_confirm(@structure_remove_confirm, :type)}?
               </UIDialog.dialog_title>
+
               <UIDialog.dialog_description>
                 "{structure_remove_confirm(@structure_remove_confirm, :label)}" and everything
                 written in it will be removed. This cannot be undone.
               </UIDialog.dialog_description>
             </UIDialog.dialog_header>
+
             <UIDialog.dialog_footer class="flex flex-row justify-end gap-2">
               <UIButton.button type="button" variant="outline" phx-click="dismiss_remove_structure">
                 Keep it
               </UIButton.button>
+
               <UIButton.button
                 type="button"
                 variant="destructive"
@@ -1344,6 +1728,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                       >
                         Add Column
                       </UIButton.button>
+
                       <UIButton.button type="button" variant="outline" size="sm" phx-click="add_row">
                         Add Row
                       </UIButton.button>
@@ -1359,6 +1744,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
                     <.icon name="hero-squares-2x2" class="size-8 text-base-content/30" />
                     <p class="text-sm text-base-content/60">This canvas has no structure yet.</p>
+
                     <%= if @is_owner do %>
                       <div class="flex gap-2">
                         <UIButton.button
@@ -1370,6 +1756,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                         >
                           Add row
                         </UIButton.button>
+
                         <UIButton.button
                           type="button"
                           id="empty-add-column"
@@ -1397,9 +1784,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                         <col />
                       <% end %>
                     </colgroup>
+
                     <thead>
                       <tr>
                         <th class="px-2 py-1 border border-base-content/20 bg-base-content/5"></th>
+
                         <%= for column <- @cells["columns"] || [] do %>
                           <th class="border border-base-content/20 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
                             <div class="flex flex-col">
@@ -1444,7 +1833,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         title="Accent color"
                                         aria-label={"Accent color for column #{column["label"]}"}
                                       ></button>
-
                                       <button
                                         type="button"
                                         phx-click="request_remove_column"
@@ -1478,6 +1866,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                         aria-label={"Set column accent #{token}"}
                                       ></button>
                                     <% end %>
+
                                     <button
                                       type="button"
                                       phx-click="set_column_accent"
@@ -1497,6 +1886,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                         <% end %>
                       </tr>
                     </thead>
+
                     <tbody>
                       <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
                         <tr>
@@ -1544,7 +1934,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                       title="Accent color"
                                       aria-label={"Accent color for row #{row["label"]}"}
                                     ></button>
-
                                     <button
                                       type="button"
                                       phx-click="request_remove_row"
@@ -1578,6 +1967,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                       aria-label={"Set row accent #{token}"}
                                     ></button>
                                   <% end %>
+
                                   <button
                                     type="button"
                                     phx-click="set_row_accent"
@@ -1598,22 +1988,24 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                               <% end %>
                             </div>
                           </td>
+
                           <%= for {column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
-                            <% layout = @cells["layout"] || [] %>
-                            <% cell_key = Enum.at(Enum.at(layout, row_index, []), col_index) %>
+                            <% layout = @cells["layout"] || [] %> <% cell_key =
+                              Enum.at(Enum.at(layout, row_index, []), col_index) %>
                             <td class="relative border border-base-content/20 align-top">
                               <%= if cell_key do %>
                                 <% cell_data =
-                                  get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
-                                <% title =
+                                  get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %> <% title =
                                   Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
                                     Map.get(cell_data, "title") || cell_key %>
-
                                 <div
                                   id={"cell-card-" <> cell_key}
                                   phx-hook="CellFocus"
                                   data-cell-key={cell_key}
-                                  class="canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset"
+                                  class={[
+                                    "canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
+                                    @focus_cell == cell_key && "ring-2 ring-primary ring-inset"
+                                  ]}
                                 >
                                   <%!-- The colour combination of this cell (column on top,
                             row on the left) is only shown in the mobile fullscreen
@@ -1629,7 +2021,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                     orientation={:left}
                                     class="cell-accent z-10"
                                   />
-
                                   <div class="cell-body p-2">
                                     <%= if @edit_structure? do %>
                                       <.form
@@ -1787,8 +2178,322 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             />
           </div>
 
+          <div
+            id="canvas-panel-agent"
+            role="tabpanel"
+            aria-labelledby="canvas-tab-agent"
+            class={[
+              "flex min-h-0 w-full flex-1 flex-col",
+              @active_tab != "agent" && "hidden"
+            ]}
+          >
+            <div class="flex min-h-0 w-full flex-1 flex-col rounded-xl border border-base-content/10 bg-base-200/40 p-4">
+              <div :if={is_nil(@agent_session)} class="m-auto max-w-md text-center">
+                <h2 class="text-lg font-medium text-base-content">Agent</h2>
+
+                <p class="mt-1 text-sm text-base-content/60">
+                  Ask about this canvas. The agent reads only what you can read and cannot change anything.
+                </p>
+
+                <p :if={not @agent_enabled?} class="mt-3 text-sm text-base-content/60">
+                  The agent needs a model provider key.
+                  <.link navigate={~p"/users/settings"} class="link link-primary">
+                    Add your API key in settings
+                  </.link>
+                </p>
+
+                <button
+                  type="button"
+                  phx-click="agent_new"
+                  disabled={not @agent_enabled?}
+                  class="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-content disabled:opacity-50"
+                >
+                  Start a chat
+                </button>
+              </div>
+
+              <div :if={@agent_session} class="flex min-h-0 flex-1 flex-col">
+                <div class="flex items-center justify-between gap-3 border-b border-base-content/10 pb-2">
+                  <h2 id="canvas-agent-title" class="truncate text-sm font-medium text-base-content">
+                    {@agent_session.title}
+                  </h2>
+
+                  <div class="flex shrink-0 items-center gap-2">
+                    <div class="relative" phx-click-away="agent_close_lists">
+                      <button
+                        type="button"
+                        id="canvas-agent-chats"
+                        phx-click="agent_toggle_list"
+                        class="flex max-w-[12rem] items-center gap-1 rounded-lg border border-base-content/15 px-2 py-1 text-xs text-base-content/70 hover:bg-base-100"
+                      >
+                        <.icon name="hero-chat-bubble-left-right" class="size-3.5 shrink-0" />
+                        <span class="truncate">{length(@agent_sessions)} chats</span>
+                        <.icon name="hero-chevron-down" class="size-3 shrink-0" />
+                      </button>
+
+                      <div
+                        :if={@agent_list_open}
+                        id="canvas-agent-chat-list"
+                        class="absolute right-0 z-30 mt-1 w-72 rounded-xl border border-base-content/10 bg-base-100 p-1 shadow-lg"
+                      >
+                        <p class="px-2 py-1 text-[11px] uppercase tracking-wide text-base-content/40">
+                          Chats on this canvas
+                        </p>
+
+                        <div :for={session <- @agent_sessions} class="group relative">
+                          <button
+                            type="button"
+                            phx-click="agent_select"
+                            phx-value-session={session.id}
+                            class={[
+                              "block w-full rounded-lg px-2 py-1.5 pr-8 text-left hover:bg-base-200",
+                              agent_session_selected?(@agent_session, session) && "bg-base-200"
+                            ]}
+                          >
+                            <p class="truncate text-xs font-medium text-base-content">
+                              {session.title}
+                            </p>
+
+                            <p class="mt-0.5 text-[11px] text-base-content/50">
+                              {turn_count(session)} turns · started {agent_date(session.inserted_at)} · {agent_relative_time(
+                                session.last_message_at || session.inserted_at
+                              )}
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            phx-click="agent_chat_menu"
+                            phx-value-session={session.id}
+                            aria-label="Chat options"
+                            class={[
+                              "absolute right-1 top-1.5 rounded p-1 text-base-content/50 hover:bg-base-300",
+                              "opacity-0 transition-opacity group-hover:opacity-100",
+                              @agent_menu_session == session.id && "opacity-100"
+                            ]}
+                          >
+                            <.icon name="hero-ellipsis-vertical" class="size-4" />
+                          </button>
+
+                          <div
+                            :if={@agent_menu_session == session.id}
+                            class="absolute right-1 top-8 z-40 w-44 rounded-lg border border-base-content/10 bg-base-100 p-1 shadow-lg"
+                          >
+                            <.form
+                              for={to_form(%{"title" => session.title}, as: :rename)}
+                              id={"agent-rename-#{session.id}"}
+                              phx-submit="agent_rename"
+                              phx-value-session={session.id}
+                              class="px-1 pb-1"
+                            >
+                              <input
+                                type="text"
+                                name="title"
+                                value={session.title}
+                                maxlength="120"
+                                class="w-full rounded border border-base-content/15 bg-base-100 px-1.5 py-1 text-xs text-base-content"
+                              />
+                              <button
+                                type="submit"
+                                class="mt-1 w-full rounded bg-primary px-2 py-1 text-xs text-primary-content"
+                              >
+                                Rename
+                              </button>
+                            </.form>
+
+                            <button
+                              type="button"
+                              phx-click="agent_duplicate"
+                              phx-value-session={session.id}
+                              class="w-full rounded px-2 py-1 text-left text-xs text-base-content/80 hover:bg-base-200"
+                            >
+                              Duplicate
+                            </button>
+
+                            <button
+                              type="button"
+                              phx-click="agent_delete"
+                              phx-value-session={session.id}
+                              data-confirm="Delete this chat and its transcript?"
+                              class="w-full rounded px-2 py-1 text-left text-xs text-error hover:bg-error/10"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      :if={@agent_turn_pid}
+                      type="button"
+                      phx-click="agent_stop"
+                      class="rounded-lg border border-base-content/20 px-2 py-1 text-xs hover:bg-base-100"
+                    >
+                      Stop
+                    </button>
+
+                    <button
+                      type="button"
+                      phx-click="agent_new"
+                      class="rounded-lg border border-base-content/20 px-2 py-1 text-xs hover:bg-base-100"
+                    >
+                      New chat
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  :if={@agent_phase}
+                  id="canvas-agent-status"
+                  class="mt-2 flex items-center gap-2 text-xs text-base-content/60"
+                >
+                  <span class="size-1.5 animate-pulse rounded-full bg-primary"></span> {@agent_phase}
+                </div>
+
+                <div id="canvas-agent-messages" class="mt-3 flex-1 space-y-3 overflow-y-auto pr-1">
+                  <p :if={@agent_messages == []} class="text-sm text-base-content/60">
+                    Ask about this canvas: its cells, its notes, what changed.
+                  </p>
+
+                  <div
+                    :for={message <- @agent_messages}
+                    id={"agent-message-#{message.id}"}
+                    class={[
+                      "rounded-xl border p-3 text-sm",
+                      message.role == :user && "border-primary/20 bg-primary/5",
+                      message.role == :assistant && "border-base-content/10 bg-base-100",
+                      message.status == :error && "border-error/40"
+                    ]}
+                  >
+                    <p class="mb-1 text-xs uppercase tracking-wide text-base-content/50">
+                      {if message.role == :user, do: "You", else: "Assistant"}
+                    </p>
+
+                    <div :if={message.tool_calls != []} class="mb-2 space-y-1">
+                      <p class="text-xs uppercase tracking-wide text-base-content/40">
+                        Tools called
+                      </p>
+
+                      <details
+                        :for={call <- message.tool_calls}
+                        class="rounded-lg border border-base-content/10 px-2 py-1 text-xs"
+                      >
+                        <summary class="cursor-pointer list-none">
+                          <span class="font-mono">{call["name"]}</span>
+                          <span class="ml-2 text-base-content/50">{call["status"]}</span>
+                        </summary>
+                        <pre class="mt-1 overflow-x-auto whitespace-pre-wrap text-base-content/70">{Jason.encode!(
+                          call["result"] || call["arguments"] || %{},
+                          pretty: true
+                        )}</pre>
+                      </details>
+                    </div>
+
+                    <div
+                      :if={agent_refs(message) != []}
+                      id={"agent-refs-#{message.id}"}
+                      class="mb-2 space-y-2"
+                    >
+                      <div
+                        :for={ref <- agent_cell_refs(message)}
+                        class="rounded-lg border border-base-content/10 bg-base-200/60 px-2.5 py-2"
+                      >
+                        <div class="flex items-start justify-between gap-2">
+                          <p class="text-xs font-medium text-base-content/80">{ref["label"]}</p>
+
+                          <.link
+                            navigate={ref["url"]}
+                            class="shrink-0 rounded-md border border-base-content/15 px-2 py-0.5 text-xs text-base-content/70 hover:bg-base-100"
+                          >
+                            Open cell
+                          </.link>
+                        </div>
+
+                        <p
+                          :if={ref["excerpt"]}
+                          class="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-base-content/60"
+                        >
+                          {ref["excerpt"]}
+                        </p>
+                      </div>
+
+                      <div :if={agent_other_refs(message) != []} class="flex flex-wrap gap-1.5">
+                        <.link
+                          :for={ref <- agent_other_refs(message)}
+                          navigate={ref["url"]}
+                          class={[
+                            "inline-flex max-w-[20rem] items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-base-200",
+                            ref["kind"] == "note" && "border-primary/30 text-primary",
+                            ref["kind"] != "note" && "border-base-content/15 text-base-content/70"
+                          ]}
+                        >
+                          <.icon
+                            name={
+                              case ref["kind"] do
+                                "note" -> "hero-document-text"
+                                "template" -> "hero-rectangle-stack"
+                                _other -> "hero-square-2-stack"
+                              end
+                            }
+                            class="size-3.5 shrink-0"
+                          /> <span class="truncate">{ref["label"]}</span>
+                        </.link>
+                      </div>
+                    </div>
+
+                    <div class="whitespace-pre-wrap break-words text-base-content">
+                      {message.content}<span :if={message.status == :streaming}>▍</span>
+                    </div>
+
+                    <p :if={message.status == :cancelled} class="mt-1 text-xs text-base-content/50">
+                      Stopped.
+                    </p>
+
+                    <p :if={message.error} class="mt-1 text-xs text-error">{message.error}</p>
+                  </div>
+                </div>
+
+                <.form
+                  for={@agent_composer}
+                  id="canvas-agent-composer"
+                  phx-submit="agent_send"
+                  class="mt-3 rounded-xl border border-base-content/10 bg-base-100 p-2 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20"
+                >
+                  <.input
+                    field={@agent_composer[:content]}
+                    type="textarea"
+                    rows="2"
+                    placeholder="Ask about this canvas…"
+                    disabled={not @agent_enabled? or @agent_turn_pid != nil}
+                    class="border-0 bg-transparent px-1 py-1 focus:ring-0"
+                  />
+                  <div class="mt-2 flex items-center justify-between gap-3">
+                    <p class="text-xs text-base-content/50">
+                      <%= if @agent_enabled? do %>
+                        Read-only. Nothing is created or changed.
+                      <% else %>
+                        <.link navigate={~p"/users/settings"} class="link link-primary">
+                          Add your API key in settings
+                        </.link>
+                      <% end %>
+                    </p>
+
+                    <button
+                      type="submit"
+                      disabled={not @agent_enabled? or @agent_turn_pid != nil}
+                      class="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-content disabled:opacity-50"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </.form>
+              </div>
+            </div>
+          </div>
+
           <%= for {tab_id, label, icon, blurb} <- @tabs do %>
-            <%= if tab_id not in ["editor", "notes"] do %>
+            <%= if tab_id not in ["editor", "notes", "agent"] do %>
               <div
                 id={"canvas-panel-" <> tab_id}
                 role="tabpanel"
@@ -1805,12 +2510,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   <span class="flex size-12 items-center justify-center rounded-full bg-base-content/5 text-base-content/40">
                     <.icon name={icon} class="size-6" />
                   </span>
+
                   <h2 class="text-lg font-medium text-base-content">
                     {label}
                   </h2>
+
                   <p class="max-w-sm text-sm text-base-content/60">
                     {blurb}
                   </p>
+
                   <p class="text-xs text-base-content/40">Coming soon.</p>
                 </div>
               </div>
@@ -1880,6 +2588,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <h2 class="text-sm font-medium uppercase tracking-wide text-base-content/50">
               Notes
             </h2>
+
             <UIButton.button type="button" id="new-note-button" phx-click="create_note" size="sm">
               <.icon name="hero-plus" class="size-4" /> New note
             </UIButton.button>
@@ -1891,6 +2600,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               class="rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-6 text-center"
             >
               <p class="text-sm text-base-content/60">No notes yet.</p>
+
               <p class="mt-1 text-xs text-base-content/45">
                 Notes are shared Markdown attached to this canvas.
               </p>
@@ -1913,6 +2623,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   <span class="block truncate text-sm font-medium text-base-content">
                     {note.title || "Untitled note"}
                   </span>
+
                   <span class="mt-1 block truncate text-xs text-base-content/50">
                     {note_snippet(note.content)}
                   </span>
@@ -1922,7 +2633,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           <% end %>
         </div>
       <% end %>
-
       <%!-- The editor. On a phone it takes over the pane. --%>
       <div
         id="canvas-note-editor"
@@ -2045,7 +2755,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             <span>{active_user_count(@presence)}</span>
           </button>
         </UITooltip.tooltip_trigger>
-
         <.active_users_list presence={@presence} />
       </UITooltip.tooltip>
 
@@ -2057,7 +2766,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         others={@status.others}
         compact
       />
-
       <%= if @can_share? do %>
         <UIButton.button
           type="button"
@@ -2085,6 +2793,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
         Active users
       </p>
+
       <ul class="space-y-1">
         <li
           :for={username <- active_usernames(@presence)}
@@ -2156,8 +2865,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         phx-value-tab={tab_id}
         class="flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-[0.7rem] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
-        <.icon name={icon} class="size-5" />
-        <span>{label}</span>
+        <.icon name={icon} class="size-5" /> <span>{label}</span>
       </button>
     </nav>
     """

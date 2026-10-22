@@ -25,9 +25,15 @@ defmodule PscWeb.Router do
   end
 
   # Other scopes may use custom stacks.
-  # scope "/api", PscWeb do
-  #   pipe_through :api
-  # end
+  scope "/", PscWeb do
+    pipe_through :api
+
+    # Model Context Protocol: JSON-RPC over HTTP for external agents. It
+    # authenticates with a bearer token instead of the session cookie, so it
+    # stays out of the browser pipeline. Disabled (404) unless PSC_MCP_TOKEN and
+    # PSC_MCP_USER are set.
+    forward "/mcp", MCP.Plug
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:psc, :dev_routes) do

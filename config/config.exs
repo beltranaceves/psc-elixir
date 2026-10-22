@@ -92,6 +92,15 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# The agent speaks to the provider through req_llm, whose agents resolve models
+# through aliases. `AGENT_MODEL` overrides this in `runtime.exs`; the literal
+# default only keeps the alias resolvable in every environment.
+config :jido_ai,
+  model_aliases: %{
+    default: "openai:gpt-4.1-mini",
+    fast: "openai:gpt-4.1-mini"
+  }
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

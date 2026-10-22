@@ -976,6 +976,51 @@ test.describe('template designer accents', () => {
   });
 });
 
+test.describe('canvas list layout', () => {
+  test('aligns card actions when one canvas has no description', async ({ page }) => {
+    const emptyDescriptionName = uniqueName('No description');
+    const describedName = uniqueName('With description');
+
+    const createCanvas = async (name: string, description?: string) => {
+      await page.goto('/canvas');
+      await page.locator('.phx-connected').first().waitFor();
+      await page.getByPlaceholder('Enter canvas name...').fill(name);
+
+      if (description) {
+        await page.getByPlaceholder('Enter canvas description...').fill(description);
+      }
+
+      await page.getByRole('button', { name: 'Create Canvas' }).click();
+      await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+    };
+
+    await createCanvas(emptyDescriptionName);
+    await createCanvas(
+      describedName,
+      'A description makes this card taller than the card above it.',
+    );
+
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    const emptyCard = page
+      .getByRole('heading', { name: emptyDescriptionName, exact: true })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    const describedCard = page
+      .getByRole('heading', { name: describedName, exact: true })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+
+    const emptyEdit = await emptyCard.getByRole('link', { name: 'Edit' }).boundingBox();
+    const describedEdit = await describedCard.getByRole('link', { name: 'Edit' }).boundingBox();
+    expect(emptyEdit).not.toBeNull();
+    expect(describedEdit).not.toBeNull();
+
+    const emptyBottom = emptyEdit!.y + emptyEdit!.height;
+    const describedBottom = describedEdit!.y + describedEdit!.height;
+    expect(Math.abs(emptyBottom - describedBottom)).toBeLessThan(2);
+  });
+});
+
 test.describe('mobile flash placement', () => {
   test('places feedback cards above the mobile tab bar', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

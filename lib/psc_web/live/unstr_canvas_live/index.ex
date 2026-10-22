@@ -260,7 +260,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
           <% else %>
             <div id="my-canvases-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for canvas <- @my_canvases do %>
-                <div class="rounded-xl border border-base-content/10 bg-base-200 p-6 hover:border-base-content/25 transition-colors">
+                <div class="h-full rounded-xl border border-base-content/10 bg-base-200 p-6 hover:border-base-content/25 transition-colors flex flex-col">
                   <h3 class="font-medium text-base-content break-words">{canvas.name}</h3>
                   <p
                     :if={canvas.description not in [nil, ""]}
@@ -268,7 +268,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                   >
                     {canvas.description}
                   </p>
-                  <div class="mt-4 flex gap-2">
+                  <div class="mt-auto pt-4 flex gap-2">
                     <.link
                       navigate={~p"/canvas/#{canvas.id}"}
                       class="flex-1 px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
@@ -296,20 +296,28 @@ defmodule PscWeb.UnstrCanvasLive.Index do
             <h2 class="text-lg font-medium text-base-content mb-4">Shared with Me</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for canvas <- @shared_canvases do %>
-                <div class="rounded-xl border border-primary/20 bg-primary/5 p-6 hover:border-primary/40 transition-colors">
-                  <div class="flex items-start justify-between">
-                    <div>
-                      <h3 class="font-medium text-base-content">{canvas.name}</h3>
-                      <p class="text-sm text-base-content/60 mt-1">by {canvas.author.email}</p>
-                    </div>
+                <div class="h-full rounded-xl border border-base-content/10 bg-base-200 p-6 hover:border-base-content/25 transition-colors flex flex-col">
+                  <div class="flex items-start justify-between gap-2">
+                    <h3 class="min-w-0 font-medium text-base-content break-words">
+                      {canvas.name}
+                    </h3>
+                    <span class="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                      shared
+                    </span>
                   </div>
-                  <p class="text-sm text-base-content/60 mt-2">{canvas.description}</p>
-                  <div class="mt-4">
+                  <p class="mt-1 text-xs text-base-content/50">by {canvas.author.email}</p>
+                  <p
+                    :if={canvas.description not in [nil, ""]}
+                    class="mt-2 text-sm text-base-content/60 break-words line-clamp-2"
+                  >
+                    {canvas.description}
+                  </p>
+                  <div class="mt-auto pt-4 flex gap-2">
                     <.link
                       navigate={~p"/canvas/#{canvas.id}"}
-                      class="block w-full px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
+                      class="flex-1 px-4 py-2 bg-primary text-primary-content text-sm font-medium rounded-lg hover:opacity-90 transition-opacity text-center"
                     >
-                      View
+                      Open
                     </.link>
                   </div>
                 </div>

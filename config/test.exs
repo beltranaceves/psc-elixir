@@ -45,3 +45,17 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Tests drive the agent with explicit scripts (Psc.Agent.Turn's `script:`
+# option), so no request leaves the process. The alias deliberately names a
+# provider that does not exist: a turn that is *not* scripted fails immediately
+# with :unknown_provider instead of quietly calling a real API.
+# No deployment-wide key in tests: the tab is gated purely on the user's own key,
+# which is what the LiveView tests exercise.
+config :psc, :agent_enabled, false
+
+config :jido_ai,
+  model_aliases: %{
+    default: "test:scripted",
+    fast: "test:scripted"
+  }

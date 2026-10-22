@@ -333,12 +333,12 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       lv |> element("#canvas-tab-bar-agent") |> render_click()
       assert has_element?(lv, "#canvas-tab-bar-agent[aria-selected='true']")
       assert has_element?(lv, "#canvas-tab-agent[aria-selected='true']")
-      assert has_element?(lv, "#canvas-placeholder-agent")
+      assert has_element?(lv, "#canvas-panel-agent:not(.hidden)")
 
       # Tabs are deep-linkable.
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
       assert has_element?(lv, "#canvas-tab-agent[aria-selected='true']")
-      assert has_element?(lv, "#canvas-placeholder-agent")
+      assert has_element?(lv, "#canvas-panel-agent:not(.hidden)")
     end
 
     test "titles the header Canvas Editor and leaves the Canvases nav item unhighlighted", %{

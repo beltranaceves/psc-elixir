@@ -15,6 +15,12 @@ defmodule Psc.Application do
       {Phoenix.PubSub, name: Psc.PubSub},
       PscWeb.Presence,
       Psc.EventsSweeper,
+      # Jido's registry, supervisors and runtime store: an agent server needs
+      # them, and the ReAct runtime spawns its worker under this supervisor.
+      Psc.Agent.Jido,
+      # Agent turns run here: one short-lived task per turn, so a crash or a
+      # deploy takes down the turn and nothing else.
+      {Task.Supervisor, name: Psc.Agent.TurnSupervisor},
       # Start a worker by calling: Psc.Worker.start_link(arg)
       # {Psc.Worker, arg},
       # Start to serve requests, typically the last entry

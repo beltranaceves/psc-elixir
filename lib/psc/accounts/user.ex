@@ -12,6 +12,8 @@ defmodule Psc.Accounts.User do
     # Authorization. Never cast from user input: roles are changed through
     # `Psc.Accounts.update_user_role/2` or the release bootstrap.
     field :role, Ecto.Enum, values: [:member, :admin], default: :member
+    field :agent_api_key, :string, redact: true
+    field :agent_model, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -156,6 +158,71 @@ defmodule Psc.Accounts.User do
     |> validate_required([:role])
     |> validate_inclusion(:role, [:member, :admin])
   end
+
+  @doc """
+  Stores the user's provider API key and model.
+
+  Kept out of the registration and profile changesets on purpose: programmatic
+  fields, never cast from a generic form. A blank key removes it.
+  """
+  def agent_key_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:agent_api_key, :agent_model])
+    |> update_change(:agent_api_key, fn
+      nil -> nil
+      value -> String.trim(value)
+    end)
+    |> update_change(:agent_model, fn
+      nil -> nil
+      value -> String.trim(value)
+    end)
+    |> then(fn changeset ->
+      case get_change(changeset, :agent_api_key) do
+        "" -> put_change(changeset, :agent_api_key, nil)
+        _other -> changeset
+      end
+    end)
+    |> then(fn changeset ->
+      case get_change(changeset, :agent_model) do
+        "" -> put_change(changeset, :agent_model, nil)
+        _other -> changeset
+      end
+    end)
+    |> validate_length(:agent_api_key, max: 512)
+    |> validate_agent_model()
+  end
+
+  @doc "Providers the settings page offers. Anything else req_llm ships is not."
+  def agent_providers do
+    ~w(openai anthropic google openrouter groq deepseek mistral xai
+       cerebras fireworks_ai moonshot_ai zai ollama lmstudio vllm)
+  end
+
+  defp validate_agent_model(changeset) do
+    case get_change(changeset, :agent_model) do
+      nil ->
+        changeset
+
+      model ->
+        case String.split(model, ":", parts: 2) do
+          [provider, id] when id != "" ->
+            if provider in agent_providers() do
+              changeset
+            else
+              add_error(changeset, :agent_model, "uses an unsupported provider")
+            end
+
+          _other ->
+            add_error(changeset, :agent_model, "must look like provider:model-id")
+        end
+    end
+  end
+
+  @doc "Whether the user brought their own provider key."
+  def agent_key?(%__MODULE__{agent_api_key: key}), do: is_binary(key) and key != ""
+
+  @doc "The user's own model spec, if they picked one."
+  def agent_model(%__MODULE__{agent_model: model}), do: model
 
   @doc """
   Whether the user may use the admin surface.

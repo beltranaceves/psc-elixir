@@ -119,6 +119,17 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  # The agent tab needs a model spec ("provider:model") and the provider's key.
+  # Without AGENT_MODEL the tab stays off rather than failing on first use.
+  case System.get_env("AGENT_MODEL") do
+    nil ->
+      config :psc, :agent_enabled, false
+
+    model ->
+      config :jido_ai, model_aliases: %{default: model, fast: model}
+      config :psc, :agent_enabled, true
+  end
+
   config :psc, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   # The public URL Phoenix generates (redirects, emails). It is the URL of the

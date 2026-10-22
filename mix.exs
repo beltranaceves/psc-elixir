@@ -83,7 +83,11 @@ defmodule Psc.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:salad_ui, "~> 1.0"},
-      {:justify, "~> 1.2"}
+      {:justify, "~> 1.2"},
+      # Agent runtime. Pinned to the 2.x line on purpose: jido_ai 2.4 requires
+      # `jido ~> 2.4`, while jido 3.0 is still a beta that pulls in bedrock,
+      # bedrock_raft and an alpha runic. 2.4 resolves to a light tree.
+      {:jido_ai, "~> 2.4"}
     ]
   end
 

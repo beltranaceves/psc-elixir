@@ -122,6 +122,22 @@ defmodule Psc.Accounts do
   def demote_admin(%User{} = user), do: update_user_role(user, :member)
 
   @doc """
+  A changeset for the user's provider API key.
+  """
+  def change_agent_key(user, attrs \\ %{}) do
+    User.agent_key_changeset(user, attrs)
+  end
+
+  @doc """
+  Stores the provider API key. A blank value removes it.
+  """
+  def update_agent_key(%User{} = user, attrs) do
+    user
+    |> User.agent_key_changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
   Sets a user's role.
 
   Returns `{:error, :last_admin}` when the change would remove the final

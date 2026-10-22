@@ -100,3 +100,6 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# The agent tab is available in dev so it can be exercised against a real key.
+config :psc, :agent_enabled, true
