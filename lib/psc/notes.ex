@@ -109,7 +109,15 @@ defmodule Psc.Notes do
 
   Only the event is persisted here; the content is folded separately by
   `save_content_to_db/2` on the idle or periodic timer.
+
+  `client_id` identifies the editing client (one LiveView process): the echo
+  is then ignored by that process alone, so a second tab or browser of the
+  same user still receives the edit.
   """
+  def apply_operation(note_id, user_id, operation, client_id) do
+    TextStore.apply_operation(Store, note_id, user_id, operation, client_id)
+  end
+
   def apply_operation(note_id, user_id, operation) do
     TextStore.apply_operation(Store, note_id, user_id, operation)
   end

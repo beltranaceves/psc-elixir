@@ -475,7 +475,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         operations = Notes.text_to_operations(socket.assigns.note_content, new_content)
 
         Enum.each(operations, fn operation ->
-          Notes.apply_operation(note.id, socket.assigns.user_id, operation)
+          Notes.apply_operation(
+            note.id,
+            socket.assigns.user_id,
+            operation,
+            socket.assigns.client_id
+          )
         end)
 
         socket =
@@ -1173,6 +1178,24 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  # A remote operation on the open note: fold it in and hand the result to the
+  # editor, whose textarea is not re-rendered (`phx-update="ignore"`).
+  defp apply_remote_note_operation(socket, user_id, operation) do
+    if socket.assigns.note do
+      new_content = Psc.Text.apply_operation(operation, socket.assigns.note_content)
+
+      {:noreply,
+       socket
+       |> assign(:note_content, new_content)
+       |> push_event("note_content_updated", %{
+         content: new_content,
+         from_user_id: user_id
+       })}
+    else
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_info({:status, _message_id, phase}, socket) do
     {:noreply, assign(socket, :agent_phase, phase)}
@@ -1212,7 +1235,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
     # New broadcasts include a per-client id so multiple tabs by same user get updates
-    if client_id != socket.assigns.client_id do
+    if user_id != socket.assigns.user_id do
       Logger.debug(
         "[UnstrCanvasLive] received broadcast operation from user_id=#{user_id} client_id=#{client_id}: #{inspect(operation)}"
       )
@@ -1356,18 +1379,22 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
-  def handle_info({:note_operation, user_id, operation, _seq}, socket) do
-    # Only update if the operation is from another user (avoid echoing back).
-    if user_id != socket.assigns.user_id and socket.assigns.note do
-      new_content = Psc.Text.apply_operation(operation, socket.assigns.note_content)
+  def handle_info({:note_operation, user_id, client_id, operation, _seq}, socket) do
+    # The broadcast names the client that wrote it, not just the user, so this
+    # view ignores its own echo and nothing else: another tab of the same user
+    # is a different client and must still see the edit.
+    if client_id != socket.assigns.client_id do
+      apply_remote_note_operation(socket, user_id, operation)
+    else
+      {:noreply, socket}
+    end
+  end
 
-      {:noreply,
-       socket
-       |> assign(:note_content, new_content)
-       |> push_event("note_content_updated", %{
-         content: new_content,
-         from_user_id: user_id
-       })}
+  # An operation applied straight through the context (no client id): there is
+  # no client to compare, so the user is the only thing to go on.
+  def handle_info({:note_operation, user_id, operation, _seq}, socket) do
+    if user_id != socket.assigns.user_id do
+      apply_remote_note_operation(socket, user_id, operation)
     else
       {:noreply, socket}
     end

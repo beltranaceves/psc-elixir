@@ -110,6 +110,36 @@ defmodule PscWeb.NoteCollaborationTest do
     refute_push_event(view, "note_content_updated", %{content: "typed here"}, 100)
   end
 
+  # Two tabs of the same account are two clients. The echo is suppressed per
+  # client, not per user, so the second tab still sees what the first typed.
+  test "another tab of the same user receives the edit", %{conn: conn, user: owner} do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(owner.id, %{"name" => "Two tabs", "layout_id" => layout.id})
+
+    note = NotesFixtures.note_fixture(%{user: owner, canvas: canvas, title: "Mine"})
+    owner_id = owner.id
+    path = ~p"/canvas/#{canvas.id}?tab=notes&note=#{note.id}"
+
+    {:ok, view_a, _html_a} = live(conn, path)
+    {:ok, view_b, _html_b} = live(conn, path)
+
+    # What typing in the first tab does: the form's change event, which applies
+    # the delta with that view's client id.
+    render_change(view_a, "update_note_content", %{"content" => "from the other tab"})
+
+    assert_push_event(
+      view_b,
+      "note_content_updated",
+      %{content: "from the other tab", from_user_id: ^owner_id},
+      @push_timeout
+    )
+
+    # The tab that typed already has the text locally: no echo to it.
+    refute_push_event(view_a, "note_content_updated", %{content: "from the other tab"}, 100)
+  end
+
   test "the note header says who else has the note open", %{conn: conn, user: owner} do
     layout = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
 

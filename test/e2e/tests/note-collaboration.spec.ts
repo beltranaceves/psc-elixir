@@ -225,4 +225,40 @@ test.describe('note collaboration', () => {
 
     await context.close();
   });
+
+  // The way this gets tested by hand: one account, two tabs. The echo is
+  // suppressed per client (the tab that typed), not per user, so the second
+  // tab must still follow along — exactly like the canvas's cells.
+  test('a second tab of the same account follows the edit', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+    await page.getByRole('button', { name: 'Start from Problem–Solution Canvas' }).click();
+    await page.getByPlaceholder('Enter canvas name...').fill(uniqueName('Two Tabs'));
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+    await page.locator('.phx-connected').first().waitFor();
+    await dismissFlash(page);
+
+    await page.locator('#canvas-tab-notes').click();
+    await page.locator('#new-note-button').click();
+    await expect(page.locator('#canvas-note-title-form')).toBeVisible();
+    await expect(page).toHaveURL(/tab=notes&note=/);
+    const noteUrl = page.url();
+
+    // A second tab in the same browser: same session, different LiveView, so
+    // a different client id.
+    const secondTab = await page.context().newPage();
+    await secondTab.goto(noteUrl);
+    await secondTab.locator('.phx-connected').first().waitFor();
+    await expect(secondTab.locator('#canvas-note-title-form')).toBeVisible();
+
+    const text = `same account ${Date.now()}`;
+    await openNoteEditor(page);
+    await page.locator(NOTE_INPUT).fill(text);
+    await expectNoteText(secondTab, text);
+
+    await secondTab.close();
+  });
 });

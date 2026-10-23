@@ -52,9 +52,12 @@ defmodule Psc.TextStore do
   @doc """
   The tag of the broadcast message.
 
-  The message is `{tag, user_id, operation, seq}`. A consumer that listens to
-  more than one kind of operation — the canvas editor listens to both the
-  canvas's and a note's — needs to tell them apart.
+  The message is `{tag, user_id, operation, seq}`, or
+  `{tag, user_id, client_id, operation, seq}` when the operation came from a
+  known client. A consumer that listens to more than one kind of operation —
+  the canvas editor listens to both the canvas's and a note's — needs to tell
+  them apart; the client id lets a view ignore its own echo without ignoring
+  another session of the same user.
   """
   @callback event_tag() :: atom
 
@@ -137,8 +140,12 @@ defmodule Psc.TextStore do
 
   Only the event is persisted here; the content is folded separately by
   `save_content/3` on the idle or periodic timer.
+
+  `client_id` identifies the editing client (one LiveView process), not the
+  user: the sender's own view is then the only one that can ignore its echo,
+  while another tab of the same user still applies it.
   """
-  def apply_operation(adapter, id, user_id, operation) do
+  def apply_operation(adapter, id, user_id, operation, client_id \\ nil) do
     seq = next_sequence(adapter, id)
     event = adapter.event()
 
@@ -151,7 +158,7 @@ defmodule Psc.TextStore do
 
     case Repo.insert(event.changeset(struct(event), event_attrs)) do
       {:ok, _event} ->
-        broadcast(adapter, id, user_id, operation, seq)
+        broadcast(adapter, id, user_id, operation, seq, client_id)
         {:ok, seq}
 
       {:error, changeset} ->
@@ -167,6 +174,24 @@ defmodule Psc.TextStore do
       Psc.PubSub,
       adapter.topic(id),
       {adapter.event_tag(), user_id, operation, seq}
+    )
+  end
+
+  @doc """
+  Broadcast an operation from a known client.
+
+  The tag carries the sender's client id so a subscriber can ignore the echo
+  of its own edit without ignoring another session of the same user.
+  """
+  def broadcast(adapter, id, user_id, operation, seq, nil) do
+    broadcast(adapter, id, user_id, operation, seq)
+  end
+
+  def broadcast(adapter, id, user_id, operation, seq, client_id) do
+    Phoenix.PubSub.broadcast(
+      Psc.PubSub,
+      adapter.topic(id),
+      {adapter.event_tag(), user_id, client_id, operation, seq}
     )
   end
 
