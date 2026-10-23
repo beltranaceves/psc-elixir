@@ -158,6 +158,12 @@ test.describe('note collaboration', () => {
     await page.locator(NOTE_INPUT).fill(textFromA);
     await expectNoteText(pageB, textFromA);
 
+    // B never clicks into the note, so it is showing the rendered preview:
+    // that has to follow the edit as well, not just the hidden textarea.
+    await expect(pageB.locator('#canvas-note-preview')).toContainText(textFromA, {
+      timeout: 20_000,
+    });
+
     // The other way round: B's edit lands in A's editor.
     const textFromB = `${textFromA} / B adds a line`;
     await openNoteEditor(pageB);

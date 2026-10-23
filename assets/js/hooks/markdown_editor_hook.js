@@ -8,7 +8,7 @@
 // the LiveView that owns the editor:
 //
 //   <render event> — { content, html }         the server re-rendered the Markdown
-//   <update event> — { content, from_user_id }  a remote edit
+//   <update event> — { content, html, from_user_id }  a remote edit
 //   <preview event> — { content }               the client asks for a re-render
 //
 // `from_user_id` of -1 means the server is resynchronising a diverged client.
@@ -87,7 +87,7 @@ export default {
       }
     })
 
-    this.handleEvent(this.updateEvent, ({ content, from_user_id }) => {
+    this.handleEvent(this.updateEvent, ({ content, html, from_user_id }) => {
       const isServerResync = from_user_id === -1
 
       // Our own edit echoed back while we type: the textarea already has it.
@@ -100,6 +100,7 @@ export default {
       }
 
       this.applyRemoteContent(content || '')
+      this.paintPreview(html)
       this.resize()
     })
 
@@ -132,6 +133,15 @@ export default {
         remapPosition(end, prefix, currentEnd, inserted.length),
       )
     }
+  },
+
+  // The Markdown the server rendered for a remote edit. A note is normally on
+  // screen as its preview, and the preview would otherwise keep showing the
+  // text from before the edit until the next blur asked for a re-render.
+  paintPreview(html) {
+    if (typeof html !== 'string') return
+
+    this.previewContent.innerHTML = html
   },
 
   edit() {

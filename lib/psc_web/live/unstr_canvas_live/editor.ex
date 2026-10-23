@@ -506,7 +506,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply,
      push_event(socket, "note_rendered", %{
        content: content,
-       html: Markdown.render(content, empty_message: "Start writing in the editor.")
+       html: render_note_html(content)
      })}
   end
 
@@ -1171,6 +1171,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     if connected?(socket) and socket.assigns.note do
       push_event(socket, "note_content_updated", %{
         content: socket.assigns.note_content,
+        html: render_note_html(socket.assigns.note_content),
         from_user_id: -1
       })
     else
@@ -1180,6 +1181,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   # A remote operation on the open note: fold it in and hand the result to the
   # editor, whose textarea is not re-rendered (`phx-update="ignore"`).
+  #
+  # The rendered Markdown travels with it. The editor usually sits in its
+  # preview, and the preview is only re-asked for on blur, so a reader would
+  # otherwise see nothing change until they clicked into the note.
   defp apply_remote_note_operation(socket, user_id, operation) do
     if socket.assigns.note do
       new_content = Psc.Text.apply_operation(operation, socket.assigns.note_content)
@@ -1189,12 +1194,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
        |> assign(:note_content, new_content)
        |> push_event("note_content_updated", %{
          content: new_content,
+         html: render_note_html(new_content),
          from_user_id: user_id
        })}
     else
       {:noreply, socket}
     end
   end
+
+  defp render_note_html(content),
+    do: Markdown.render(content, empty_message: "Start writing in the editor.")
 
   @impl true
   def handle_info({:status, _message_id, phase}, socket) do

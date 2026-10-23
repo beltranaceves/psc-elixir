@@ -37,9 +37,13 @@ defmodule PscWeb.NoteCollaborationTest do
     assert_push_event(
       view,
       "note_content_updated",
-      %{content: "hello from the other user", from_user_id: ^other_id},
+      %{content: "hello from the other user", html: html, from_user_id: ^other_id},
       @push_timeout
     )
+
+    # The rendered Markdown travels with the content: a note sits on screen as
+    # its preview, which has no other way to learn about a remote edit.
+    assert html =~ "hello from the other user"
   end
 
   # A scratchpad canvas has one note and no note list; opening the Notes view
@@ -184,8 +188,10 @@ defmodule PscWeb.NoteCollaborationTest do
     assert_push_event(
       view,
       "note_content_updated",
-      %{content: "already here", from_user_id: -1},
+      %{content: "already here", html: html, from_user_id: -1},
       @push_timeout
     )
+
+    assert html =~ "already here"
   end
 end
