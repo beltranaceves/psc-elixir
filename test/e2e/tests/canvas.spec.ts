@@ -1010,14 +1010,25 @@ test.describe('canvas list layout', () => {
       .getByRole('heading', { name: describedName, exact: true })
       .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
 
+    const emptyCardBox = await emptyCard.boundingBox();
+    const describedCardBox = await describedCard.boundingBox();
     const emptyEdit = await emptyCard.getByRole('link', { name: 'Edit' }).boundingBox();
     const describedEdit = await describedCard.getByRole('link', { name: 'Edit' }).boundingBox();
     expect(emptyEdit).not.toBeNull();
     expect(describedEdit).not.toBeNull();
+    expect(emptyCardBox).not.toBeNull();
+    expect(describedCardBox).not.toBeNull();
 
-    const emptyBottom = emptyEdit!.y + emptyEdit!.height;
-    const describedBottom = describedEdit!.y + describedEdit!.height;
-    expect(Math.abs(emptyBottom - describedBottom)).toBeLessThan(2);
+    // The actions sit the same distance from the bottom of their card whether
+    // or not the card has a description. Comparing the offsets rather than
+    // absolute positions keeps the assertion true when the two cards land in
+    // different rows: other tests create canvases on this account at the same
+    // time, and any of them can come between these two in the list.
+    const emptyOffset = emptyEdit!.y + emptyEdit!.height - (emptyCardBox!.y + emptyCardBox!.height);
+    const describedOffset =
+      describedEdit!.y + describedEdit!.height - (describedCardBox!.y + describedCardBox!.height);
+
+    expect(Math.abs(emptyOffset - describedOffset)).toBeLessThan(2);
   });
 });
 
