@@ -64,34 +64,26 @@ test.describe('catalog', () => {
     await expect(dialog).toBeHidden();
   });
 
-  test('the catalog leads the template picker', async ({ page, context }) => {
+  test('the catalog leads the template picker', async ({ page }) => {
     await page.goto('/canvas');
     await page.locator('.phx-connected').first().waitFor();
 
     // The catalog is a link, not a choice: it has no aria-pressed, and it
-    // opens in a new tab so a name already typed is not lost.
+    // navigates in this tab like the catalog entry in the app header.
     const catalog = page.locator('#template-picker-catalog');
     await expect(catalog).toBeVisible();
     await expect(catalog).toHaveAttribute('href', '/catalog');
-    await expect(catalog).toHaveAttribute('target', '_blank');
+    await expect(catalog).not.toHaveAttribute('target', '_blank');
     expect(await catalog.getAttribute('aria-pressed')).toBeNull();
 
     // It is the first card in the row.
     const first = page.locator('#template-picker > *').first();
     await expect(first).toHaveAttribute('id', 'template-picker-catalog');
 
-    // Clicking it opens the catalog in a new tab, and the draft name survives
-    // in the tab it came from.
-    await page.getByPlaceholder('Enter canvas name...').fill('Draft name');
-
-    const [popup] = await Promise.all([
-      context.waitForEvent('page'),
-      catalog.click(),
-    ]);
-
-    await popup.waitForLoadState('domcontentloaded');
-    await expect(popup).toHaveURL(/\/catalog$/);
-    expect(await page.getByPlaceholder('Enter canvas name...').inputValue()).toBe('Draft name');
+    // Clicking it leaves the canvas page for the catalog, in the same tab.
+    await catalog.click();
+    await expect(page).toHaveURL(/\/catalog$/);
+    await expect(page.locator('#catalog-grid')).toBeVisible();
   });
 
   test('search narrows the catalog', async ({ page }) => {

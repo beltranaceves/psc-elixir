@@ -64,12 +64,14 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, ~s|#template-picker-#{shared.id}[aria-pressed='false']|)
     end
 
-    test "the catalog card leads the picker and opens in a new tab", %{conn: conn} do
+    test "the catalog card leads the picker and navigates in the same tab", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
-      # It is a link, not a choice: no aria-pressed, and a new tab so a name
-      # already typed is not lost.
-      assert has_element?(lv, ~s|#template-picker-catalog[target="_blank"]|)
+      # It is a link, not a choice: no aria-pressed, and it goes to the catalog
+      # in this tab, the way the catalog entry in the app header does.
+      assert has_element?(lv, ~s|#template-picker-catalog[href="/catalog"]|)
+      assert has_element?(lv, ~s|#template-picker-catalog[data-phx-link]|)
+      refute has_element?(lv, ~s|#template-picker-catalog[target]|)
       refute has_element?(lv, ~s|#template-picker-catalog[aria-pressed]|)
 
       # And it is the first card in the row.

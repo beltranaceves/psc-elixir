@@ -167,13 +167,11 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               a select's value would. --%>
               <div id="template-picker" class="canvas-grid-scroll flex gap-3 overflow-x-auto pb-1">
                 <%!-- The catalog is a link, not a choice: a dashed card, like
-                every other action card in the app, and it opens in a new tab
-                so a name already typed is not lost. --%>
-                <a
+                every other action card in the app. It navigates in this tab
+                like the catalog entry in the app header. --%>
+                <.link
                   id="template-picker-catalog"
-                  href={~p"/catalog"}
-                  target="_blank"
-                  rel="noopener"
+                  navigate={~p"/catalog"}
                   class="flex w-40 shrink-0 flex-col gap-2 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-3 text-left transition-colors hover:border-base-content/45 hover:bg-base-content/5"
                 >
                   <span class="flex h-16 items-center justify-center">
@@ -186,7 +184,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                     Browse the catalog
                   </span>
                   <span class="text-xs text-base-content/50">Public templates</span>
-                </a>
+                </.link>
 
                 <button
                   type="button"
