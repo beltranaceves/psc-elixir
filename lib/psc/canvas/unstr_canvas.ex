@@ -21,8 +21,8 @@ defmodule Psc.Canvas.UnstrCanvas do
     # A note belongs to a canvas and inherits its access rules.
     has_many :notes, Psc.Notes.Note, foreign_key: :canvas_id, on_delete: :delete_all
 
-    # An empty structure: a canvas with no rows and no columns yet. The owner
-    # builds it in place (structure editing); the built-in PSC grid is an
+    # An empty structure: a canvas with no rows and no columns yet. Anyone with
+    # access builds it in place (structure editing); the built-in PSC grid is an
     # explicit choice (Canvas.psc_cells/0), not a silent default.
     field :cells, :map, default: %{"rows" => [], "columns" => [], "layout" => []}
 

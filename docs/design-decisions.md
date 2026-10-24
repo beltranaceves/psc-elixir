@@ -1461,6 +1461,14 @@ dialog on destructive removals, and one shift for existing users: the picker's d
 now an empty canvas, with the PSC one click away. The event log stays bounded — structure
 operations fold and prune exactly like cell operations.
 
+**Amendment (2026-10-24).** The owner-only guard is gone: anyone the canvas is shared with
+can toggle **Edit structure** and create structure operations. The canvas's access rule is
+the only gate, which the LiveView already enforces at mount. The alternative recorded
+above — "who may reshape someone's workspace is a different question" — was reconsidered:
+a canvas that a collaborator can fill in but not reshape is half-editable, and structure
+operations are attributable and replayable in the event log exactly like cell edits.
+Sharing, removing access and deleting notes remain the author's alone.
+
 ---
 
 ## ADR-034 — Administration is a role, and the defaults are rows

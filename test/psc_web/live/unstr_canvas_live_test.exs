@@ -430,7 +430,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#md-r1_c1-content")
     end
 
-    test "structure editing is the owner's toggle, hidden from shared users", %{
+    test "structure editing is available to users the canvas is shared with", %{
       conn: conn,
       user: user
     } do
@@ -441,8 +441,15 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      # The owner sees the toggle; a shared user does not.
-      refute has_element?(lv, "#edit-structure-toggle")
+      # Access to the canvas is the only gate: a collaborator sees the toggle
+      # and can restructure the grid, not just fill it in.
+      assert has_element?(lv, "#edit-structure-toggle[aria-pressed='false']")
+
+      lv |> element("#edit-structure-toggle") |> render_click()
+      lv |> render_click("add_row", %{})
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert Enum.map(cells["rows"], & &1["id"]) == ["r1", "r2", "r3"]
     end
 
     test "the owner toggles Edit structure and the controls appear", %{conn: conn, user: user} do
@@ -627,7 +634,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       refute Map.has_key?(cells["r1_c1"], "notes")
     end
 
-    test "a shared user forging a structure event is a no-op", %{conn: conn, user: user} do
+    test "a shared user can restructure the grid", %{conn: conn, user: user} do
       owner = Psc.AccountsFixtures.user_fixture()
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id})
       {:ok, canvas} = Canvas.instantiate_template(template, owner.id)
@@ -635,12 +642,12 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      render_click(lv, "add_row", %{})
+      lv |> render_click("add_row", %{})
 
-      # The forged operation is a no-op: the structure is untouched.
       assert Enum.map(Canvas.get_unstr_canvas_content(canvas.id)["rows"], & &1["id"]) == [
                "r1",
-               "r2"
+               "r2",
+               "r3"
              ]
     end
 

@@ -8,10 +8,10 @@ labels, fields and accents are authored in the template designer, copied once by
 user throws it away and starts over.
 
 **Structure editing** brings the designer's grid controls into the canvas editor behind an
-**Edit structure** toggle (owner-only). Rows and columns can be added, removed, renamed and
+**Edit structure** toggle. Rows and columns can be added, removed, renamed and
 accented; cells can be renamed, gain and lose fields, and re-title their sections. It also
 makes the **truly blank canvas** viable: the picker's no-template option becomes an empty
-grid that the owner builds in place, with the built-in PSC one click away as its own
+grid that anyone with access builds in place, with the built-in PSC one click away as its own
 explicit choice.
 
 > **Terminology.** A **canvas** is one configurable workspace (`unstr_canvases` /
@@ -36,11 +36,11 @@ immediately, autosaved — not the designer's explicit-save model, because a can
    carrying the whole new shape — was rejected: it is last-write-wins on the entire
    structure, its payload is large, and it would drag the designer's draft-and-apply dance
    into a surface that autosaves.
-2. **Owner-only.** Only the canvas's author sees the toggle and can create structure
-   operations; shared users keep content-only editing, exactly as the canvas-editor spec
-   already promises. The guard lives where the operation is *created* (the LiveView
-   handler, like `delete_note`), not in the CRDT apply — collaborators must still
-   *receive* and apply structure ops to see the new grid.
+2. **Everyone with access edits the structure.** Anyone the canvas is shared with
+   sees the toggle and can create structure operations; the canvas's access rule is
+   the only gate, and mount already refuses users who cannot access it. (Structure
+   editing was owner-only when this spec was written; that rule was dropped so a
+   shared canvas is not half-editable.)
 3. **The toggle reveals controls; it never locks content.** "Edit structure" shows the
    designer-style controls on the grid; filling in cells keeps working throughout, because
    the two never touch the same keys. (The word "mode" would imply a lock-out that does
@@ -99,10 +99,10 @@ Notes on the shape:
 
 ### The toggle and the toolbar
 
-A slim **owner-only** toolbar sits above the grid: **Edit structure** (a toggle), and —
-while it is on — **Add Column** and **Add Row**. Shared users see no toolbar at all. The
+A slim toolbar sits above the grid: **Edit structure** (a toggle), and —
+while it is on — **Add Column** and **Add Row**. Everyone who can open the canvas sees it. The
 toggle's state is a LiveView assign, not URL state (ADR-026): it is a working mode of the
-owner's session, like the designer's accent picker, not a view someone would link to.
+user's session, like the designer's accent picker, not a view someone would link to.
 
 ### The grid, in Edit mode
 
@@ -117,10 +117,9 @@ The designer's controls, applied to the canvas's own map:
 
 ### The empty canvas
 
-With no rows or no columns, the grid area renders an empty state instead of a table: for
-the owner, **Add row** / **Add column** buttons (the same operations, so a blank canvas is
-built in place); for a shared user, "The owner hasn't built this canvas yet". A canvas
-created from the **Blank canvas** card starts here.
+With no rows or no columns, the grid area renders an empty state instead of a table, with
+**Add row** / **Add column** buttons (the same operations, so a blank canvas is
+built in place). A canvas created from the **Blank canvas** card starts here.
 
 ### Collaborators and stale references
 
@@ -131,8 +130,12 @@ than rendering a ghost.
 
 ## Validation rules
 
-- The owner guard is enforced server-side at every structure event; a shared user forging
-  one gets the same treatment as a forged note delete.
+- Structure events carry no owner check: the LiveView only mounts for users who can
+  access the canvas, and everyone with access may restructure it.
+- Row and column ids are picked from the state the sender sees (`rN`), and `add_row` /
+  `add_column` are idempotent, so two collaborators adding at the same instant collapse
+  into one row: structure is last-write-wins, like every other canvas operation.
+
 - `add_cell_field` rejects the reserved keys and a field the cell already has.
 - Accent tokens must be known (`Psc.Canvas.Accent.valid?/1`) or nil.
 - New row/column ids never collide with existing ones (next free index).
@@ -157,7 +160,7 @@ than rendering a ghost.
 
 ## Acceptance criteria
 
-- [ ] The owner can toggle Edit structure and add, remove, rename and accent rows and columns; a shared user sees none of it and forges nothing
+- [ ] Any user with access can toggle Edit structure and add, remove, rename and accent rows and columns, live for every connected client
 - [ ] Every structure change is visible live to other connected clients
 - [ ] Removing a row or column with content asks first; removing an empty one does not
 - [ ] Cells can be renamed, gain fields, lose fields and re-title sections in place

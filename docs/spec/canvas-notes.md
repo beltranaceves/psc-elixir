@@ -87,7 +87,7 @@ The canvas is the only permission boundary. A note has no access rules of its ow
 | Create a note | Anyone with canvas access | Same as editing a cell. |
 | Edit a note's content | Anyone with canvas access | Same as editing a cell. |
 | Rename a note | Anyone with canvas access | Same as renaming a cell's label. |
-| Delete a note | **The canvas author only** | Mirrors the owner-only rule for canvas structure. |
+| Delete a note | **The canvas author only** | Deleting is destructive and irreversible; structure editing is shared, note deletion is not. |
 
 Consequences that are deliberate:
 

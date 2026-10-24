@@ -8,7 +8,7 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     * `%{"type" => "update_name", "value" => value}`
     * `%{"type" => "update_description", "value" => value}`
 
-  Structure operations (owner-authored, applied by every client) carry their ids and
+  Structure operations (authored by any participant, applied by every client) carry their ids and
   labels inside the payload, so applying the events in sequence order always reaches the
   same state:
 

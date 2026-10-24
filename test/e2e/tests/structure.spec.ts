@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Structure editing: the owner's Edit structure toggle, and the truly blank
+ * Structure editing: the Edit structure toggle, and the truly blank
  * canvas built in place.
  *
- * A canvas is no longer frozen at the shape it was instantiated with. The
- * owner can add, remove, rename and accent rows and columns, and rename
+ * A canvas is no longer frozen at the shape it was instantiated with. Anyone
+ * with access can add, remove, rename and accent rows and columns, and rename
  * cells, add and remove fields, and retitle sections — every change an
  * operation that lands on every connected client.
  */

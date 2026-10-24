@@ -184,9 +184,9 @@ applies to the template cards in the template library.
 ### Structure editing (Edit structure)
 
 The canvas's structure is editable in place ([canvas-structure.md](canvas-structure.md),
-ADR-033). An **owner-only** toolbar above the grid carries the **Edit structure** toggle
-and — while it is on — **Add Column** / **Add Row**. Shared users see no toolbar and their
-structure events are refused server-side.
+ADR-033). A toolbar above the grid carries the **Edit structure** toggle
+and — while it is on — **Add Column** / **Add Row**. Everyone who can open the canvas
+sees it: access to the canvas is the only gate.
 
 While the toggle is on, the grid carries the designer's controls: row and column headers
 become label inputs with an accent swatch (inline palette) and a remove ×; each cell gains
@@ -248,7 +248,7 @@ A "Structure" toggle in the editor header reveals grid-editing controls:
 - Each cell has an "Add field" button in its header (sends `add_cell_field`).
 - Each field label in a cell has a small × to remove it (sends `remove_cell_field`).
 
-Structure editing is **owner-only** — shared users can edit cell content but not the grid structure. (This is the binary role boundary.)
+Structure editing follows the canvas's access rule — anyone the canvas is shared with can edit the grid as well as the content. The canvas author keeps the owner-only actions: sharing, removing access, and deleting notes.
 
 ### Sharing UI
 

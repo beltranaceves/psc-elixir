@@ -103,7 +103,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:note_save_stats, @initial_save_stats)
         |> assign(:note_topic, nil)
         |> assign(:note_presence, %{})
-        |> assign(:is_owner, canvas.author_id == socket.assigns.current_scope.user.id)
         |> assign(:edit_structure?, false)
         |> assign(:structure_accent_picker, nil)
         |> assign(:structure_remove_confirm, nil)
@@ -618,149 +617,104 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply, socket}
   end
 
-  ## Structure editing (owner only)
+  ## Structure editing
 
-  # Every structure event is guarded here, where the operation is created: a
-  # shared user forging one is a no-op, the same treatment a forged note
-  # delete gets. Collaborators still receive and apply the operations that
-  # the owner creates, which is what keeps their grid in step.
+  # Every structure event is available to anyone the canvas is shared with: a
+  # canvas's access rule is the only gate. The operation is broadcast like any
+  # other edit, so every open client applies it and the grid stays in step.
 
   @impl true
   def handle_event("toggle_structure", _params, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       socket
-       |> assign(:edit_structure?, not socket.assigns.edit_structure?)
-       |> assign(:structure_accent_picker, nil)
-       |> assign(:structure_remove_confirm, nil)}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     socket
+     |> assign(:edit_structure?, not socket.assigns.edit_structure?)
+     |> assign(:structure_accent_picker, nil)
+     |> assign(:structure_remove_confirm, nil)}
   end
 
   def handle_event("add_row", _params, socket) do
-    if socket.assigns.is_owner do
-      {id, index} = next_structure_id("r", Map.get(socket.assigns.cells, "rows", []))
+    {id, index} = next_structure_id("r", Map.get(socket.assigns.cells, "rows", []))
 
-      {:noreply,
-       process_operation(socket, %{"type" => "add_row", "id" => id, "label" => "Row #{index}"})}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(socket, %{"type" => "add_row", "id" => id, "label" => "Row #{index}"})}
   end
 
   def handle_event("add_column", _params, socket) do
-    if socket.assigns.is_owner do
-      {id, index} = next_structure_id("c", Map.get(socket.assigns.cells, "columns", []))
+    {id, index} = next_structure_id("c", Map.get(socket.assigns.cells, "columns", []))
 
-      {:noreply,
-       process_operation(
-         socket,
-         %{"type" => "add_column", "id" => id, "label" => "Column #{index}"}
-       )}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(
+       socket,
+       %{"type" => "add_column", "id" => id, "label" => "Column #{index}"}
+     )}
   end
 
   def handle_event("update_row_label", %{"structure_id" => id, "label" => label}, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       process_operation(socket, %{"type" => "update_row_label", "id" => id, "label" => label})}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(socket, %{"type" => "update_row_label", "id" => id, "label" => label})}
   end
 
   def handle_event("update_column_label", %{"structure_id" => id, "label" => label}, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       process_operation(socket, %{"type" => "update_column_label", "id" => id, "label" => label})}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(socket, %{"type" => "update_column_label", "id" => id, "label" => label})}
   end
 
   def handle_event("set_row_accent", %{"id" => id, "accent" => accent}, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       socket
-       |> assign(:structure_accent_picker, nil)
-       |> process_operation(%{
-         "type" => "set_row_accent",
-         "id" => id,
-         "accent" => normalize_accent(accent)
-       })}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     socket
+     |> assign(:structure_accent_picker, nil)
+     |> process_operation(%{
+       "type" => "set_row_accent",
+       "id" => id,
+       "accent" => normalize_accent(accent)
+     })}
   end
 
   def handle_event("set_column_accent", %{"id" => id, "accent" => accent}, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       socket
-       |> assign(:structure_accent_picker, nil)
-       |> process_operation(%{
-         "type" => "set_column_accent",
-         "id" => id,
-         "accent" => normalize_accent(accent)
-       })}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     socket
+     |> assign(:structure_accent_picker, nil)
+     |> process_operation(%{
+       "type" => "set_column_accent",
+       "id" => id,
+       "accent" => normalize_accent(accent)
+     })}
   end
 
   def handle_event("toggle_structure_accent", %{"group" => group, "id" => id}, socket) do
-    if socket.assigns.is_owner do
-      key = if group == "row", do: {:row, id}, else: {:column, id}
+    key = if group == "row", do: {:row, id}, else: {:column, id}
 
-      picker =
-        if socket.assigns.structure_accent_picker == key, do: nil, else: key
+    picker =
+      if socket.assigns.structure_accent_picker == key, do: nil, else: key
 
-      {:noreply, assign(socket, :structure_accent_picker, picker)}
-    else
-      {:noreply, socket}
-    end
+    {:noreply, assign(socket, :structure_accent_picker, picker)}
   end
 
   def handle_event("request_remove_row", %{"id" => id}, socket) do
-    if socket.assigns.is_owner do
-      request_structure_remove(socket, "row", id)
-    else
-      {:noreply, socket}
-    end
+    request_structure_remove(socket, "row", id)
   end
 
   def handle_event("request_remove_column", %{"id" => id}, socket) do
-    if socket.assigns.is_owner do
-      request_structure_remove(socket, "column", id)
-    else
-      {:noreply, socket}
-    end
+    request_structure_remove(socket, "column", id)
   end
 
   def handle_event("confirm_remove_structure", _params, socket) do
-    if socket.assigns.is_owner do
-      {socket, operation} =
-        case socket.assigns.structure_remove_confirm do
-          %{"type" => "row", "id" => id} ->
-            {socket, %{"type" => "remove_row", "id" => id}}
+    {socket, operation} =
+      case socket.assigns.structure_remove_confirm do
+        %{"type" => "row", "id" => id} ->
+          {socket, %{"type" => "remove_row", "id" => id}}
 
-          %{"type" => "column", "id" => id} ->
-            {socket, %{"type" => "remove_column", "id" => id}}
+        %{"type" => "column", "id" => id} ->
+          {socket, %{"type" => "remove_column", "id" => id}}
 
-          _other ->
-            {socket, nil}
-        end
-
-      socket = assign(socket, :structure_remove_confirm, nil)
-
-      if operation do
-        {:noreply, process_operation(socket, operation)}
-      else
-        {:noreply, socket}
+        _other ->
+          {socket, nil}
       end
+
+    socket = assign(socket, :structure_remove_confirm, nil)
+
+    if operation do
+      {:noreply, process_operation(socket, operation)}
     else
       {:noreply, socket}
     end
@@ -771,23 +725,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_event("update_cell_label", %{"cell_key" => cell_key, "label" => label}, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       process_operation(socket, %{
-         "type" => "update_cell_label",
-         "cell_key" => cell_key,
-         "label" => label
-       })}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(socket, %{
+       "type" => "update_cell_label",
+       "cell_key" => cell_key,
+       "label" => label
+     })}
   end
 
   def handle_event("add_cell_field", %{"cell_key" => cell_key, "field" => field}, socket) do
     field = String.trim(field)
 
-    if socket.assigns.is_owner and field != "" and
-         field not in Psc.Canvas.UnstrCanvasCRDT.reserved_cell_keys() do
+    if field != "" and field not in Psc.Canvas.UnstrCanvasCRDT.reserved_cell_keys() do
       {:noreply,
        process_operation(socket, %{
          "type" => "add_cell_field",
@@ -800,16 +749,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_event("remove_cell_field", %{"cell_key" => cell_key, "field" => field}, socket) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       process_operation(socket, %{
-         "type" => "remove_cell_field",
-         "cell_key" => cell_key,
-         "field" => field
-       })}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(socket, %{
+       "type" => "remove_cell_field",
+       "cell_key" => cell_key,
+       "field" => field
+     })}
   end
 
   def handle_event(
@@ -817,17 +762,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         %{"cell_key" => cell_key, "field" => field, "title" => title},
         socket
       ) do
-    if socket.assigns.is_owner do
-      {:noreply,
-       process_operation(socket, %{
-         "type" => "update_cell_field_title",
-         "cell_key" => cell_key,
-         "field" => field,
-         "title" => title
-       })}
-    else
-      {:noreply, socket}
-    end
+    {:noreply,
+     process_operation(socket, %{
+       "type" => "update_cell_field_title",
+       "cell_key" => cell_key,
+       "field" => field,
+       "title" => title
+     })}
   end
 
   @impl true
@@ -1562,7 +1503,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp row_label_width, do: @row_label_width_rem
 
   # A canvas with no rows or no columns has nothing to render as a table: the
-  # empty state takes over, and the owner builds the structure in place.
+  # empty state takes over, and anyone with access builds the structure in place.
   defp structure_empty?(cells) do
     Map.get(cells, "rows", []) == [] or Map.get(cells, "columns", []) == []
   end
@@ -1805,80 +1746,72 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               id="canvas-grid"
               class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
             >
-              <%!-- Structure editing: the owner's toggle, and — while it is on —
-              the add actions. Shared users see no toolbar at all. --%>
-              <%= if @is_owner do %>
-                <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
-                  <button
-                    type="button"
-                    id="edit-structure-toggle"
-                    phx-click="toggle_structure"
-                    aria-pressed={to_string(@edit_structure?)}
-                    class={[
-                      "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
-                      @edit_structure? &&
-                        "border-primary/50 bg-primary/10 text-base-content",
-                      not @edit_structure? &&
-                        "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
-                    ]}
-                  >
-                    <.icon name="hero-pencil-square" class="size-4" /> Edit structure
-                  </button>
+              <%!-- Structure editing is available to everyone with access to the
+              canvas: the toggle, and — while it is on — the add actions. --%>
+              <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
+                <button
+                  type="button"
+                  id="edit-structure-toggle"
+                  phx-click="toggle_structure"
+                  aria-pressed={to_string(@edit_structure?)}
+                  class={[
+                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+                    @edit_structure? &&
+                      "border-primary/50 bg-primary/10 text-base-content",
+                    not @edit_structure? &&
+                      "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
+                  ]}
+                >
+                  <.icon name="hero-pencil-square" class="size-4" /> Edit structure
+                </button>
 
-                  <%= if @edit_structure? do %>
-                    <div class="flex gap-2">
-                      <UIButton.button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        phx-click="add_column"
-                      >
-                        Add Column
-                      </UIButton.button>
+                <%= if @edit_structure? do %>
+                  <div class="flex gap-2">
+                    <UIButton.button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      phx-click="add_column"
+                    >
+                      Add Column
+                    </UIButton.button>
 
-                      <UIButton.button type="button" variant="outline" size="sm" phx-click="add_row">
-                        Add Row
-                      </UIButton.button>
-                    </div>
-                  <% end %>
-                </div>
-              <% end %>
+                    <UIButton.button type="button" variant="outline" size="sm" phx-click="add_row">
+                      Add Row
+                    </UIButton.button>
+                  </div>
+                <% end %>
+              </div>
 
               <div class="canvas-grid-scroll flex min-h-0 flex-1 flex-col overflow-auto">
                 <%= if structure_empty?(@cells) do %>
-                  <%!-- A blank canvas: nothing to render as a table yet. The
-                  owner builds it here; a shared user waits. --%>
+                  <%!-- A blank canvas: nothing to render as a table yet. Anyone
+                  with access can build the first row and column here. --%>
                   <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
                     <.icon name="hero-squares-2x2" class="size-8 text-base-content/30" />
                     <p class="text-sm text-base-content/60">This canvas has no structure yet.</p>
 
-                    <%= if @is_owner do %>
-                      <div class="flex gap-2">
-                        <UIButton.button
-                          type="button"
-                          id="empty-add-row"
-                          variant="outline"
-                          size="sm"
-                          phx-click="add_row"
-                        >
-                          Add row
-                        </UIButton.button>
+                    <div class="flex gap-2">
+                      <UIButton.button
+                        type="button"
+                        id="empty-add-row"
+                        variant="outline"
+                        size="sm"
+                        phx-click="add_row"
+                      >
+                        Add row
+                      </UIButton.button>
 
-                        <UIButton.button
-                          type="button"
-                          id="empty-add-column"
-                          variant="outline"
-                          size="sm"
-                          phx-click="add_column"
-                        >
-                          Add column
-                        </UIButton.button>
-                      </div>
-                    <% else %>
-                      <p class="text-xs text-base-content/45">
-                        The owner hasn't built this canvas yet.
-                      </p>
-                    <% end %>
+                      <UIButton.button
+                        type="button"
+                        id="empty-add-column"
+                        variant="outline"
+                        size="sm"
+                        phx-click="add_column"
+                      >
+                        Add column
+                      </UIButton.button>
+                    </div>
                   </div>
                 <% else %>
                   <table
