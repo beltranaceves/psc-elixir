@@ -78,6 +78,33 @@ defmodule PscWeb.UnstrCanvasEditorRegressionTest do
     end
   end
 
+  describe "editor contract" do
+    test "keeps the ids and hooks the client and tests depend on", %{conn: conn, user: user} do
+      canvas = canvas_fixture(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      for id <- [
+            "canvas-header",
+            "canvas-grid",
+            "cell-card-r1_c1",
+            "md-r1_c1-content",
+            "active-users-tooltip",
+            "canvas-tabs",
+            "canvas-tabs-bar",
+            "canvas-tabpanel",
+            "canvas-panel-editor",
+            "canvas-panel-notes",
+            "canvas-panel-agent"
+          ] do
+        assert has_element?(view, "##{id}"), "missing ##{id}"
+      end
+
+      assert has_element?(view, ~s|#cell-card-r1_c1[phx-hook="CellFocus"]|)
+      assert has_element?(view, ~s|#md-r1_c1-content[phx-hook="MarkdownField"]|)
+      assert has_element?(view, ~s|#canvas-tabpanel[phx-hook="CanvasTabs"]|)
+    end
+  end
+
   describe "no-op edits" do
     test "blurring a cell without changing it stays saved and records no event", %{
       conn: conn,

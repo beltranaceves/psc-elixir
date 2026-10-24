@@ -210,12 +210,26 @@ Fix: one `stop_turn/1` that terminates the `Task.Supervisor` child and clears `a
 **Revised extraction sequence.** The 3.1 caveat stands; this ordering reduces risk while keeping the test hooks intact.
 
 1. **Pure/function-component pass (no process change).** Move `status_source` and the save-stat bookkeeping into `PscWeb.UnstrCanvasLive.SaveStatus`; move `active_usernames/1`, `active_users_label/1`, `active_users_compact_label/1`, `active_user_count/1`, `note_editors/2`, `note_editors_label/1` into `PscWeb.UnstrCanvasLive.PresenceLabels`; move `turn_count/1`, `agent_date/1`, `agent_relative_time/1`, `agent_refs/1` and the cell/other split into `PscWeb.UnstrCanvasLive.AgentFormat`. Then move the six private function components into `UnstrCanvasLive.Components.*`. Events stay in the parent, IDs stay identical. Roughly 450 lines (components plus helpers) leave the file for little risk.
-2. **Agent LiveComponent.** It owns the 11 `agent_*` assigns, 11 events, 6 `handle_info` clauses and the `phx-window-focus` refresh. Inputs: `canvas_id`, `user_id`, `current_scope`. This is the cleanest process-boundary move (~450 lines).
+2. **Agent panel (function component, not a LiveComponent).** LiveComponents run in the parent LiveView process and have no `handle_info` callback, so they cannot own the session PubSub subscription or the turn timers. A nested LiveView would add routing/session/test plumbing. Move the render and formatting helpers to `UnstrCanvasLive.AgentPanel`; keep the 11 assigns, 11 events, 6 `handle_info` clauses and `phx-window-focus` in the parent.
 3. **Notes.** Extract the render first. A full LiveComponent costs more because the header status pill reads `note_save_state`; it needs either a `send_update/2` to a small status LiveComponent or the pill moving into the notes panel. Only take that step if the note panel keeps growing.
 4. **Grid/structure.** Extract row/column/cell header function components first (events remain `phx-click`/`phx-change` to the parent), then share the pure add/remove/label/accent semantics with `CanvasLayoutLive.Editor` as described in 3.4.
 5. **Autosave.** Extract timers, fingerprint, save, stats and retry into one module; fixing finding 1 while moving the code is cheaper than fixing it twice. Add `terminate/2` for a best-effort flush, with the event log as the documented recovery path.
 
 **Tests missing around the above:** same-user second canvas tab (mirror `note_collaboration_test.exs:119`), failed save keeps `:unsaved` and retries, `agent_stop`/`agent_new` during a turn, note switch inside the idle window, and a malformed canvas id.
+
+**Refactor status (2026-10-25).** Slices 1–3 and the agent render split are implemented:
+
+| Module | Kind | Lines |
+|---|---|---:|
+| `editor.ex` | LiveView coordinator | 1,717 (from 3,044) |
+| `header.ex` | function components | 214 |
+| `tabs.ex` | function components + tab table | 89 |
+| `grid.ex` | function components | 536 |
+| `notes_panel.ex` | function components + note formatting | 226 |
+| `agent_panel.ex` | function component (render + formatting) | 382 |
+| `save.ex` | plain module | 62 |
+
+The parent keeps canvas state, operations, save timers, presence, notes state and the agent state/subscription. All test IDs and `phx-hook` bindings are unchanged. `mix verify` passes (403 tests) and the full Playwright suite passes (60 tests). The Notes LiveComponent remains deferred: the header status pill would need `send_update/2` or a third status component, which is the complexity this refactor was meant to avoid.
 
 ### 3.2 `PscWeb.CanvasLayoutLive.Editor`
 

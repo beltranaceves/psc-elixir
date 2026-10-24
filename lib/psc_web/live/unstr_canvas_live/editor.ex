@@ -6,19 +6,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # names — unqualified imports would conflict.
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Dialog, as: UIDialog
-  alias PscWeb.Components.UI.Tooltip, as: UITooltip
-
-  import PscWeb.Components.Accent
-  import PscWeb.Components.MarkdownEditor
-  import PscWeb.Components.ShareDialog
-  import PscWeb.Components.StatusPill
 
   alias Psc.Canvas
   alias Psc.Canvas.NotesMode
   alias Psc.Notes
   alias PscWeb.Markdown
   alias PscWeb.Presence
+  alias PscWeb.UnstrCanvasLive.AgentPanel
+  alias PscWeb.UnstrCanvasLive.Grid
+  alias PscWeb.UnstrCanvasLive.Header
+  alias PscWeb.UnstrCanvasLive.NotesPanel
   alias PscWeb.UnstrCanvasLive.Save
+  alias PscWeb.UnstrCanvasLive.Tabs
   require Logger
 
   @idle_save_interval 1500
@@ -32,21 +31,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     last_saved_at: nil,
     last_write_ms: nil
   }
-
-  # The canvas editor is a tabbed surface: the grid is one of several views on
-  # the same canvas. Everything but the editor is a placeholder for now.
-  @tabs [
-    {"analysis", "Analysis", "hero-chart-bar",
-     "Insights over the canvas: relevance, staleness and content coverage."},
-    {"notes", "Notes", "hero-document-text", "Shared notes attached to this canvas."},
-    {"editor", "Editor", "hero-pencil-square", "The canvas grid."},
-    {"agent", "Agent", "hero-sparkles", "Talk to an agent that can read and edit this canvas."}
-  ]
-
-  defp find_tab(id) do
-    Enum.find(@tabs, fn {tab_id, _label, _icon, _blurb} -> tab_id == id end) ||
-      Enum.find(@tabs, fn {tab_id, _label, _icon, _blurb} -> tab_id == "editor" end)
-  end
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -79,7 +63,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:save_stats, @initial_save_stats)
         |> assign(:share_open, false)
         |> assign(:active_tab, "editor")
-        |> assign(:tabs, @tabs)
+        |> assign(:tabs, Tabs.tabs())
         |> assign(:agent_session, nil)
         |> assign(:agent_messages, [])
         |> assign(:agent_turn_pid, nil)
@@ -88,7 +72,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:agent_list_open, false)
         |> assign(:agent_menu_session, nil)
         |> assign(:agent_phase, nil)
-        |> assign(:focus_cell, nil)
         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))
         |> assign(:agent_enabled?, Psc.Agent.enabled?(socket.assigns.current_scope.user))
         |> assign(
@@ -206,7 +189,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     socket = stop_running_turn(socket)
     user = socket.assigns.current_scope.user
 
-    case Psc.Agent.create_session(user.id, %{canvas_id: socket.assigns.canvas.id}) do
+    case Psc.Agent.create_session(user.id, %{canvas_id: socket.assigns.canvas_id}) do
       {:ok, session} ->
         {:noreply,
          socket
@@ -284,13 +267,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_event("agent_refresh", _params, socket) do
-    # Settings open in another tab (or on another device). When the user comes
-    # back to a tab that is still waiting on a key or a model, re-read the
-    # account, so saving settings enables the composer without a page reload.
-    if socket.assigns.active_tab == "agent" and not socket.assigns.agent_enabled? do
-      {:noreply, refresh_agent_scope(socket)}
-    else
+    # Settings can be saved in another tab or on another device. While the
+    # panel is still waiting on a key or a model, re-read the account so saving
+    # settings enables the composer without a page reload.
+    if socket.assigns.agent_enabled? do
       {:noreply, socket}
+    else
+      {:noreply, refresh_agent_scope(socket)}
     end
   end
 
@@ -575,7 +558,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         {:noreply,
          socket
          |> assign(:note_content, new_content)
-         |> assign(:note_html, render_note_html(new_content))
+         |> assign(:note_html, NotesPanel.render_html(new_content))
          |> assign(:note_idle_timer_ref, note_idle_timer_ref)
          |> assign(:note_save_state, :unsaved)}
     end
@@ -586,7 +569,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply,
      push_event(socket, "note_rendered", %{
        content: content,
-       html: render_note_html(content)
+       html: NotesPanel.render_html(content)
      })}
   end
 
@@ -934,9 +917,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     user = socket.assigns.current_scope.user
     enabled? = Psc.Agent.enabled?(user)
     missing = Psc.Agent.missing_configuration(user)
-    sessions = Psc.Agent.list_sessions_for_canvas(socket.assigns.canvas.id, user.id)
+    sessions = Psc.Agent.list_sessions_for_canvas(socket.assigns.canvas_id, user.id)
 
-    case Psc.Agent.latest_session(socket.assigns.canvas.id, user.id) do
+    case Psc.Agent.latest_session(socket.assigns.canvas_id, user.id) do
       nil ->
         socket
         |> assign(:agent_session, nil)
@@ -994,49 +977,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # Links the tools returned with their results. Built server-side from ids the
   # access check already approved, so a chip cannot point somewhere the user
   # could not open.
-  defp agent_refs(message) do
-    message.tool_calls
-    |> Enum.flat_map(fn call ->
-      case call["result"] do
-        %{"refs" => refs} when is_list(refs) -> Enum.filter(refs, &is_map_key(&1, "url"))
-        _other -> []
-      end
-    end)
-    |> Enum.uniq_by(& &1["url"])
-  end
-
-  defp agent_cell_refs(message), do: Enum.filter(agent_refs(message), &(&1["kind"] == "cell"))
-
-  defp agent_other_refs(message),
-    do: Enum.reject(agent_refs(message), &(&1["kind"] == "cell"))
-
-  defp agent_session_selected?(current, session), do: current.id == session.id
-
-  # A turn is a user message plus the answer it produced; the counter stores both.
-  defp turn_count(session), do: max(div(session.message_count + 1, 2), 0)
-
-  defp agent_date(nil), do: "—"
-
-  defp agent_date(%NaiveDateTime{} = at), do: Calendar.strftime(at, "%d %b")
-  defp agent_date(%DateTime{} = at), do: Calendar.strftime(at, "%d %b")
-
-  defp agent_relative_time(nil), do: "never used"
-
-  defp agent_relative_time(%_{} = at) do
-    seconds = DateTime.diff(DateTime.utc_now(), to_utc(at))
-
-    cond do
-      seconds < 60 -> "just now"
-      seconds < 3_600 -> "#{div(seconds, 60)}m ago"
-      seconds < 86_400 -> "#{div(seconds, 3_600)}h ago"
-      seconds < 2_592_000 -> "#{div(seconds, 86_400)}d ago"
-      true -> "on #{agent_date(at)}"
-    end
-  end
-
-  defp to_utc(%DateTime{} = at), do: at
-  defp to_utc(%NaiveDateTime{} = at), do: DateTime.from_naive!(at, "Etc/UTC")
-
   defp update_agent_message(socket, id, fun) do
     messages =
       Enum.map(socket.assigns.agent_messages, fn message ->
@@ -1078,7 +1018,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   @impl true
   def handle_params(params, _url, socket) do
-    tab = find_tab(params["tab"]) |> elem(0)
+    tab = Tabs.find(params["tab"]) |> elem(0)
 
     # A snippet chip links to ?tab=editor&cell=r1_c1: open the editor tab and mark
     # the cell so it is obvious which one the agent meant.
@@ -1107,11 +1047,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # The notes of the canvas, most recently touched first. The snippet is
   # derived once here instead of on every render.
   defp reload_notes(socket) do
-    assign(socket, :notes, with_snippets(Notes.list_notes(socket.assigns.canvas_id)))
-  end
-
-  defp with_snippets(notes) do
-    Enum.map(notes, &Map.put(&1, :snippet, note_snippet(&1.content)))
+    assign(socket, :notes, NotesPanel.with_snippets(Notes.list_notes(socket.assigns.canvas_id)))
   end
 
   # A scratchpad canvas has exactly one note, and no list. It is created the
@@ -1136,7 +1072,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> leave_note()
         |> assign(:note, note)
         |> assign(:note_content, content)
-        |> assign(:note_html, render_note_html(content))
+        |> assign(:note_html, NotesPanel.render_html(content))
         |> assign(:note_last_saved_content, content)
         # Single-note canvases never went through load_note_by_id/2, so they
         # never subscribed: remote operations were broadcast to nobody.
@@ -1151,7 +1087,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
              ) do
           {:ok, note} ->
             socket
-            |> assign(:notes, with_snippets([note]))
+            |> assign(:notes, NotesPanel.with_snippets([note]))
             |> assign(:note, note)
             |> assign(:note_content, "")
             |> assign(:note_html, "")
@@ -1198,7 +1134,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> leave_note()
         |> assign(:note, note)
         |> assign(:note_content, content)
-        |> assign(:note_html, render_note_html(content))
+        |> assign(:note_html, NotesPanel.render_html(content))
         |> assign(:note_last_saved_content, content)
         |> assign(:note_save_state, :saved)
         |> assign(:note_save_stats, @initial_save_stats)
@@ -1280,7 +1216,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     if connected?(socket) and socket.assigns.note do
       push_event(socket, "note_content_updated", %{
         content: socket.assigns.note_content,
-        html: render_note_html(socket.assigns.note_content),
+        html: NotesPanel.render_html(socket.assigns.note_content),
         from_user_id: -1
       })
     else
@@ -1297,7 +1233,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp apply_remote_note_operation(socket, user_id, operation) do
     if socket.assigns.note do
       new_content = Psc.Text.apply_operation(operation, socket.assigns.note_content)
-      html = render_note_html(new_content)
+      html = NotesPanel.render_html(new_content)
 
       {:noreply,
        socket
@@ -1312,9 +1248,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       {:noreply, socket}
     end
   end
-
-  defp render_note_html(content),
-    do: Markdown.render(content, empty_message: "Start writing in the editor.")
 
   @impl true
   def handle_info({:status, _message_id, phase}, socket) do
@@ -1562,98 +1495,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     assign(socket, presence: presence_list)
   end
 
-  # Every data column may shrink to this width before the table stops fitting
-  # the viewport and scrolls horizontally.
-  @min_column_width_rem 12
-
-  # The row-label column is a fixed width, not one that grows with the
-  # longest label.
-  #
-  # A content-derived width is a trap here: the label reaches the server
-  # through a debounced change, so the column would resize a beat after the
-  # typing - the width lags the text, and the input the user is typing in
-  # moves under their cursor. Worse, the width was sized for the *label*, so
-  # in Edit structure the input, the accent swatch and the remove button had
-  # to share it: a 5-character label left the input 17px wide.
-  #
-  # A fixed column gives the input room to type in at every viewport, and it
-  # does not move while typing.
-  @row_label_width_rem 11
-
-  defp table_min_width(cells) do
-    columns = length(cells["columns"] || [])
-    "calc(#{row_label_width()}rem + #{columns * @min_column_width_rem}rem)"
-  end
-
-  # The width of the row-label column, in rem.
-  defp row_label_width, do: @row_label_width_rem
-
-  # A canvas with no rows or no columns has nothing to render as a table: the
-  # empty state takes over, and anyone with access builds the structure in place.
-  defp structure_empty?(cells) do
-    Map.get(cells, "rows", []) == [] or Map.get(cells, "columns", []) == []
-  end
-
   defp structure_remove_confirm(confirm, :type), do: confirm["type"]
   defp structure_remove_confirm(confirm, :label), do: confirm["label"] || ""
-
-  # The Markdown field of one cell field: the hook wrapper, the rendered
-  # preview and the textarea. Shared by the view and the edit-structure
-  # renderings of a cell.
-  attr :cell_key, :string, required: true
-  attr :field, :string, required: true
-  attr :value, :any, required: true
-  attr :user_id, :integer, required: true
-
-  defp cell_field_editor(assigns) do
-    ~H"""
-    <div
-      id={"md-" <> @cell_key <> "-" <> @field}
-      phx-hook="MarkdownField"
-      phx-update="ignore"
-      data-cell-key={@cell_key}
-      data-field={@field}
-      data-field-wrapper
-      data-current-user-id={@user_id}
-      class="w-full"
-    >
-      <div
-        id={"md-render-" <> @cell_key <> "-" <> @field}
-        class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
-        phx-update="ignore"
-      >
-        {@value}
-      </div>
-      <textarea
-        name={"values[" <> @field <> "]"}
-        phx-debounce="150"
-        class="field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
-        placeholder="Enter value..."
-        rows="3"
-      >{@value}</textarea>
-    </div>
-    """
-  end
-
-  defp active_usernames(presence) do
-    for {_user_id, %{metas: [meta | _]}} <- presence, do: meta[:username]
-  end
-
-  defp active_users_label([]), do: "No one online"
-  defp active_users_label([username]), do: username
-  defp active_users_label([username | rest]), do: "#{username} +#{length(rest)}"
-
-  # A short presence label for narrow screens, where the full e-mail address
-  # would not fit next to the other actions.
-  defp active_users_compact_label(presence) do
-    case active_usernames(presence) do
-      [] -> "Offline"
-      [_one] -> "1 online"
-      many -> "#{length(many)} online"
-    end
-  end
-
-  defp active_user_count(presence), do: length(active_usernames(presence))
 
   @impl true
   def render(assigns) do
@@ -1669,11 +1512,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <:header_nav>
-        <.tab_strip tabs={@tabs} active_tab={@active_tab} />
+        <Tabs.strip tabs={@tabs} active_tab={@active_tab} />
       </:header_nav>
 
       <:header_actions>
-        <.header_actions
+        <Header.actions
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
@@ -1684,93 +1527,19 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         id="canvas-workspace"
         class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2"
       >
-        <%!-- Header: title, description, presence and actions --%>
-        <div id="canvas-header" class="flex shrink-0 flex-col gap-2 px-2 sm:px-0">
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:items-start">
-            <.form
-              for={%{}}
-              id="canvas-name-form"
-              phx-change="update_name"
-              class="order-1 min-w-0 flex-1 sm:flex-none"
-            >
-              <input
-                name="value"
-                type="text"
-                value={@c_name}
-                phx-debounce="1000"
-                class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-lg font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
-                placeholder="Canvas name"
-              />
-            </.form>
-
-            <%!-- Save state: beside the title on phones, with the other
-            actions on larger screens. The badge keeps the same height as the
-            other header controls so they line up on one line. Below `sm` the
-            app header carries a minimal version instead (see header_actions). --%>
-            <div id="canvas-save-state" class="order-2 hidden shrink-0 sm:order-4 sm:block">
-              <.status_pill
-                id="canvas-save-state-pill"
-                save_state={@status.state}
-                save_stats={@status.stats}
-                label={@status.label}
-                others={@status.others}
-              />
-            </div>
-
-            <.form
-              for={%{}}
-              id="canvas-description-form"
-              phx-change="update_description"
-              class="order-3 w-full min-w-0 sm:order-2 sm:w-auto sm:flex-1"
-            >
-              <textarea
-                name="value"
-                phx-debounce="1000"
-                class="field-sizing-content box-content max-h-12 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-6 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none sm:max-h-16 sm:leading-8"
-                placeholder="Add a description..."
-                rows="1"
-              ><%= @c_desc %></textarea>
-            </.form>
-            <%!-- Active users: truncated, with the full list in a hover tooltip --%>
-            <div id="canvas-presence" class="order-4 hidden sm:order-3 sm:block">
-              <UITooltip.tooltip id="active-users-tooltip">
-                <UITooltip.tooltip_trigger>
-                  <button
-                    type="button"
-                    class="inline-flex h-8 max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <span class="relative flex size-2 shrink-0">
-                      <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
-                      <span class="relative inline-flex size-2 rounded-full bg-success"></span>
-                    </span>
-                    <span class="truncate lg:hidden">{active_users_compact_label(@presence)}</span>
-                    <span class="hidden truncate lg:inline">
-                      {active_users_label(active_usernames(@presence))}
-                    </span>
-                  </button>
-                </UITooltip.tooltip_trigger>
-                <.active_users_list presence={@presence} />
-              </UITooltip.tooltip>
-            </div>
-
-            <%= if @canvas.author_id == @user_id do %>
-              <div class="order-5 ml-auto hidden sm:ml-0 sm:block">
-                <.share_button id="share-canvas-button" label="Share" />
-              </div>
-            <% end %>
-          </div>
-        </div>
-
-        <.share_dialog
-          id="share-canvas-dialog"
-          open={@share_open}
-          title="Share canvas"
-          description="People with access can edit this canvas with you in real time."
-          manage?={@canvas.author_id == @user_id}
-          shared_with={@canvas.shared_with || []}
-          share_event="share_canvas"
-          remove_event="remove_access"
-          on_close="share_closed"
+        <Header.header
+          canvas={@canvas}
+          c_name={@c_name}
+          c_desc={@c_desc}
+          presence={@presence}
+          status={@status}
+          user_id={@user_id}
+          can_share?={@canvas.author_id == @user_id}
+        />
+        <Header.share_dialog
+          canvas={@canvas}
+          share_open={@share_open}
+          can_share?={@canvas.author_id == @user_id}
         />
         <%!-- Removing a row or column that holds content asks first: the
         operation is destructive, and the event log keeps the old values only
@@ -1828,461 +1597,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               @active_tab != "editor" && "hidden"
             ]}
           >
-            <div
-              id="canvas-grid"
-              class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
-            >
-              <%!-- Structure editing is available to everyone with access to the
-              canvas: the toggle, and — while it is on — the add actions. --%>
-              <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
-                <button
-                  type="button"
-                  id="edit-structure-toggle"
-                  phx-click="toggle_structure"
-                  aria-pressed={to_string(@edit_structure?)}
-                  class={[
-                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
-                    @edit_structure? &&
-                      "border-primary/50 bg-primary/10 text-base-content",
-                    not @edit_structure? &&
-                      "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
-                  ]}
-                >
-                  <.icon name="hero-pencil-square" class="size-4" /> Edit structure
-                </button>
-
-                <%= if @edit_structure? do %>
-                  <div class="flex gap-2">
-                    <UIButton.button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      phx-click="add_column"
-                    >
-                      Add Column
-                    </UIButton.button>
-
-                    <UIButton.button type="button" variant="outline" size="sm" phx-click="add_row">
-                      Add Row
-                    </UIButton.button>
-                  </div>
-                <% end %>
-              </div>
-
-              <div class="canvas-grid-scroll flex min-h-0 flex-1 flex-col overflow-auto">
-                <%= if structure_empty?(@cells) do %>
-                  <%!-- A blank canvas: nothing to render as a table yet. Anyone
-                  with access can build the first row and column here. --%>
-                  <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-                    <.icon name="hero-squares-2x2" class="size-8 text-base-content/30" />
-                    <p class="text-sm text-base-content/60">This canvas has no structure yet.</p>
-
-                    <div class="flex gap-2">
-                      <UIButton.button
-                        type="button"
-                        id="empty-add-row"
-                        variant="outline"
-                        size="sm"
-                        phx-click="add_row"
-                      >
-                        Add row
-                      </UIButton.button>
-
-                      <UIButton.button
-                        type="button"
-                        id="empty-add-column"
-                        variant="outline"
-                        size="sm"
-                        phx-click="add_column"
-                      >
-                        Add column
-                      </UIButton.button>
-                    </div>
-                  </div>
-                <% else %>
-                  <table
-                    class="h-full min-h-0 w-full flex-1 table-fixed border-collapse"
-                    style={"min-width: #{table_min_width(@cells)}"}
-                  >
-                    <colgroup>
-                      <col style={"width: #{row_label_width()}rem"} />
-                      <%= for _column <- @cells["columns"] || [] do %>
-                        <col />
-                      <% end %>
-                    </colgroup>
-
-                    <thead>
-                      <tr>
-                        <th class="px-2 py-1 border border-base-content/20 bg-base-content/5"></th>
-
-                        <%= for column <- @cells["columns"] || [] do %>
-                          <th class="border border-base-content/20 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
-                            <div class="flex flex-col">
-                              <.accent_bar
-                                id={"accent-bar-column-#{column["id"]}"}
-                                token={column["accent"]}
-                              />
-                              <div class="px-2 py-1">
-                                <%= if @edit_structure? do %>
-                                  <%!-- Same treatment as the row header: the input
-                                  takes the full width, the controls sit beside it
-                                  on a pointer and below it on a phone. --%>
-                                  <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-1">
-                                    <.form
-                                      for={%{}}
-                                      id={"column-" <> column["id"] <> "-label-form"}
-                                      phx-change="update_column_label"
-                                      class="min-w-0 flex-1"
-                                    >
-                                      <input type="hidden" name="structure_id" value={column["id"]} />
-                                      <input
-                                        type="text"
-                                        id={"column-" <> column["id"] <> "-label"}
-                                        name="label"
-                                        value={column["label"]}
-                                        phx-debounce="300"
-                                        class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none sm:py-0.5"
-                                      />
-                                    </.form>
-
-                                    <div class="flex shrink-0 items-center gap-1.5 sm:gap-1">
-                                      <button
-                                        type="button"
-                                        id={"accent-swatch-column-" <> column["id"]}
-                                        phx-click="toggle_structure_accent"
-                                        phx-value-group="column"
-                                        phx-value-id={column["id"]}
-                                        class={[
-                                          "size-7 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition sm:size-3.5",
-                                          swatch_class(column["accent"])
-                                        ]}
-                                        title="Accent color"
-                                        aria-label={"Accent color for column #{column["label"]}"}
-                                      ></button>
-                                      <button
-                                        type="button"
-                                        phx-click="request_remove_column"
-                                        phx-value-id={column["id"]}
-                                        class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10 sm:size-5"
-                                        title="Remove column"
-                                        aria-label={"Remove column #{column["label"]}"}
-                                      >
-                                        <.icon name="hero-x-mark" class="size-3.5 sm:size-3" />
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  <div
-                                    :if={@structure_accent_picker == {:column, column["id"]}}
-                                    class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
-                                  >
-                                    <%= for token <- Psc.Canvas.Accent.tokens() do %>
-                                      <button
-                                        type="button"
-                                        phx-click="set_column_accent"
-                                        phx-value-id={column["id"]}
-                                        phx-value-accent={token}
-                                        class={[
-                                          "size-6 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition sm:size-3",
-                                          swatch_class(token),
-                                          column["accent"] == token &&
-                                            "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
-                                        ]}
-                                        title={token}
-                                        aria-label={"Set column accent #{token}"}
-                                      ></button>
-                                    <% end %>
-
-                                    <button
-                                      type="button"
-                                      phx-click="set_column_accent"
-                                      phx-value-id={column["id"]}
-                                      phx-value-accent=""
-                                      class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
-                                    >
-                                      None
-                                    </button>
-                                  </div>
-                                <% else %>
-                                  {column["label"]}
-                                <% end %>
-                              </div>
-                            </div>
-                          </th>
-                        <% end %>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      <%= for {row, row_index} <- Enum.with_index(@cells["rows"] || []) do %>
-                        <tr>
-                          <td class="relative border border-base-content/20 bg-base-content/5 p-0 align-top">
-                            <.accent_bar
-                              id={"accent-bar-row-#{row["id"]}"}
-                              token={row["accent"]}
-                              orientation={:left}
-                            />
-                            <div class="px-2 py-1">
-                              <%= if @edit_structure? do %>
-                                <%!-- The input gets the full width of the column; the
-                                swatch and the remove button sit beside it on a
-                                pointer and below it on a phone, where a 14px
-                                swatch is not a target anyone can hit. --%>
-                                <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-1">
-                                  <.form
-                                    for={%{}}
-                                    id={"row-" <> row["id"] <> "-label-form"}
-                                    phx-change="update_row_label"
-                                    class="min-w-0 flex-1"
-                                  >
-                                    <input type="hidden" name="structure_id" value={row["id"]} />
-                                    <input
-                                      type="text"
-                                      id={"row-" <> row["id"] <> "-label"}
-                                      name="label"
-                                      value={row["label"]}
-                                      phx-debounce="300"
-                                      class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none sm:py-0.5"
-                                    />
-                                  </.form>
-
-                                  <div class="flex shrink-0 items-center gap-1.5 sm:gap-1">
-                                    <button
-                                      type="button"
-                                      id={"accent-swatch-row-" <> row["id"]}
-                                      phx-click="toggle_structure_accent"
-                                      phx-value-group="row"
-                                      phx-value-id={row["id"]}
-                                      class={[
-                                        "size-7 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition sm:size-3.5",
-                                        swatch_class(row["accent"])
-                                      ]}
-                                      title="Accent color"
-                                      aria-label={"Accent color for row #{row["label"]}"}
-                                    ></button>
-                                    <button
-                                      type="button"
-                                      phx-click="request_remove_row"
-                                      phx-value-id={row["id"]}
-                                      class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10 sm:size-5"
-                                      title="Remove row"
-                                      aria-label={"Remove row #{row["label"]}"}
-                                    >
-                                      <.icon name="hero-x-mark" class="size-3.5 sm:size-3" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div
-                                  :if={@structure_accent_picker == {:row, row["id"]}}
-                                  class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
-                                >
-                                  <%= for token <- Psc.Canvas.Accent.tokens() do %>
-                                    <button
-                                      type="button"
-                                      phx-click="set_row_accent"
-                                      phx-value-id={row["id"]}
-                                      phx-value-accent={token}
-                                      class={[
-                                        "size-6 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition sm:size-3",
-                                        swatch_class(token),
-                                        row["accent"] == token &&
-                                          "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
-                                      ]}
-                                      title={token}
-                                      aria-label={"Set row accent #{token}"}
-                                    ></button>
-                                  <% end %>
-
-                                  <button
-                                    type="button"
-                                    phx-click="set_row_accent"
-                                    phx-value-id={row["id"]}
-                                    phx-value-accent=""
-                                    class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
-                                  >
-                                    None
-                                  </button>
-                                </div>
-                              <% else %>
-                                <div
-                                  class="truncate font-medium text-base-content/70 text-sm"
-                                  title={row["label"]}
-                                >
-                                  {row["label"]}
-                                </div>
-                              <% end %>
-                            </div>
-                          </td>
-
-                          <%= for {column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
-                            <% layout = @cells["layout"] || [] %> <% cell_key =
-                              Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                            <td class="relative border border-base-content/20 align-top">
-                              <%= if cell_key do %>
-                                <% cell_data =
-                                  get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %> <% title =
-                                  Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
-                                    Map.get(cell_data, "title") || cell_key %>
-                                <div
-                                  id={"cell-card-" <> cell_key}
-                                  phx-hook="CellFocus"
-                                  data-cell-key={cell_key}
-                                  class={[
-                                    "canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
-                                    @focus_cell == cell_key && "ring-2 ring-primary ring-inset"
-                                  ]}
-                                >
-                                  <%!-- The colour combination of this cell (column on top,
-                            row on the left) is only shown in the mobile fullscreen
-                            view, where there is room for it. --%>
-                                  <.accent_bar
-                                    id={"accent-bar-cell-#{cell_key}-column"}
-                                    token={column["accent"]}
-                                    class="cell-accent absolute inset-x-0 top-0 h-1 z-10"
-                                  />
-                                  <.accent_bar
-                                    id={"accent-bar-cell-#{cell_key}-row"}
-                                    token={row["accent"]}
-                                    orientation={:left}
-                                    class="cell-accent z-10"
-                                  />
-                                  <div class="cell-body p-2">
-                                    <%= if @edit_structure? do %>
-                                      <.form
-                                        for={%{}}
-                                        id={"cell-label-" <> cell_key}
-                                        phx-change="update_cell_label"
-                                        class="mb-1"
-                                      >
-                                        <input type="hidden" name="cell_key" value={cell_key} />
-                                        <input
-                                          type="text"
-                                          id={"cell-" <> cell_key <> "-label"}
-                                          name="label"
-                                          value={Map.get(cell_data, "label", "")}
-                                          phx-debounce="300"
-                                          placeholder={cell_key}
-                                          class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
-                                        />
-                                      </.form>
-                                    <% else %>
-                                      <div class="mb-1">
-                                        <div class="text-sm font-medium text-base-content break-words">
-                                          {title}
-                                        </div>
-                                      </div>
-                                    <% end %>
-
-                                    <%= for {field, value} <- cell_data do %>
-                                      <%!-- "semantics" is tolerated in older canvases but is
-                                    no longer authored or shown; "titles" holds labels. --%>
-                                      <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
-                                        <% field_title = Psc.Canvas.field_title(cell_data, field) %>
-                                        <div
-                                          id={"cell-field-" <> cell_key <> "-" <> field}
-                                          class="mb-1 flex min-w-0 flex-col"
-                                        >
-                                          <%= if @edit_structure? do %>
-                                            <.form
-                                              for={%{}}
-                                              id={"cell-title-" <> cell_key <> "-" <> field}
-                                              phx-change="update_cell_field_title"
-                                              class="mb-0.5 flex items-center gap-1"
-                                            >
-                                              <input type="hidden" name="cell_key" value={cell_key} />
-                                              <input type="hidden" name="field" value={field} />
-                                              <input
-                                                type="text"
-                                                id={"cell-" <> cell_key <> "-field-" <> field <> "-title"}
-                                                name="title"
-                                                value={field_title}
-                                                phx-debounce="300"
-                                                placeholder={field}
-                                                class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                              />
-                                              <button
-                                                type="button"
-                                                phx-click="remove_cell_field"
-                                                phx-value-cell_key={cell_key}
-                                                phx-value-field={field}
-                                                class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
-                                                title={"Remove field #{field}"}
-                                                aria-label={"Remove field #{field}"}
-                                              >
-                                                <.icon name="hero-x-mark" class="size-2.5" />
-                                              </button>
-                                            </.form>
-                                          <% else %>
-                                            <label
-                                              :if={field_title != ""}
-                                              class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
-                                            >
-                                              {field_title}
-                                            </label>
-                                          <% end %>
-
-                                          <.form
-                                            for={%{}}
-                                            id={"cell-form-" <> cell_key <> "-" <> field}
-                                            phx-change="update_cell"
-                                          >
-                                            <input type="hidden" name="cell_key" value={cell_key} />
-                                            <.cell_field_editor
-                                              cell_key={cell_key}
-                                              field={field}
-                                              value={value}
-                                              user_id={@user_id}
-                                            />
-                                          </.form>
-                                        </div>
-                                      <% end %>
-                                    <% end %>
-
-                                    <%= if @edit_structure? do %>
-                                      <.form
-                                        for={%{}}
-                                        id={"cell-add-field-" <> cell_key}
-                                        phx-submit="add_cell_field"
-                                        class="mt-1 flex gap-1"
-                                      >
-                                        <input type="hidden" name="cell_key" value={cell_key} />
-                                        <input
-                                          type="text"
-                                          id={"cell-" <> cell_key <> "-new-field"}
-                                          name="field"
-                                          placeholder="New field"
-                                          class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                        />
-                                        <button
-                                          type="submit"
-                                          class="shrink-0 rounded border border-base-content/10 px-1.5 py-0.5 text-xs text-base-content/70 transition-colors hover:bg-base-content/5 hover:text-base-content"
-                                        >
-                                          Add
-                                        </button>
-                                      </.form>
-                                    <% end %>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    data-cell-exit="true"
-                                    class="cell-exit fixed bottom-5 right-5 z-[70] size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-base-300"
-                                    aria-label="Close full screen"
-                                  >
-                                    <.icon name="hero-x-mark" class="size-5" />
-                                  </button>
-                                </div>
-                              <% end %>
-                            </td>
-                          <% end %>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
-                <% end %>
-              </div>
-            </div>
+            <Grid.grid
+              cells={@cells}
+              edit_structure?={@edit_structure?}
+              structure_accent_picker={@structure_accent_picker}
+              focus_cell={@focus_cell}
+              user_id={@user_id}
+            />
           </div>
 
           <div
@@ -2294,7 +1615,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               @active_tab != "notes" && "hidden"
             ]}
           >
-            <.notes_view
+            <NotesPanel.panel
               notes={@notes}
               note={@note}
               note_content={@note_content}
@@ -2318,318 +1639,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               @active_tab != "agent" && "hidden"
             ]}
           >
-            <div class="flex min-h-0 w-full flex-1 flex-col rounded-xl border border-base-content/10 bg-base-200/40 p-4">
-              <div :if={is_nil(@agent_session)} class="m-auto max-w-md text-center">
-                <h2 class="text-lg font-medium text-base-content">Agent</h2>
-
-                <p class="mt-1 text-sm text-base-content/60">
-                  Ask about this canvas. The agent reads only what you can read and cannot change anything.
-                </p>
-
-                <p :if={@agent_missing == :key} class="mt-3 text-sm text-base-content/60">
-                  The agent needs a model provider key.
-                  <.link navigate={~p"/users/settings"} class="link link-primary">
-                    Add your API key in settings
-                  </.link>
-                </p>
-
-                <p :if={@agent_missing == :model} class="mt-3 text-sm text-base-content/60">
-                  Your key is saved; the agent still needs a model.
-                  <.link navigate={~p"/users/settings"} class="link link-primary">
-                    Choose a model in settings
-                  </.link>
-                </p>
-
-                <button
-                  type="button"
-                  phx-click="agent_new"
-                  disabled={not @agent_enabled?}
-                  class="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-content disabled:opacity-50"
-                >
-                  Start a chat
-                </button>
-              </div>
-
-              <div :if={@agent_session} class="flex min-h-0 flex-1 flex-col">
-                <div class="flex items-center justify-between gap-3 border-b border-base-content/10 pb-2">
-                  <h2 id="canvas-agent-title" class="truncate text-sm font-medium text-base-content">
-                    {@agent_session.title}
-                  </h2>
-
-                  <div class="flex shrink-0 items-center gap-2">
-                    <div class="relative" phx-click-away="agent_close_lists">
-                      <button
-                        type="button"
-                        id="canvas-agent-chats"
-                        phx-click="agent_toggle_list"
-                        class="flex max-w-[12rem] items-center gap-1 rounded-lg border border-base-content/15 px-2 py-1 text-xs text-base-content/70 hover:bg-base-100"
-                      >
-                        <.icon name="hero-chat-bubble-left-right" class="size-3.5 shrink-0" />
-                        <span class="truncate">{length(@agent_sessions)} chats</span>
-                        <.icon name="hero-chevron-down" class="size-3 shrink-0" />
-                      </button>
-
-                      <div
-                        :if={@agent_list_open}
-                        id="canvas-agent-chat-list"
-                        class="absolute right-0 z-30 mt-1 w-72 rounded-xl border border-base-content/10 bg-base-100 p-1 shadow-lg"
-                      >
-                        <p class="px-2 py-1 text-[11px] uppercase tracking-wide text-base-content/40">
-                          Chats on this canvas
-                        </p>
-
-                        <div :for={session <- @agent_sessions} class="group relative">
-                          <button
-                            type="button"
-                            phx-click="agent_select"
-                            phx-value-session={session.id}
-                            class={[
-                              "block w-full rounded-lg px-2 py-1.5 pr-8 text-left hover:bg-base-200",
-                              agent_session_selected?(@agent_session, session) && "bg-base-200"
-                            ]}
-                          >
-                            <p class="truncate text-xs font-medium text-base-content">
-                              {session.title}
-                            </p>
-
-                            <p class="mt-0.5 text-[11px] text-base-content/50">
-                              {turn_count(session)} turns · started {agent_date(session.inserted_at)} · {agent_relative_time(
-                                session.last_message_at || session.inserted_at
-                              )}
-                            </p>
-                          </button>
-
-                          <button
-                            type="button"
-                            phx-click="agent_chat_menu"
-                            phx-value-session={session.id}
-                            aria-label="Chat options"
-                            class={[
-                              "absolute right-1 top-1.5 rounded p-1 text-base-content/50 hover:bg-base-300",
-                              "opacity-0 transition-opacity group-hover:opacity-100",
-                              @agent_menu_session == session.id && "opacity-100"
-                            ]}
-                          >
-                            <.icon name="hero-ellipsis-vertical" class="size-4" />
-                          </button>
-
-                          <div
-                            :if={@agent_menu_session == session.id}
-                            class="absolute right-1 top-8 z-40 w-44 rounded-lg border border-base-content/10 bg-base-100 p-1 shadow-lg"
-                          >
-                            <.form
-                              for={to_form(%{"title" => session.title}, as: :rename)}
-                              id={"agent-rename-#{session.id}"}
-                              phx-submit="agent_rename"
-                              phx-value-session={session.id}
-                              class="px-1 pb-1"
-                            >
-                              <input
-                                type="text"
-                                name="title"
-                                value={session.title}
-                                maxlength="120"
-                                class="w-full rounded border border-base-content/15 bg-base-100 px-1.5 py-1 text-xs text-base-content"
-                              />
-                              <button
-                                type="submit"
-                                class="mt-1 w-full rounded bg-primary px-2 py-1 text-xs text-primary-content"
-                              >
-                                Rename
-                              </button>
-                            </.form>
-
-                            <button
-                              type="button"
-                              phx-click="agent_duplicate"
-                              phx-value-session={session.id}
-                              class="w-full rounded px-2 py-1 text-left text-xs text-base-content/80 hover:bg-base-200"
-                            >
-                              Duplicate
-                            </button>
-
-                            <button
-                              type="button"
-                              phx-click="agent_delete"
-                              phx-value-session={session.id}
-                              data-confirm="Delete this chat and its transcript?"
-                              class="w-full rounded px-2 py-1 text-left text-xs text-error hover:bg-error/10"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      :if={@agent_turn_pid}
-                      type="button"
-                      phx-click="agent_stop"
-                      class="rounded-lg border border-base-content/20 px-2 py-1 text-xs hover:bg-base-100"
-                    >
-                      Stop
-                    </button>
-
-                    <button
-                      type="button"
-                      phx-click="agent_new"
-                      class="rounded-lg border border-base-content/20 px-2 py-1 text-xs hover:bg-base-100"
-                    >
-                      New chat
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  :if={@agent_phase}
-                  id="canvas-agent-status"
-                  class="mt-2 flex items-center gap-2 text-xs text-base-content/60"
-                >
-                  <span class="size-1.5 animate-pulse rounded-full bg-primary"></span> {@agent_phase}
-                </div>
-
-                <div id="canvas-agent-messages" class="mt-3 flex-1 space-y-3 overflow-y-auto pr-1">
-                  <p :if={@agent_messages == []} class="text-sm text-base-content/60">
-                    Ask about this canvas: its cells, its notes, what changed.
-                  </p>
-
-                  <div
-                    :for={message <- @agent_messages}
-                    id={"agent-message-#{message.id}"}
-                    class={[
-                      "rounded-xl border p-3 text-sm",
-                      message.role == :user && "border-primary/20 bg-primary/5",
-                      message.role == :assistant && "border-base-content/10 bg-base-100",
-                      message.status == :error && "border-error/40"
-                    ]}
-                  >
-                    <p class="mb-1 text-xs uppercase tracking-wide text-base-content/50">
-                      {if message.role == :user, do: "You", else: "Assistant"}
-                    </p>
-
-                    <div :if={message.tool_calls != []} class="mb-2 space-y-1">
-                      <p class="text-xs uppercase tracking-wide text-base-content/40">
-                        Tools called
-                      </p>
-
-                      <details
-                        :for={call <- message.tool_calls}
-                        class="rounded-lg border border-base-content/10 px-2 py-1 text-xs"
-                      >
-                        <summary class="cursor-pointer list-none">
-                          <span class="font-mono">{call["name"]}</span>
-                          <span class="ml-2 text-base-content/50">{call["status"]}</span>
-                        </summary>
-                        <pre class="mt-1 overflow-x-auto whitespace-pre-wrap text-base-content/70">{Jason.encode!(
-                          call["result"] || call["arguments"] || %{},
-                          pretty: true
-                        )}</pre>
-                      </details>
-                    </div>
-
-                    <div
-                      :if={agent_refs(message) != []}
-                      id={"agent-refs-#{message.id}"}
-                      class="mb-2 space-y-2"
-                    >
-                      <div
-                        :for={ref <- agent_cell_refs(message)}
-                        class="rounded-lg border border-base-content/10 bg-base-200/60 px-2.5 py-2"
-                      >
-                        <div class="flex items-start justify-between gap-2">
-                          <p class="text-xs font-medium text-base-content/80">{ref["label"]}</p>
-
-                          <.link
-                            navigate={ref["url"]}
-                            class="shrink-0 rounded-md border border-base-content/15 px-2 py-0.5 text-xs text-base-content/70 hover:bg-base-100"
-                          >
-                            Open cell
-                          </.link>
-                        </div>
-
-                        <p
-                          :if={ref["excerpt"]}
-                          class="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-base-content/60"
-                        >
-                          {ref["excerpt"]}
-                        </p>
-                      </div>
-
-                      <div :if={agent_other_refs(message) != []} class="flex flex-wrap gap-1.5">
-                        <.link
-                          :for={ref <- agent_other_refs(message)}
-                          navigate={ref["url"]}
-                          class={[
-                            "inline-flex max-w-[20rem] items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-base-200",
-                            ref["kind"] == "note" && "border-primary/30 text-primary",
-                            ref["kind"] != "note" && "border-base-content/15 text-base-content/70"
-                          ]}
-                        >
-                          <.icon
-                            name={
-                              case ref["kind"] do
-                                "note" -> "hero-document-text"
-                                "template" -> "hero-rectangle-stack"
-                                _other -> "hero-square-2-stack"
-                              end
-                            }
-                            class="size-3.5 shrink-0"
-                          /> <span class="truncate">{ref["label"]}</span>
-                        </.link>
-                      </div>
-                    </div>
-
-                    <div class="whitespace-pre-wrap break-words text-base-content">
-                      {message.content}<span :if={message.status == :streaming}>▍</span>
-                    </div>
-
-                    <p :if={message.status == :cancelled} class="mt-1 text-xs text-base-content/50">
-                      Stopped.
-                    </p>
-
-                    <p :if={message.error} class="mt-1 text-xs text-error">{message.error}</p>
-                  </div>
-                </div>
-
-                <.form
-                  for={@agent_composer}
-                  id="canvas-agent-composer"
-                  phx-submit="agent_send"
-                  class="mt-3 rounded-xl border border-base-content/10 bg-base-100 p-2 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20"
-                >
-                  <.input
-                    field={@agent_composer[:content]}
-                    type="textarea"
-                    rows="2"
-                    placeholder="Ask about this canvas…"
-                    disabled={not @agent_enabled? or @agent_turn_pid != nil}
-                    class="border-0 bg-transparent px-1 py-1 focus:ring-0"
-                  />
-                  <div class="mt-2 flex items-center justify-between gap-3">
-                    <p class="text-xs text-base-content/50">
-                      <%= if @agent_enabled? do %>
-                        Read-only. Nothing is created or changed.
-                      <% else %>
-                        <.link navigate={~p"/users/settings"} class="link link-primary">
-                          {if @agent_missing == :key,
-                            do: "Add your API key in settings",
-                            else: "Choose a model in settings"}
-                        </.link>
-                      <% end %>
-                    </p>
-
-                    <button
-                      type="submit"
-                      disabled={not @agent_enabled? or @agent_turn_pid != nil}
-                      class="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-content disabled:opacity-50"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </.form>
-              </div>
-            </div>
+            <AgentPanel.panel
+              agent_session={@agent_session}
+              agent_messages={@agent_messages}
+              agent_turn_pid={@agent_turn_pid}
+              agent_sessions={@agent_sessions}
+              agent_list_open={@agent_list_open}
+              agent_menu_session={@agent_menu_session}
+              agent_phase={@agent_phase}
+              agent_enabled?={@agent_enabled?}
+              agent_missing={@agent_missing}
+              agent_composer={@agent_composer}
+            />
           </div>
 
           <%= for {tab_id, label, icon, blurb} <- @tabs do %>
@@ -2669,7 +1690,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
       <%!-- Below the header breakpoint the tabs live at the bottom of the
       screen, like a native app. --%>
-      <.tab_bar tabs={@tabs} active_tab={@active_tab} />
+      <Tabs.bar tabs={@tabs} active_tab={@active_tab} />
     </Layouts.app>
     """
   end
@@ -2692,353 +1713,5 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     else
       %{label: "Canvas", state: canvas.state, stats: canvas.stats, others: []}
     end
-  end
-
-  # The Notes view: the canvas's notes, and the one that is open.
-  #
-  # On a wide screen the list sits beside the editor. On a phone they are one
-  # pane at a time: the list, and — once a note is open — the editor with a
-  # back action.
-  #
-  # A scratchpad canvas has one note and no list: the editor takes the whole
-  # view, with no way to pick another note.
-  attr :notes, :list, required: true
-  attr :note, :map, default: nil
-  attr :note_content, :string, default: ""
-  attr :note_html, :string, default: ""
-  attr :note_save_state, :atom, required: true
-  attr :note_save_stats, :map, required: true
-  attr :note_presence, :map, default: %{}
-  attr :user_id, :integer, required: true
-  attr :is_owner, :boolean, required: true
-  attr :scratchpad?, :boolean, default: false
-
-  defp notes_view(assigns) do
-    ~H"""
-    <div id="canvas-notes" class="flex min-h-0 w-full flex-1 flex-col lg:flex-row lg:gap-4">
-      <%!-- The list. On a phone it is hidden while a note is open. A
-      scratchpad has no list at all: it is not rendered. --%>
-      <%= if not @scratchpad? do %>
-        <div
-          id="canvas-notes-list"
-          class={[
-            "flex min-h-0 w-full flex-col lg:w-64 lg:shrink-0",
-            @note && "hidden lg:flex"
-          ]}
-        >
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <h2 class="text-sm font-medium uppercase tracking-wide text-base-content/50">
-              Notes
-            </h2>
-
-            <UIButton.button type="button" id="new-note-button" phx-click="create_note" size="sm">
-              <.icon name="hero-plus" class="size-4" /> New note
-            </UIButton.button>
-          </div>
-
-          <%= if @notes == [] do %>
-            <div
-              id="canvas-notes-empty"
-              class="rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-6 text-center"
-            >
-              <p class="text-sm text-base-content/60">No notes yet.</p>
-
-              <p class="mt-1 text-xs text-base-content/45">
-                Notes are shared Markdown attached to this canvas.
-              </p>
-            </div>
-          <% else %>
-            <ul id="canvas-notes-items" class="min-h-0 flex-1 space-y-2 overflow-y-auto">
-              <li :for={note <- @notes} id={"canvas-note-" <> note.id}>
-                <button
-                  type="button"
-                  phx-click="select_note"
-                  phx-value-note={note.id}
-                  aria-current={to_string(@note && @note.id == note.id)}
-                  class={[
-                    "w-full rounded-lg border p-3 text-left transition-colors",
-                    @note && @note.id == note.id && "border-primary/40 bg-primary/10",
-                    !(@note && @note.id == note.id) &&
-                      "border-base-content/10 bg-base-200 hover:border-base-content/25"
-                  ]}
-                >
-                  <span class="block truncate text-sm font-medium text-base-content">
-                    {note.title || "Untitled note"}
-                  </span>
-
-                  <span class="mt-1 block truncate text-xs text-base-content/50">
-                    {note.snippet}
-                  </span>
-                </button>
-              </li>
-            </ul>
-          <% end %>
-        </div>
-      <% end %>
-      <%!-- The editor. On a phone it takes over the pane. --%>
-      <div
-        id="canvas-note-editor"
-        class={[
-          "flex min-h-0 w-full flex-1 flex-col",
-          !@note && "hidden lg:flex"
-        ]}
-      >
-        <%= if @note do %>
-          <div class="mb-3 flex flex-wrap items-center gap-3">
-            <%!-- There is no list to go back to in a scratchpad. --%>
-            <button
-              :if={!@scratchpad?}
-              type="button"
-              id="canvas-notes-back"
-              phx-click="select_note"
-              phx-value-note=""
-              class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-base-content/60 transition-colors hover:bg-base-content/5 hover:text-base-content lg:hidden"
-              aria-label="Back to the notes"
-            >
-              <.icon name="hero-arrow-left" class="size-5" />
-            </button>
-
-            <.form
-              for={%{}}
-              id="canvas-note-title-form"
-              phx-change="update_note_title"
-              class="min-w-0 flex-1"
-            >
-              <input
-                name="title"
-                type="text"
-                value={@note.title}
-                phx-debounce="500"
-                placeholder="Untitled note"
-                class="w-full min-w-0 border-b-2 border-transparent bg-transparent text-lg font-semibold text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary focus:outline-none"
-              />
-            </.form>
-
-            <%!-- Who else has this note open. The canvas's Active Users says
-            who is on the canvas; this says who is in the same note. --%>
-            <span
-              :if={note_editors(@note_presence, @user_id) != []}
-              id="canvas-note-presence"
-              title={note_editors_label(note_editors(@note_presence, @user_id))}
-              class="inline-flex max-w-48 items-center gap-1.5 rounded-full border border-base-content/10 bg-base-content/5 px-2.5 py-1 text-xs text-base-content/70"
-            >
-              <span class="relative flex size-2 shrink-0">
-                <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
-                <span class="relative inline-flex size-2 rounded-full bg-success"></span>
-              </span>
-              <span class="truncate">
-                {note_editors_label(note_editors(@note_presence, @user_id))}
-              </span>
-            </span>
-
-            <%= if @is_owner and not @scratchpad? do %>
-              <UIButton.button
-                type="button"
-                id="canvas-note-delete"
-                phx-click="delete_note"
-                phx-value-note={@note.id}
-                data-confirm="Delete this note? This cannot be undone."
-                variant="outline"
-                size="sm"
-                class="text-error hover:text-error"
-              >
-                Delete
-              </UIButton.button>
-            <% end %>
-          </div>
-
-          <.markdown_editor
-            id="canvas-note-markdown"
-            input_id="canvas-note-input"
-            form_id="canvas-note-form"
-            preview_id="canvas-note-preview"
-            content={@note_content}
-            html={@note_html}
-            current_user_id={@user_id}
-            change_event="update_note_content"
-            preview_event="render_note"
-            render_event="note_rendered"
-            update_event="note_content_updated"
-            empty_message="Start writing in the editor."
-            preview_label="Edit note content"
-          />
-        <% else %>
-          <div class="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center">
-            <p class="max-w-sm text-sm text-base-content/50">
-              <%= if @scratchpad? do %>
-                The scratchpad is on its way. Reload the view to write in it.
-              <% else %>
-                Select a note, or create one, to start writing.
-              <% end %>
-            </p>
-          </div>
-        <% end %>
-      </div>
-    </div>
-    """
-  end
-
-  # A one-line preview of a note's content for the list.
-  defp note_snippet(nil), do: "Empty"
-
-  defp note_snippet(content) when content in ["", nil], do: "Empty"
-
-  defp note_snippet(content) do
-    content
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-    |> String.slice(0, 90)
-  end
-
-  # The other people who have this note open. Presence keys come back from the
-  # CRDT as strings, so the id is compared as one.
-  defp note_editors(presence, user_id) do
-    for {id, %{metas: [meta | _]}} <- presence, to_string(id) != to_string(user_id) do
-      meta[:username]
-    end
-  end
-
-  defp note_editors_label([username]), do: "#{username} is editing"
-  defp note_editors_label(usernames), do: "#{length(usernames)} others are editing"
-
-  # On phones the canvas header gives its vertical space back to the grid: the
-  # presence, the save state and Share move into the app header as icons.
-  attr :presence, :map, required: true
-  attr :status, :map, required: true
-  attr :can_share?, :boolean, required: true
-
-  defp header_actions(assigns) do
-    ~H"""
-    <div class="flex items-center gap-1 sm:hidden">
-      <UITooltip.tooltip id="active-users-tooltip-compact">
-        <UITooltip.tooltip_trigger>
-          <button
-            type="button"
-            id="canvas-presence-compact"
-            class="inline-flex h-8 items-center gap-1.5 rounded-full border border-base-content/10 px-2.5 text-xs tabular-nums text-base-content/70 transition-colors hover:bg-base-content/5"
-            title={active_users_compact_label(@presence)}
-            aria-label={active_users_compact_label(@presence)}
-          >
-            <span class="relative flex size-2 shrink-0">
-              <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
-              <span class="relative inline-flex size-2 rounded-full bg-success"></span>
-            </span>
-            <span>{active_user_count(@presence)}</span>
-          </button>
-        </UITooltip.tooltip_trigger>
-        <.active_users_list presence={@presence} />
-      </UITooltip.tooltip>
-
-      <.status_pill
-        id="canvas-save-state-compact"
-        save_state={@status.state}
-        save_stats={@status.stats}
-        label={@status.label}
-        others={@status.others}
-        compact
-      />
-      <%= if @can_share? do %>
-        <UIButton.button
-          type="button"
-          id="share-canvas-button-compact"
-          phx-click="open_share"
-          variant="outline"
-          size="icon"
-          class="!size-8 rounded-full"
-          aria-label="Share"
-          title="Share"
-        >
-          <.icon name="hero-share" class="size-4" />
-        </UIButton.button>
-      <% end %>
-    </div>
-    """
-  end
-
-  # The people currently on the canvas, as shown in the presence tooltip.
-  attr :presence, :map, required: true
-
-  defp active_users_list(assigns) do
-    ~H"""
-    <UITooltip.tooltip_content side="bottom" align="end" class="w-64 px-3 py-2.5">
-      <p class="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-base-content/50">
-        Active users
-      </p>
-
-      <ul class="space-y-1">
-        <li
-          :for={username <- active_usernames(@presence)}
-          class="truncate text-sm text-base-content/80"
-        >
-          {username}
-        </li>
-      </ul>
-    </UITooltip.tooltip_content>
-    """
-  end
-
-  # The tab strip lives in the app header on large screens. When the header
-  # runs out of room the same tabs become a bottom app bar, the way native
-  # apps switch sections.
-  attr :tabs, :list, required: true
-  attr :active_tab, :string, required: true
-
-  defp tab_strip(assigns) do
-    ~H"""
-    <nav
-      id="canvas-tabs"
-      role="tablist"
-      aria-label="Canvas views"
-      class="hidden items-center gap-0.5 rounded-lg border border-base-content/25 bg-base-content/5 px-1 py-0.5 lg:flex"
-    >
-      <button
-        :for={{tab_id, label, icon, _blurb} <- @tabs}
-        type="button"
-        role="tab"
-        id={"canvas-tab-#{tab_id}"}
-        data-tab={tab_id}
-        aria-selected={to_string(@active_tab == tab_id)}
-        aria-controls={"canvas-panel-#{tab_id}"}
-        aria-label={label}
-        title={label}
-        phx-click="select_tab"
-        phx-value-tab={tab_id}
-        class="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      >
-        <.icon name={icon} class="size-4" />
-        <%!-- The names are dropped when the header gives the strip less room
-        than it needs, so the tabs never overflow into a scrollbar. --%>
-        <span class="@max-[23rem]:hidden">{label}</span>
-      </button>
-    </nav>
-    """
-  end
-
-  defp tab_bar(assigns) do
-    ~H"""
-    <nav
-      id="canvas-tabs-bar"
-      role="tablist"
-      aria-label="Canvas views"
-      class="fixed inset-x-0 bottom-0 z-40 flex h-[calc(var(--canvas-tab-bar-height)+env(safe-area-inset-bottom))] items-stretch justify-around gap-1 border-t border-base-content/10 bg-base-200/95 px-1 py-1 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
-    >
-      <button
-        :for={{tab_id, label, icon, _blurb} <- @tabs}
-        type="button"
-        role="tab"
-        id={"canvas-tab-bar-#{tab_id}"}
-        data-tab={tab_id}
-        aria-selected={to_string(@active_tab == tab_id)}
-        aria-controls={"canvas-panel-#{tab_id}"}
-        aria-label={label}
-        title={label}
-        phx-click="select_tab"
-        phx-value-tab={tab_id}
-        class="flex flex-1 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5 text-[0.7rem] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      >
-        <.icon name={icon} class="size-5" /> <span>{label}</span>
-      </button>
-    </nav>
-    """
   end
 end
