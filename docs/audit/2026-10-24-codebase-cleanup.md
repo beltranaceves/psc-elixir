@@ -231,6 +231,13 @@ Fix: one `stop_turn/1` that terminates the `Task.Supervisor` child and clears `a
 
 The parent keeps canvas state, operations, save timers, presence, notes state and the agent state/subscription. All test IDs and `phx-hook` bindings are unchanged. `mix verify` passes (403 tests) and the full Playwright suite passes (60 tests). The Notes LiveComponent remains deferred: the header status pill would need `send_update/2` or a third status component, which is the complexity this refactor was meant to avoid.
 
+**Bento follow-up (2026-10-25).** The bento layout mode (ADR-035 to ADR-038, `docs/spec/bento.md`) landed on top of the split:
+
+- `Psc.Canvas.Structure` is the one module that knows a structure's shape; it also owns clamping, `next_slot/1`, `neighbours/2` and the reserved cell keys (the CRDT now delegates to it).
+- The shared cell body moved to `UnstrCanvasLive.Cell`, so the table grid and the bento board cannot drift.
+- New modules: `UnstrCanvasLive.Bento` (board), `CanvasLayoutLive.BentoEditor` (designer) and the `BentoBoard` JS hook.
+- The window was 20 lines longer after the split (`editor.ex` 1,717), and the render dispatch is a two-line `Structure.bento?/1` branch.
+
 ### 3.2 `PscWeb.CanvasLayoutLive.Editor`
 
 Current line map:

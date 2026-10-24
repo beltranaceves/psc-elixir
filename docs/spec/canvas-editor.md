@@ -62,6 +62,14 @@ See `template-designer.md` → **Design System** for the full design direction. 
 
 Specs and implementations are validated with screenshots. The app is screenshotted in the browser, and the screenshot is analyzed against this design system. Screenshots are the authoritative visual reference.
 
+## Layout modes
+
+The editor renders one of two structures from the same cells: the table described below,
+or a free-form **bento** board of cards on a fixed column grid. The mode is a property of
+the template (`layout_mode`) and is copied to the canvas. See [bento.md](bento.md) and
+ADR-035 to ADR-038; everything in this document about cells, fields, autosave, presence
+and notes applies to both.
+
 ## Data Model
 
 No schema changes. The editor works entirely within the existing `unstr_canvases.cells` map structure:

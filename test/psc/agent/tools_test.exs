@@ -102,7 +102,7 @@ defmodule Psc.Agent.ToolsTest do
 
     # The description is prompt text: it has to teach the result shape, or the
     # model reads empty cells as "no access".
-    for fact <- ["layout", "r<row>_c<col>", "filled_cell_count", "empty"] do
+    for fact <- ["layout", "r<row>_c<col>", "filled_cell_count", "empty", "bento", "placement"] do
       assert get_canvas["description"] =~ fact
     end
   end

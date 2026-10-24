@@ -6,15 +6,21 @@ defmodule Psc.Agent.Tools.GetCanvas do
   use Jido.Action,
     name: "get_canvas",
     description:
-      "Read one canvas by id: its name, description and the cell grid the editor shows.\n" <>
+      "Read one canvas by id: its name, description and the cell grid or bento board the editor shows.\n" <>
         "\n" <>
         "Result shape:\n" <>
-        "- `cells` holds `rows` and `columns` (each with `id`, `label`, optional `accent`), " <>
-        "`layout`, one entry per cell, and `$name`/`$description` (a copy of the header).\n" <>
-        "- `layout` is a matrix of cell KEYS, e.g. [[\"r1_c1\", \"r1_c2\"], [\"r2_c1\", \"r2_c2\"]]. " <>
-        "The keys are not objects: follow a key into `cells` to read that cell.\n" <>
-        "- Each cell entry, keyed `r<row>_c<col>` (e.g. `r1_c1`), has `label` and `content` — " <>
-        "`content` is the Markdown the user wrote in it.\n" <>
+        "- `layout_mode` is `\"table\"` (a rows x columns matrix) or `\"bento\"` (free-form cards on " <>
+        "a fixed column grid, up to 16 columns).\n" <>
+        "- `cards` lists the reading order for both modes: `key`, `label`, and the rectangle it " <>
+        "occupies (`x`, `y`, `w`, `h`, in grid units, 0-based).\n" <>
+        "- For a table, `cells` holds `rows` and `columns` (each with `id`, `label`, optional " <>
+        "`accent`), `layout` and one entry per cell. `layout` is a matrix of cell KEYS, mostly " <>
+        "`r<row>_c<col>` (e.g. [[\"r1_c1\", \"r1_c2\"], [\"r2_c1\", \"r2_c2\"]]). Follow a key into " <>
+        "`cells` to read that cell.\n" <>
+        "- For a bento, `cells` is flat: one entry per card key, with a `placement` " <>
+        "(`x`, `y`, `w`, `h`) and an optional `accent`. There are no row or column headers.\n" <>
+        "- Each cell entry has `label` and `content` — `content` is the Markdown the user wrote in " <>
+        "it.\n" <>
         "- `cell_count` is how many cells exist; `filled_cell_count` is how many have text.\n" <>
         "\n" <>
         "How to read it:\n" <>
@@ -30,6 +36,7 @@ defmodule Psc.Agent.Tools.GetCanvas do
   alias Psc.Agent.Tools.Ref
   alias Psc.Agent.Tools.Scope
   alias Psc.Canvas
+  alias Psc.Canvas.Structure
 
   # One message for "missing" and "not yours": two different ones would let a
   # client probe which canvas ids exist.
@@ -46,7 +53,8 @@ defmodule Psc.Agent.Tools.GetCanvas do
       # Tell the model how much writing there is. Without this it sees empty
       # `content` strings and reports "I can't access the cells", which reads like
       # a permissions failure rather than an empty canvas.
-      cell_keys = Enum.filter(Map.keys(cells), &String.match?(&1, ~r/^r\d+_c\d+$/))
+      structure = Structure.cards(cells)
+      cell_keys = Enum.map(structure, & &1.key)
       filled = Enum.count(cell_keys, &filled?(cells[&1]))
 
       {:ok,
@@ -54,7 +62,12 @@ defmodule Psc.Agent.Tools.GetCanvas do
          id: canvas.id,
          name: canvas.name,
          description: canvas.description,
+         layout_mode: if(Structure.bento?(cells), do: "bento", else: "table"),
          cells: cells,
+         cards:
+           Enum.map(structure, fn card ->
+             %{key: card.key, label: card.label, x: card.x, y: card.y, w: card.w, h: card.h}
+           end),
          cell_count: length(cell_keys),
          filled_cell_count: filled,
          updated_at: Scope.iso8601(canvas.updated_at),

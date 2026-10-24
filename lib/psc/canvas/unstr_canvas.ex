@@ -47,27 +47,12 @@ defmodule Psc.Canvas.UnstrCanvas do
   end
 
   defp validate_cells_structure(changeset) do
-    # Validates that the cells field contains all the keys outlined in the layout 2d array
+    # The shape rules live in Psc.Canvas.Structure: a table needs the matrix,
+    # a bento needs bounded placements, and an empty canvas is valid in both.
     validate_change(changeset, :cells, fn :cells, cells ->
-      layout = get_in(cells, ["layout"])
-
-      if is_list(layout) and Enum.all?(layout, &is_list/1) do
-        # Flatten the layout to get all cell keys
-        cell_keys = layout |> List.flatten() |> Enum.uniq()
-
-        # Metadata keys that should be excluded from cell validation
-        metadata_keys = ["columns", "rows", "layout"]
-        all_cell_keys = cells |> Map.keys() |> Enum.reject(&(&1 in metadata_keys))
-
-        missing_keys = cell_keys -- all_cell_keys
-
-        if missing_keys == [] do
-          []
-        else
-          [cells: "Missing cell data for keys: #{Enum.join(missing_keys, ", ")}"]
-        end
-      else
-        [cells: "Layout must be a 2D array of cell keys"]
+      case Psc.Canvas.Structure.validate(cells) do
+        :ok -> []
+        {:error, _field, message} -> [cells: message]
       end
     end)
   end

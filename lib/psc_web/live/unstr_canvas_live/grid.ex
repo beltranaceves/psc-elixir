@@ -7,6 +7,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   import PscWeb.CoreComponents, only: [icon: 1]
 
   alias PscWeb.Components.UI.Button, as: UIButton
+  alias PscWeb.UnstrCanvasLive.Cell
 
   # Every data column may shrink to this width before the table stops fitting
   # the viewport and scrolls horizontally.
@@ -318,158 +319,16 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                     <td class="relative border border-base-content/20 align-top">
                       <%= if cell_key do %>
                         <% cell_data =
-                          get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %> <% title =
-                          Map.get(cell_data, "label") || Map.get(cell_data, "name") ||
-                            Map.get(cell_data, "title") || cell_key %>
-                        <div
-                          id={"cell-card-" <> cell_key}
-                          phx-hook="CellFocus"
-                          data-cell-key={cell_key}
-                          class={[
-                            "canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
-                            @focus_cell == cell_key && "ring-2 ring-primary ring-inset"
-                          ]}
-                        >
-                          <%!-- The colour combination of this cell (column on top,
-                            row on the left) is only shown in the mobile fullscreen
-                            view, where there is room for it. --%>
-                          <.accent_bar
-                            id={"accent-bar-cell-#{cell_key}-column"}
-                            token={column["accent"]}
-                            class="cell-accent absolute inset-x-0 top-0 h-1 z-10"
-                          />
-                          <.accent_bar
-                            id={"accent-bar-cell-#{cell_key}-row"}
-                            token={row["accent"]}
-                            orientation={:left}
-                            class="cell-accent z-10"
-                          />
-                          <div class="cell-body p-2">
-                            <%= if @edit_structure? do %>
-                              <.form
-                                for={%{}}
-                                id={"cell-label-" <> cell_key}
-                                phx-change="update_cell_label"
-                                class="mb-1"
-                              >
-                                <input type="hidden" name="cell_key" value={cell_key} />
-                                <input
-                                  type="text"
-                                  id={"cell-" <> cell_key <> "-label"}
-                                  name="label"
-                                  value={Map.get(cell_data, "label", "")}
-                                  phx-debounce="300"
-                                  placeholder={cell_key}
-                                  class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
-                                />
-                              </.form>
-                            <% else %>
-                              <div class="mb-1">
-                                <div class="text-sm font-medium text-base-content break-words">
-                                  {title}
-                                </div>
-                              </div>
-                            <% end %>
-
-                            <%= for {field, value} <- cell_data do %>
-                              <%!-- "semantics" is tolerated in older canvases but is
-                                    no longer authored or shown; "titles" holds labels. --%>
-                              <%= if field not in ["row", "column", "label", "semantics", "titles"] do %>
-                                <% field_title = Psc.Canvas.field_title(cell_data, field) %>
-                                <div
-                                  id={"cell-field-" <> cell_key <> "-" <> field}
-                                  class="mb-1 flex min-w-0 flex-col"
-                                >
-                                  <%= if @edit_structure? do %>
-                                    <.form
-                                      for={%{}}
-                                      id={"cell-title-" <> cell_key <> "-" <> field}
-                                      phx-change="update_cell_field_title"
-                                      class="mb-0.5 flex items-center gap-1"
-                                    >
-                                      <input type="hidden" name="cell_key" value={cell_key} />
-                                      <input type="hidden" name="field" value={field} />
-                                      <input
-                                        type="text"
-                                        id={"cell-" <> cell_key <> "-field-" <> field <> "-title"}
-                                        name="title"
-                                        value={field_title}
-                                        phx-debounce="300"
-                                        placeholder={field}
-                                        class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                      />
-                                      <button
-                                        type="button"
-                                        phx-click="remove_cell_field"
-                                        phx-value-cell_key={cell_key}
-                                        phx-value-field={field}
-                                        class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
-                                        title={"Remove field #{field}"}
-                                        aria-label={"Remove field #{field}"}
-                                      >
-                                        <.icon name="hero-x-mark" class="size-2.5" />
-                                      </button>
-                                    </.form>
-                                  <% else %>
-                                    <label
-                                      :if={field_title != ""}
-                                      class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
-                                    >
-                                      {field_title}
-                                    </label>
-                                  <% end %>
-
-                                  <.form
-                                    for={%{}}
-                                    id={"cell-form-" <> cell_key <> "-" <> field}
-                                    phx-change="update_cell"
-                                  >
-                                    <input type="hidden" name="cell_key" value={cell_key} />
-                                    <.cell_field_editor
-                                      cell_key={cell_key}
-                                      field={field}
-                                      value={value}
-                                      user_id={@user_id}
-                                    />
-                                  </.form>
-                                </div>
-                              <% end %>
-                            <% end %>
-
-                            <%= if @edit_structure? do %>
-                              <.form
-                                for={%{}}
-                                id={"cell-add-field-" <> cell_key}
-                                phx-submit="add_cell_field"
-                                class="mt-1 flex gap-1"
-                              >
-                                <input type="hidden" name="cell_key" value={cell_key} />
-                                <input
-                                  type="text"
-                                  id={"cell-" <> cell_key <> "-new-field"}
-                                  name="field"
-                                  placeholder="New field"
-                                  class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                />
-                                <button
-                                  type="submit"
-                                  class="shrink-0 rounded border border-base-content/10 px-1.5 py-0.5 text-xs text-base-content/70 transition-colors hover:bg-base-content/5 hover:text-base-content"
-                                >
-                                  Add
-                                </button>
-                              </.form>
-                            <% end %>
-                          </div>
-
-                          <button
-                            type="button"
-                            data-cell-exit="true"
-                            class="cell-exit fixed bottom-5 right-5 z-[70] size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-base-300"
-                            aria-label="Close full screen"
-                          >
-                            <.icon name="hero-x-mark" class="size-5" />
-                          </button>
-                        </div>
+                          get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
+                        <Cell.card
+                          cell_key={cell_key}
+                          cell_data={cell_data}
+                          edit_structure?={@edit_structure?}
+                          user_id={@user_id}
+                          focus_cell={@focus_cell}
+                          accent_top={column["accent"]}
+                          accent_left={row["accent"]}
+                        />
                       <% end %>
                     </td>
                   <% end %>
@@ -494,43 +353,5 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   # empty state takes over, and anyone with access builds the structure in place.
   defp structure_empty?(cells) do
     Map.get(cells, "rows", []) == [] or Map.get(cells, "columns", []) == []
-  end
-
-  # The Markdown field of one cell field: the hook wrapper, the rendered
-  # preview and the textarea. Shared by the view and the edit-structure
-  # renderings of a cell.
-  attr :cell_key, :string, required: true
-  attr :field, :string, required: true
-  attr :value, :any, required: true
-  attr :user_id, :integer, required: true
-
-  defp cell_field_editor(assigns) do
-    ~H"""
-    <div
-      id={"md-" <> @cell_key <> "-" <> @field}
-      phx-hook="MarkdownField"
-      phx-update="ignore"
-      data-cell-key={@cell_key}
-      data-field={@field}
-      data-field-wrapper
-      data-current-user-id={@user_id}
-      class="w-full"
-    >
-      <div
-        id={"md-render-" <> @cell_key <> "-" <> @field}
-        class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
-        phx-update="ignore"
-      >
-        {@value}
-      </div>
-      <textarea
-        name={"values[" <> @field <> "]"}
-        phx-debounce="150"
-        class="field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
-        placeholder="Enter value..."
-        rows="3"
-      >{@value}</textarea>
-    </div>
-    """
   end
 end

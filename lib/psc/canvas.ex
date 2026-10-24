@@ -10,6 +10,7 @@ defmodule Psc.Canvas do
   alias Psc.Canvas.UnstrCanvas
   alias Psc.Canvas.Layout
   alias Psc.Canvas.NotesMode
+  alias Psc.Canvas.Structure
 
   # The built-in Problem–Solution Canvas: the 12-cell grid (Perceive / Form /
   # Consolidate / Learn × Rationale / Strategy / Tactics) that used to be the
@@ -251,6 +252,13 @@ defmodule Psc.Canvas do
       slug: "scratchpad",
       name: "Scratchpad",
       description: "One page and a single note, for free-form thinking."
+    },
+    %{
+      slug: "bento",
+      name: "Bento Board",
+      description:
+        "Free-form cards on a 12-column board: a big picture, supporting " <>
+          "evidence, a decision and the open questions."
     }
   ]
 
@@ -302,6 +310,7 @@ defmodule Psc.Canvas do
 
   defp builtin_layout_map("psc"), do: psc_layout_map()
   defp builtin_layout_map("scratchpad"), do: scratchpad_layout_map()
+  defp builtin_layout_map("bento"), do: bento_layout_map()
 
   @doc """
   The Problem–Solution Canvas as a template definition.
@@ -353,6 +362,35 @@ defmodule Psc.Canvas do
         }
       },
       "notes_mode" => "single"
+    }
+  end
+
+  @doc """
+  The built-in bento template: four cards on a 12-column board.
+
+  A bento template is stored in the same flat shape as a bento canvas - one
+  entry per card, with a `"placement"` - so validation, instantiation and the
+  editor share one representation.
+  """
+  def bento_layout_map do
+    card = fn label, fields, x, y, w, h, accent ->
+      %{
+        "label" => label,
+        "fields" => fields,
+        "defaults" => Map.new(fields, &{&1, ""}),
+        "placement" => %{"x" => x, "y" => y, "w" => w, "h" => h},
+        "accent" => accent
+      }
+    end
+
+    %{
+      "layout_mode" => "bento",
+      "bento_columns" => 12,
+      "big_picture" => card.("Big picture", ["content"], 0, 0, 8, 3, "sky"),
+      "evidence" => card.("Evidence", ["content"], 8, 0, 4, 3, "emerald"),
+      "decision" => card.("Decision", ["content"], 0, 3, 6, 2, "violet"),
+      "open_questions" => card.("Open questions", ["content"], 6, 3, 6, 2, "amber"),
+      "notes_mode" => "multi"
     }
   end
 
@@ -570,14 +608,21 @@ defmodule Psc.Canvas do
   """
   def instantiate_template(template, user_id, overrides \\ %{}) do
     lm = template.layout_map || %{}
-    rows = lm["rows"] || []
-    columns = lm["columns"] || []
-    layout = lm["layout"] || []
-    template_cells = lm["cells"] || %{}
 
     cells =
-      %{"rows" => rows, "columns" => columns, "layout" => layout}
-      |> put_instantiated_cells(template_cells, layout, rows, columns)
+      case Structure.mode(lm) do
+        :bento ->
+          instantiate_bento_cells(lm)
+
+        :table ->
+          rows = lm["rows"] || []
+          columns = lm["columns"] || []
+          layout = lm["layout"] || []
+          template_cells = lm["cells"] || %{}
+
+          %{"rows" => rows, "columns" => columns, "layout" => layout}
+          |> put_instantiated_cells(template_cells, layout, rows, columns)
+      end
 
     attrs =
       %{
@@ -632,6 +677,34 @@ defmodule Psc.Canvas do
 
   defp maybe_put_titles(data, titles) when titles in [nil, %{}], do: data
   defp maybe_put_titles(data, titles), do: Map.put(data, "titles", titles)
+
+  # A bento template already has the canvas shape: flat cards with a
+  # placement. Only the fields change from a definition to a value.
+  defp instantiate_bento_cells(lm) do
+    cards =
+      lm
+      |> Structure.cells()
+      |> Map.new(fn {key, meta} ->
+        data =
+          (meta["fields"] || ["content"])
+          |> Map.new(fn field -> {field, Map.get(meta["defaults"] || %{}, field, "")} end)
+          |> Map.merge(%{
+            "label" => meta["label"] || key,
+            "placement" => meta["placement"]
+          })
+          |> maybe_put_titles(meta["titles"])
+          |> maybe_put_accent(meta["accent"])
+
+        {key, data}
+      end)
+
+    cards
+    |> Map.put("layout_mode", "bento")
+    |> Map.put("bento_columns", Structure.columns(lm))
+  end
+
+  defp maybe_put_accent(data, accent) when accent in [nil, ""], do: data
+  defp maybe_put_accent(data, accent), do: Map.put(data, "accent", accent)
 
   @doc """
   List all unstructured canvases authored by a user.

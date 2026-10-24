@@ -225,6 +225,10 @@ export default {
 
   // Move the fullscreen state to the cell `delta` steps away on one axis.
   navigate(axis, delta, direction) {
+    // A bento board has no table rows to walk: the server computes each card's
+    // neighbours from its placement and the card carries them as JSON.
+    if (this.navigateByNav(axis, delta, direction)) return
+
     const td = this.el.closest("td")
     const tr = td && td.parentElement
     const tbody = tr && tr.parentElement
@@ -247,6 +251,33 @@ export default {
 
     this.collapse({ swipeOut: direction.out, history: false })
     target._cellFocus.expand({ swipeIn: direction.in, history: "replace" })
+  },
+
+  // A card can announce its neighbours (`data-cell-nav`); when it does, the
+  // swipe follows them instead of the DOM's row/column geometry. Returns
+  // whether a target was found, so a table cell falls back to the old walk.
+  navigateByNav(axis, delta, direction) {
+    const raw = this.el.dataset.cellNav
+    if (!raw) return false
+
+    let nav
+    try {
+      nav = JSON.parse(raw)
+    } catch (_error) {
+      return false
+    }
+
+    const side =
+      axis === "column" ? (delta > 0 ? "right" : "left") : delta > 0 ? "down" : "up"
+    const key = nav[side]
+    if (!key) return false
+
+    const target = document.querySelector(`#cell-card-${CSS.escape(key)}`)
+    if (!target || target === this.el || !target._cellFocus) return false
+
+    this.collapse({ swipeOut: direction.out, history: false })
+    target._cellFocus.expand({ swipeIn: direction.in, history: "replace" })
+    return true
   },
 
   isExpanded() {

@@ -9,10 +9,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   alias Psc.Canvas
   alias Psc.Canvas.NotesMode
+  alias Psc.Canvas.Structure
   alias Psc.Notes
   alias PscWeb.Markdown
   alias PscWeb.Presence
   alias PscWeb.UnstrCanvasLive.AgentPanel
+  alias PscWeb.UnstrCanvasLive.Bento
   alias PscWeb.UnstrCanvasLive.Grid
   alias PscWeb.UnstrCanvasLive.Header
   alias PscWeb.UnstrCanvasLive.NotesPanel
@@ -728,10 +730,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_event("toggle_structure_accent", %{"group" => group, "id" => id}, socket) do
-    key = if group == "row", do: {:row, id}, else: {:column, id}
+    key =
+      case group do
+        "row" -> {:row, id}
+        "card" -> {:card, id}
+        _other -> {:column, id}
+      end
 
-    picker =
-      if socket.assigns.structure_accent_picker == key, do: nil, else: key
+    picker = if socket.assigns.structure_accent_picker == key, do: nil, else: key
 
     {:noreply, assign(socket, :structure_accent_picker, picker)}
   end
@@ -753,6 +759,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         %{"type" => "column", "id" => id} ->
           {socket, %{"type" => "remove_column", "id" => id}}
 
+        %{"type" => "card", "cell_key" => key} ->
+          {socket, %{"type" => "remove_card", "cell_key" => key}}
+
         _other ->
           {socket, nil}
       end
@@ -768,6 +777,88 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   def handle_event("dismiss_remove_structure", _params, socket) do
     {:noreply, assign(socket, :structure_remove_confirm, nil)}
+  end
+
+  ## Bento cards
+
+  def handle_event("add_card", _params, socket) do
+    if Structure.bento?(socket.assigns.cells) do
+      key = next_card_key(socket.assigns.cells)
+      count = length(Structure.cards(socket.assigns.cells)) + 1
+
+      {:noreply,
+       process_operation(socket, %{
+         "type" => "add_card",
+         "cell_key" => key,
+         "label" => "Card #{count}"
+       })}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("request_remove_card", %{"cell_key" => key}, socket) do
+    case Map.get(Structure.cells(socket.assigns.cells), key) do
+      nil ->
+        {:noreply, socket}
+
+      cell ->
+        if cell_has_content?(cell) do
+          {:noreply,
+           assign(socket, :structure_remove_confirm, %{
+             "type" => "card",
+             "cell_key" => key,
+             "label" => cell["label"] || key
+           })}
+        else
+          {:noreply, process_operation(socket, %{"type" => "remove_card", "cell_key" => key})}
+        end
+    end
+  end
+
+  def handle_event("set_card_accent", %{"cell_key" => key, "accent" => accent}, socket) do
+    {:noreply,
+     socket
+     |> assign(:structure_accent_picker, nil)
+     |> process_operation(%{
+       "type" => "set_card_accent",
+       "cell_key" => key,
+       "accent" => normalize_accent(accent)
+     })}
+  end
+
+  # One operation per completed gesture: the drag hook pushes the final cell,
+  # and the arrow keys push one step at a time.
+  def handle_event("move_card", %{"cell_key" => key} = params, socket) do
+    {:noreply,
+     process_operation(socket, %{
+       "type" => "move_card",
+       "cell_key" => key,
+       "x" => to_unit(params["x"]),
+       "y" => to_unit(params["y"])
+     })}
+  end
+
+  def handle_event("resize_card", %{"cell_key" => key} = params, socket) do
+    {:noreply,
+     process_operation(socket, %{
+       "type" => "resize_card",
+       "cell_key" => key,
+       "w" => to_unit(params["w"]),
+       "h" => to_unit(params["h"])
+     })}
+  end
+
+  # Arrow keys on the card's drag grip move it by one unit; holding shift
+  # resizes it. The grip is a button, so the handler never competes with an
+  # arrow key pressed inside a Markdown editor.
+  def handle_event("nudge_card", %{"key" => key, "cell_key" => cell_key} = params, socket) do
+    resize? = params["shiftKey"] == true
+
+    case nudge_delta(key) do
+      nil -> {:noreply, socket}
+      {dx, dy} -> {:noreply, nudge_card(socket, cell_key, dx, dy, resize?)}
+    end
   end
 
   def handle_event("update_cell_label", %{"cell_key" => cell_key, "label" => label}, socket) do
@@ -869,6 +960,68 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         end
 
       {:noreply, process_operation(socket, operation)}
+    end
+  end
+
+  # The next free "cardN" key, scanning the keys that are already there so a
+  # removal never makes the next card collide with a survivor.
+  defp next_card_key(cells) do
+    taken =
+      for key <- Structure.cell_keys(cells),
+          parts = Regex.run(~r/^card(\d+)$/, key),
+          n <- tl(parts) do
+        String.to_integer(n)
+      end
+
+    "card#{Enum.max([0 | taken]) + 1}"
+  end
+
+  defp nudge_delta("ArrowLeft"), do: {-1, 0}
+  defp nudge_delta("ArrowRight"), do: {1, 0}
+  defp nudge_delta("ArrowUp"), do: {0, -1}
+  defp nudge_delta("ArrowDown"), do: {0, 1}
+  defp nudge_delta(_key), do: nil
+
+  defp nudge_card(socket, key, dx, dy, resize?) do
+    case Structure.card(socket.assigns.cells, key) do
+      nil ->
+        socket
+
+      card ->
+        operation =
+          if resize? do
+            %{
+              "type" => "resize_card",
+              "cell_key" => key,
+              "w" => card.w + dx,
+              "h" => card.h + dy
+            }
+          else
+            %{"type" => "move_card", "cell_key" => key, "x" => card.x + dx, "y" => card.y + dy}
+          end
+
+        process_operation(socket, operation)
+    end
+  end
+
+  defp to_unit(value) do
+    case value do
+      int when is_integer(int) ->
+        int
+
+      float when is_float(float) ->
+        trunc(float)
+
+      binary when is_binary(binary) ->
+        binary
+        |> Integer.parse()
+        |> case do
+          {int, _rest} -> int
+          :error -> 0
+        end
+
+      _other ->
+        0
     end
   end
 
@@ -1597,13 +1750,23 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               @active_tab != "editor" && "hidden"
             ]}
           >
-            <Grid.grid
-              cells={@cells}
-              edit_structure?={@edit_structure?}
-              structure_accent_picker={@structure_accent_picker}
-              focus_cell={@focus_cell}
-              user_id={@user_id}
-            />
+            <%= if Structure.bento?(@cells) do %>
+              <Bento.board
+                cells={@cells}
+                edit_structure?={@edit_structure?}
+                structure_accent_picker={@structure_accent_picker}
+                focus_cell={@focus_cell}
+                user_id={@user_id}
+              />
+            <% else %>
+              <Grid.grid
+                cells={@cells}
+                edit_structure?={@edit_structure?}
+                structure_accent_picker={@structure_accent_picker}
+                focus_cell={@focus_cell}
+                user_id={@user_id}
+              />
+            <% end %>
           </div>
 
           <div

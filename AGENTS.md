@@ -46,6 +46,9 @@ SaladUI components (`lib/psc_web/components/ui/`), `Req` for HTTP.
 - A **template** holds `layout_map`: rows, columns, a cell matrix, per-cell fields and optional
   section titles, row/column accents, and a `notes_mode`. It can be `public` and is then listed
   in `/catalog`.
+- A template or canvas has a **layout mode**: `table` (the rows × columns matrix above) or
+  `bento` (free-form cards with a `placement` on a 4–16 column grid). `Psc.Canvas.Structure`
+  is the only module that knows the shape; see `docs/spec/bento.md`.
 - A **canvas** is created from a template (or blank, or the built-in PSC). Creation goes
   through `Psc.Canvas.instantiate_template/3`; the cells and notes are a copy, never a link.
 - A **note** inherits its canvas's access rules. There is no per-note sharing.

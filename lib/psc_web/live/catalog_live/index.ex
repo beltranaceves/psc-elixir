@@ -164,8 +164,7 @@ defmodule PscWeb.CatalogLive.Index do
             </span>
 
             <span class="flex items-center gap-2 text-xs text-base-content/50">
-              <span>{length(template.layout_map["rows"] || [])} rows</span> <span>&times;</span>
-              <span>{length(template.layout_map["columns"] || [])} columns</span>
+              <span>{PscWeb.Components.TemplatePreview.structure_size(template.layout_map)}</span>
             </span>
 
             <span class="mt-3 flex items-center justify-between gap-2 border-t border-base-content/10 pt-3 text-xs text-base-content/50">
@@ -224,9 +223,7 @@ defmodule PscWeb.CatalogLive.Index do
               <dt class="text-xs uppercase tracking-wide text-base-content/45">Grid</dt>
 
               <dd class="text-base-content">
-                {length(@open_template.layout_map["rows"] || [])} rows × {length(
-                  @open_template.layout_map["columns"] || []
-                )} columns
+                {PscWeb.Components.TemplatePreview.structure_size(@open_template.layout_map)}
               </dd>
             </div>
 

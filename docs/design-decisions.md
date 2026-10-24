@@ -1537,3 +1537,88 @@ the global bundle and is pre-1.0, so upgrades need review.
    `add_row` / `remove_row` / `add_column` / `remove_column` / `add_cell_field` /
    `remove_cell_field` as CRDT operations, but grid structure can currently only be
    changed in the template designer.
+
+## ADR-035 — A canvas has a layout mode: table or bento
+
+**Context.** The editor only spoke one visual language: a rows x columns matrix with row
+and column headers. The same cells make sense as free-form cards on a board (a "bento"),
+and users asked for it. Two canvas implementations would duplicate the editor, the CRDT,
+autosave, presence, notes and the tests that guard them.
+
+**Decision.**
+
+- A structure has a `"layout_mode"`: `"table"` (the default when the key is absent) or
+  `"bento"`. The mode is chosen when a template is created and copied to its canvases.
+  There is no in-place conversion: converting would restructure everyone's content, and
+  the template-to-canvas rule is already "a copy, never a link". A user who wants a board
+  duplicates as bento instead.
+- Both modes share the cell vocabulary (`label`, fields, `titles`, Markdown content).
+  A bento cell adds `"placement"` (`x`, `y`, `w`, `h`) and an optional `"accent"`; the map
+  adds `"bento_columns"` (4–16, default 12). No new table, no migration: `cells` is jsonb,
+  and a row without `layout_mode` keeps rendering as a table forever.
+- A bento template is stored in the same flat shape as a bento canvas, so one module
+  (`Psc.Canvas.Structure`) serves the editor, the designer, the previews and the agent
+  tools. A table template keeps its cells nested under `"cells"`.
+
+**Consequences.** Two shapes exist, but only in `Structure.cells/1` and the designer's
+`cell_meta/2`: every other caller asks `Structure`. Validation branches on the mode, so
+the schema rejects a card that leaves the board. Geometry survives the snapshot/prune
+cycle unchanged because it is part of the cell, not a parallel list that could orphan.
+
+**Alternatives considered.** A `bento` table (rejected: content and geometry would
+diverge on every save). Absolute pixel positioning (rejected: no reflow, no responsive
+collapse, and mobile would need its own layout engine). Masonry (rejected: it cannot
+express a big picture beside a column of small cards).
+
+## ADR-036 — Bento geometry is grid-placed and last-write-wins
+
+**Context.** Cards move and resize. The event log must replay deterministically on every
+client, and the free tier allows ~10k rows per table.
+
+**Decision.**
+
+- A drag or resize sends **one** operation when the gesture ends (`move_card`,
+  `resize_card`), never one per pointer move. Arrow keys on the move grip send one
+  operation per press (`nudge_card`), or one `resize_card` with shift.
+- Geometry is clamped in one place, `Psc.Canvas.Structure.clamp_placement/2`, called by
+  the reducer. Two clients applying the same event therefore compute the same rectangle;
+  clamping in the LiveView would let a stale client disagree with the log.
+- Placement is per card, last-write-wins. Two people dragging the same card leave the
+  later `seq` on top. Overlap is not rejected: rejecting server-side would desync the
+  optimistic drag from the log, and a server-side "nudge into a free slot" would not
+  replay the same way twice.
+- A drag that ends where it started writes nothing: the generic no-op guard in
+  `process_operation/2` compares the resulting cells.
+
+**Consequences.** A card can briefly overlap another after concurrent drags; the later
+sequence wins. The event table grows by one row per gesture, not per frame.
+
+## ADR-037 — Mobile card navigation is server-computed
+
+**Context.** The fullscreen cell swipe walked `tr`/`td` in the DOM. A bento has no table,
+and even a table's swipe behaviour was only correct because of its markup.
+
+**Decision.**
+
+- `Psc.Canvas.Structure.neighbours/2` returns `left`, `right`, `up`, `down` for a card.
+  A table uses strict matrix neighbours (no wrap at an edge). A bento uses geometry
+  (cards sharing a span), with reading-order fallback for horizontal swipes so they never
+  get stuck at a ragged edge; vertical swipes stay geometric.
+- Each card carries them as `data-cell-nav` JSON, and `cell_focus.js` prefers them,
+  falling back to the DOM walk for older markup.
+
+**Consequences.** Navigation is testable server-side (it is a pure function of the
+structure), and the client no longer encodes layout knowledge.
+
+## ADR-038 — A bento card's height is a minimum
+
+**Context.** The table canvas fits the viewport. A bento board of cards with Markdown
+content cannot: a card that holds a paragraph would clip it, and inquiry notes are often
+long.
+
+**Decision.** A card's `h` is a minimum height in 72px row units, not a maximum. Cards
+grow with their content, and the board scrolls vertically. The table keeps its
+viewport-fit behaviour.
+
+**Consequences.** The two modes scroll differently on purpose; the board is a document,
+the table is a dashboard.

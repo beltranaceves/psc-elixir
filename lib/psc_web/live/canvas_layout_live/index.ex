@@ -129,7 +129,12 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-base-content/50">
             Available templates
           </h2>
-          <div id="template-grid" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <%!-- Equal rows: the create tiles and the template cards read as one
+          grid even when their descriptions wrap to different heights. --%>
+          <div
+            id="template-grid"
+            class="grid auto-rows-fr grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+          >
             <%!-- The create action is the first tile of the library: same size
             as a template card, so the list reads as one grid. The catalog
             follows it, so the two ways to get a template lead the page. --%>
@@ -177,6 +182,20 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       <span class="flex flex-col gap-1">
         <span class="font-medium text-base-content">New Template</span>
         <span class="text-sm text-base-content/50">Design a grid and its cells</span>
+      </span>
+    </.link>
+
+    <.link
+      id="new-bento-template-card"
+      navigate={~p"/templates/new?mode=bento"}
+      class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-4 text-center transition-colors hover:border-base-content/45 hover:bg-base-content/5"
+    >
+      <span class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <.icon name="hero-squares-2x2" class="size-5" />
+      </span>
+      <span class="flex flex-col gap-1">
+        <span class="font-medium text-base-content">New Bento Board</span>
+        <span class="text-sm text-base-content/50">Cards of any size on a 12-column board</span>
       </span>
     </.link>
     """
@@ -233,9 +252,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       </p>
 
       <div class="flex items-center gap-2 text-xs text-base-content/50 mb-4">
-        <span>{length(@template.layout_map["rows"] || [])} rows</span>
-        <span>&times;</span>
-        <span>{length(@template.layout_map["columns"] || [])} columns</span>
+        <span>{PscWeb.Components.TemplatePreview.structure_size(@template.layout_map)}</span>
       </div>
 
       <div class="flex flex-wrap items-center gap-2 mt-auto">

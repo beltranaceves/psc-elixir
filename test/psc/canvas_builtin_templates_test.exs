@@ -12,7 +12,7 @@ defmodule Psc.CanvasBuiltinTemplatesTest do
   describe "seed_builtin_templates/0" do
     test "creates the defaults once and is idempotent" do
       # The setup already seeded them.
-      assert {0, 2} = Canvas.seed_builtin_templates()
+      assert {0, 3} = Canvas.seed_builtin_templates()
 
       assert %{built_in: true, slug: "psc", public: true} = Canvas.get_template_by_slug("psc")
       assert %{built_in: true, slug: "scratchpad"} = Canvas.get_template_by_slug("scratchpad")
@@ -22,7 +22,7 @@ defmodule Psc.CanvasBuiltinTemplatesTest do
       psc = Canvas.get_template_by_slug("psc")
       {:ok, _edited} = Canvas.update_template(psc, %{"name" => "Renamed default"})
 
-      assert {0, 2} = Canvas.seed_builtin_templates()
+      assert {0, 3} = Canvas.seed_builtin_templates()
       assert Canvas.get_template_by_slug("psc").name == "Renamed default"
     end
 
@@ -56,6 +56,7 @@ defmodule Psc.CanvasBuiltinTemplatesTest do
       slugs = user |> Canvas.list_templates() |> Enum.map(& &1.slug)
       assert "psc" in slugs
       assert "scratchpad" in slugs
+      assert "bento" in slugs
 
       psc = Canvas.get_template_by_slug("psc")
       assert Canvas.can_access_template?(psc, user.email)

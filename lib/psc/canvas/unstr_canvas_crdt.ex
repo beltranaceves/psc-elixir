@@ -33,20 +33,20 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
       into its `@c_name` / `@c_desc` assigns).
   """
 
+  alias Psc.Canvas.Structure
   alias Psc.Canvas.UnstrCanvasEvent
   alias Psc.Repo
   import Ecto.Query
 
-  # Keys of a cell that are metadata, not content: never addable or removable
-  # as fields. `name` is the legacy label alias, `semantics` the removed field
-  # of ADR-012 — both kept reserved so old cells cannot gain them back.
-  @reserved_cell_keys ["row", "column", "label", "name", "semantics", "titles"]
-
   @doc """
   The cell keys that are metadata, not content: the structure events refuse
   to add or remove them.
+
+  The list lives in `Psc.Canvas.Structure` so the renderers, the reducer and
+  the validators share one definition; `placement` and `accent` are how a
+  bento card is drawn, never editable fields.
   """
-  def reserved_cell_keys, do: @reserved_cell_keys
+  def reserved_cell_keys, do: Psc.Canvas.Structure.reserved_cell_keys()
 
   def load_events(unstr_canvas_id) do
     from(e in UnstrCanvasEvent,
@@ -202,7 +202,7 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
   def apply_operation(%{"type" => "add_cell_field", "cell_key" => key, "field" => field}, cells) do
     update_cell_data(cells, key, fn cell ->
       cond do
-        field in @reserved_cell_keys ->
+        field in reserved_cell_keys() ->
           cell
 
         Map.has_key?(cell, field) ->
@@ -221,7 +221,7 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
         cells
       ) do
     update_cell_data(cells, key, fn cell ->
-      if field in @reserved_cell_keys do
+      if field in reserved_cell_keys() do
         cell
       else
         titles = Map.delete(cell["titles"] || %{}, field)
@@ -247,6 +247,52 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     update_cell_data(cells, key, fn cell ->
       Map.put(cell, "titles", Map.put(cell["titles"] || %{}, field, title))
     end)
+  end
+
+  ## Bento operations
+  #
+  # Geometry is clamped inside `Psc.Canvas.Structure` so every client - and a
+  # replay of the log - reaches exactly the same placement. A drag sends one
+  # operation on release, never one per pointer move.
+
+  def apply_operation(
+        %{"type" => "add_card", "cell_key" => key, "placement" => placement} = op,
+        cells
+      ) do
+    Structure.add_card(cells, key, placement, op["label"], op["accent"])
+  end
+
+  def apply_operation(%{"type" => "add_card", "cell_key" => key} = op, cells) do
+    Structure.add_card(cells, key, nil, op["label"], op["accent"])
+  end
+
+  def apply_operation(%{"type" => "remove_card", "cell_key" => key}, cells) do
+    Structure.remove_card(cells, key)
+  end
+
+  def apply_operation(
+        %{"type" => "move_card", "cell_key" => key, "x" => x, "y" => y},
+        cells
+      ) do
+    Structure.move(cells, key, x, y)
+  end
+
+  def apply_operation(
+        %{"type" => "resize_card", "cell_key" => key, "w" => w, "h" => h},
+        cells
+      ) do
+    Structure.resize(cells, key, w, h)
+  end
+
+  def apply_operation(
+        %{"type" => "set_card_accent", "cell_key" => key, "accent" => accent},
+        cells
+      ) do
+    Structure.set_accent(cells, key, accent)
+  end
+
+  def apply_operation(%{"type" => "set_bento_columns", "columns" => count}, cells) do
+    Structure.set_columns(cells, count)
   end
 
   def apply_operation(_op, cells), do: cells
