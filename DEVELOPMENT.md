@@ -303,12 +303,17 @@ Dokploy/Traefik do). A deployment served over plain HTTP on a port of its own se
 runs the `tailwind` and `esbuild` Hex packages, which download their standalone binaries
 with Erlang's HTTP client. That client refuses response headers over 10 KB, so a build
 host behind a proxy fails on the GitHub release redirect with
-`{:header_too_long, {:max, 10240}}`. Both the `Dockerfile` and the Dokploy `bootstrap`
-service therefore download the binaries with curl and set `TAILWIND_PATH` and
-`ESBUILD_PATH`; `config/config.exs` passes those to the packages as `:path`, and the
-packages skip their own download. Leave both unset on a host that can reach the releases
-(Gigalixir does), and the managed download stays in use. Keep the versions in the
-Dockerfile/compose block in step with `config/config.exs`.
+`{:header_too_long, {:max, 10240}}`. `mix psc.fetch_asset_clis` therefore runs first in
+`assets.build` and `assets.deploy`: it downloads both CLIs with curl into the exact paths
+the packages probe (`_build/tailwind-<target>-<version>`, `_build/esbuild-<target>`), so
+their own download never starts. A failure is reported, not raised, and the packages then
+try their own download as before.
+
+The `Dockerfile` and the Dokploy `bootstrap` service also pre-install the binaries and set
+`TAILWIND_PATH` / `ESBUILD_PATH`; `config/config.exs` passes those to the packages as
+`:path`. Either mechanism is enough — the env vars save the Mix task a download when a
+runner has already provisioned them. Keep the versions in the Dockerfile/compose block in
+step with `config/config.exs`.
 
 ### Toolchain
 
