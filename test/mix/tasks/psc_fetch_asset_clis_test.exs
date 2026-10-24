@@ -62,6 +62,35 @@ defmodule Mix.Tasks.Psc.FetchAssetClisTest do
     assert File.read!(path) == "fake"
   end
 
+  test "the esbuild executable is read out of the tarball, Unix layout" do
+    tarball = tarball_fixture([{~c"package/bin/esbuild", "#!/bin/sh\n"}])
+
+    assert FetchAssetClis.extract_esbuild(tarball) == {:ok, "#!/bin/sh\n"}
+  end
+
+  test "the esbuild executable is read out of the tarball, Windows layout" do
+    tarball = tarball_fixture([{~c"package/esbuild.exe", "MZ..."}])
+
+    assert FetchAssetClis.extract_esbuild(tarball) == {:ok, "MZ..."}
+  end
+
+  test "a tarball without the executable is reported, not guessed" do
+    tarball = tarball_fixture([{~c"package/package.json", "{}"}])
+
+    assert {:error, reason} = FetchAssetClis.extract_esbuild(tarball)
+    assert reason =~ "did not contain"
+  end
+
+  defp tarball_fixture(entries) do
+    path =
+      Path.join(System.tmp_dir!(), "esbuild-fixture-#{System.unique_integer([:positive])}.tgz")
+
+    :ok = :erl_tar.create(String.to_charlist(path), entries, [:compressed])
+    binary = File.read!(path)
+    File.rm!(path)
+    binary
+  end
+
   test "an unconfigured version is skipped rather than guessed" do
     Application.delete_env(:tailwind, :version)
     Application.delete_env(:esbuild, :version)

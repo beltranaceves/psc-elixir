@@ -299,21 +299,24 @@ sees: `https` on 443 when a proxy terminates TLS in front of the app (both Gigal
 Dokploy/Traefik do). A deployment served over plain HTTP on a port of its own sets
 `PSC_URL_SCHEME=http` and `PSC_URL_PORT=<port>`.
 
-**The asset CLIs are fetched with curl when the network needs it.** `mix assets.deploy`
+**The asset CLIs are fetched from mix, with no external tools.** `mix assets.deploy`
 runs the `tailwind` and `esbuild` Hex packages, which download their standalone binaries
-with Erlang's HTTP client. That client refuses response headers over 10 KB, so a build
-host behind a proxy fails on the GitHub release redirect with
-`{:header_too_long, {:max, 10240}}`. `mix psc.fetch_asset_clis` therefore runs first in
-`assets.build` and `assets.deploy`: it downloads both CLIs with curl into the exact paths
-the packages probe (`_build/tailwind-<target>-<version>`, `_build/esbuild-<target>`), so
-their own download never starts. A failure is reported, not raised, and the packages then
-try their own download as before.
+themselves with Erlang's `:httpc` and its default 10 KB response-header limit. The GitHub
+release redirect Tailwind follows exceeds that behind a proxy, so the build dies with
+`{:header_too_long, {:max, 10240}}`; esbuild's npm-registry download fails the same way.
 
-The `Dockerfile` and the Dokploy `bootstrap` service also pre-install the binaries and set
-`TAILWIND_PATH` / `ESBUILD_PATH`; `config/config.exs` passes those to the packages as
-`:path`. Either mechanism is enough — the env vars save the Mix task a download when a
-runner has already provisioned them. Keep the versions in the Dockerfile/compose block in
-step with `config/config.exs`.
+`mix psc.fetch_asset_clis` therefore runs first in `assets.build` and `assets.deploy`. It
+downloads both CLIs into the exact paths the packages probe
+(`_build/tailwind-<target>-<version>`, `_build/esbuild-<target>`), so their own download
+never starts. It uses `curl` when present and `:httpc` with `max_header_size` raised when
+not (the slim Elixir images ship no `curl`), and unpacks the esbuild tarball with
+`:erl_tar`, so it needs nothing beyond OTP. A failure is reported, not raised, and the
+packages then try their own download as before.
+
+The `Dockerfile` and the Dokploy `bootstrap` service can also pre-install the binaries and
+set `TAILWIND_PATH` / `ESBUILD_PATH` (passed through as `:path` in `config/config.exs`);
+that only saves the Mix task a download. Keep the versions there in step with
+`config/config.exs`.
 
 ### Toolchain
 

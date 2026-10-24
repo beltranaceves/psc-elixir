@@ -1,30 +1,38 @@
 defmodule Mix.Tasks.Psc.FetchAssetClis do
-  @shortdoc "Fetches the tailwind/esbuild CLIs with curl when Erlang's HTTP client cannot"
+  @shortdoc "Fetches the tailwind/esbuild CLIs when Erlang's HTTP client cannot"
 
   @moduledoc """
   Pre-fetches the Tailwind and esbuild executables that their Mix packages would
-  otherwise download with Erlang's `:httpc`.
+  otherwise download themselves.
 
-  `:httpc` rejects response headers longer than 10 KB, and the GitHub release
-  redirect that Tailwind's download follows exceeds that behind a proxy, so the
-  build dies with `{:header_too_long, {:max, 10240}}`. esbuild's package fetches
-  from the npm registry, which fails the same way on a proxied host.
+  Both packages use Erlang's `:httpc` with its default 10 KB response-header
+  limit. The GitHub release redirect that Tailwind's download follows exceeds
+  that behind a proxy, so the build dies with
+  `{:header_too_long, {:max, 10240}}`; esbuild's package fetches from the npm
+  registry and fails the same way there.
 
-  This task downloads both with `curl` and writes them to the exact paths the
-  packages probe (`Tailwind.bin_path/1`, `Esbuild.bin_path/0`), so their
-  `install` step finds them and does nothing. It is deliberately
-  runner-independent: `mix assets.build` and `mix assets.deploy` call it, so a
-  Dockerfile, a compose bootstrap or a buildpack all get the same behaviour
-  without having to carry its logic.
+  This task downloads both to the exact paths the packages probe
+  (`Tailwind.bin_path/1`, `Esbuild.bin_path/0`), so their `install` step finds
+  them and does nothing. `curl` is used when it is installed, and `:httpc` with
+  `max_header_size` raised when it is not — the slim Elixir images ship without
+  `curl`, and `:erl_tar` replaces `tar` for the esbuild tarball. It therefore
+  needs nothing beyond OTP, which is why it lives here rather than in a
+  Dockerfile or a compose bootstrap: `mix assets.build` and `mix assets.deploy`
+  run it in every build path.
 
   It no-ops when the binaries are already present (including when
   `TAILWIND_PATH` / `ESBUILD_PATH` point at an installed CLI), and a failure is
-  reported rather than raised: the packages then attempt their own download and
-  produce their usual, more specific error.
+  reported rather than raised so the packages still get their own attempt.
   """
 
   use Mix.Task
 
+  # The GitHub release redirect's headers are well over httpc's 10 KB default.
+  @max_header_size 512 * 1024
+
+  @doc """
+  Fetches both CLIs, reporting rather than raising.
+  """
   @impl Mix.Task
   def run(_args) do
     report(ensure_tailwind())
@@ -91,6 +99,27 @@ defmodule Mix.Tasks.Psc.FetchAssetClis do
     "https://registry.npmjs.org/@esbuild/#{target}/-/#{target}-#{version}.tgz"
   end
 
+  @doc """
+  Extracts the executable from an esbuild npm tarball.
+
+  The tarball holds the executable alone: `package/bin/esbuild` on Unix,
+  `package/esbuild.exe` on Windows — the same two layouts esbuild's own
+  installer reads. `:erl_tar` is used instead of the `tar` command so a slim
+  build image needs no external tools.
+  """
+  def extract_esbuild(tarball) when is_binary(tarball) do
+    with {:ok, entries} <- :erl_tar.extract({:binary, tarball}, [:compressed, :memory]) do
+      case Enum.find_value(entries, fn {name, contents} ->
+             if name in [~c"package/bin/esbuild", ~c"package/esbuild.exe"], do: contents
+           end) do
+        nil -> {:error, "the esbuild tarball did not contain the executable"}
+        binary -> {:ok, binary}
+      end
+    else
+      {:error, reason} -> {:error, "the esbuild tarball could not be read: #{inspect(reason)}"}
+    end
+  end
+
   # The package names its binary "esbuild-<target>", which is exactly the npm
   # scope name, so the installed path is the source of truth for the target.
   defp esbuild_target(path) do
@@ -98,84 +127,68 @@ defmodule Mix.Tasks.Psc.FetchAssetClis do
   end
 
   defp install(url, path) do
-    if String.ends_with?(url, ".tgz") do
-      install_esbuild(url, path)
-    else
-      install_binary(url, path)
-    end
-  end
-
-  defp install_binary(url, path) do
-    with :ok <- curl(url, path) do
+    with :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- write(url, path) do
       File.chmod!(path, 0o755)
       report_fetch(path)
     end
   end
 
-  # The tarball holds "package/bin/esbuild"; only the executable is kept.
-  defp install_esbuild(url, path) do
-    tmp = Path.join(System.tmp_dir!(), "esbuild-cli-#{System.unique_integer([:positive])}")
-    tar = tmp <> ".tgz"
-    File.mkdir_p!(tmp)
+  # The esbuild URL is a tarball, so it is fetched whole and unpacked in memory
+  # (a few MB) instead of being streamed to its final path.
+  defp write(url, path) do
+    if String.ends_with?(url, ".tgz") do
+      tmp = path <> ".tgz"
 
-    result =
-      with :ok <- curl(url, tar),
-           :ok <- untar(tar, tmp),
-           :ok <- copy_esbuild(tmp, path) do
-        File.chmod!(path, 0o755)
-        report_fetch(path)
+      with :ok <- fetch_to_file(url, tmp),
+           {:ok, binary} <- extract_esbuild(File.read!(tmp)) do
+        File.rm(tmp)
+        File.write(path, binary)
       end
-
-    File.rm_rf(tmp)
-    File.rm(tar)
-    result
-  end
-
-  # The tarball holds the executable alone: "package/bin/esbuild" on Unix,
-  # "package/esbuild.exe" on Windows — the same two layouts esbuild's own
-  # installer reads.
-  defp copy_esbuild(tmp, path) do
-    source =
-      ["package/bin/esbuild", "package/esbuild.exe"]
-      |> Enum.map(&Path.join(tmp, &1))
-      |> Enum.find(&File.exists?/1)
-
-    if source do
-      File.mkdir_p!(Path.dirname(path))
-      File.cp!(source, path)
-      :ok
     else
-      {:error, "the esbuild tarball did not contain package/bin/esbuild"}
+      fetch_to_file(url, path)
     end
   end
 
-  defp untar(tar, destination) do
-    case System.find_executable("tar") do
-      nil ->
-        {:error, "tar is not installed"}
-
-      exe ->
-        case System.cmd(exe, ["-xzf", tar, "-C", destination], stderr_to_stdout: true) do
-          {_out, 0} -> :ok
-          {out, code} -> {:error, "tar exited #{code}: #{String.trim(out)}"}
-        end
-    end
-  end
-
-  defp curl(url, path) do
+  # curl streams a 100+ MB binary to disk without holding it in memory; httpc is
+  # the fallback for images that do not ship curl, which is the usual case for
+  # slim Elixir base images.
+  defp fetch_to_file(url, path) do
     case System.find_executable("curl") do
-      nil ->
-        {:error, "curl is not installed"}
+      nil -> fetch_with_httpc(url, path)
+      exe -> run_curl(exe, url, path)
+    end
+  end
 
-      exe ->
-        File.mkdir_p!(Path.dirname(path))
+  defp run_curl(exe, url, path) do
+    args = ["-fsSL", "--retry", "3", "--retry-delay", "2", "-o", path, url]
 
-        args = ["-fsSL", "--retry", "3", "--retry-delay", "2", "-o", path, url]
+    case System.cmd(exe, args, stderr_to_stdout: true) do
+      {_out, 0} -> :ok
+      {out, code} -> {:error, "curl exited #{code} for #{url}: #{String.trim(out)}"}
+    end
+  end
 
-        case System.cmd(exe, args, stderr_to_stdout: true) do
-          {_out, 0} -> :ok
-          {out, code} -> {:error, "curl exited #{code} for #{url}: #{String.trim(out)}"}
-        end
+  defp fetch_with_httpc(url, path) do
+    # httpc refuses headers over 10 KB, which is exactly the failure this task
+    # exists to avoid; the limit is a per-request option.
+    {:ok, _} = Application.ensure_all_started(:inets)
+    {:ok, _} = Application.ensure_all_started(:ssl)
+
+    request = {String.to_charlist(url), []}
+    http_options = [timeout: 300_000, connect_timeout: 30_000, autoredirect: true]
+    options = [body_format: :binary, max_header_size: @max_header_size]
+
+    case :httpc.request(:get, request, http_options, options) do
+      {:ok, {{_, 200, _}, _headers, body}} ->
+        File.write!(path, body)
+        :ok
+
+      {:ok, {{_, status, _}, _headers, _body}} ->
+        {:error, "GET #{url} returned #{status}"}
+
+      {:error, reason} ->
+        {:error, "GET #{url} failed: #{inspect(reason)}"}
     end
   end
 
