@@ -33,6 +33,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
          |> assign(:template_form, to_form(%{}))
          |> assign(:editing_layout, nil)
          |> assign(:owner?, true)
+         |> assign(:can_edit?, true)
          |> assign(:share_open, false)
          |> assign(:accent_picker, nil)
          |> assign(:confirm_leave?, false)
@@ -44,6 +45,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           %{} = template ->
             if Canvas.can_access_template?(template, user.email) do
               owner? = template.author_id == user.id
+              can_edit? = not template.built_in
 
               {:ok,
                socket
@@ -54,6 +56,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                )
                |> assign(:editing_layout, template)
                |> assign(:owner?, owner?)
+               |> assign(:can_edit?, can_edit?)
                |> assign(:share_open, false)
                |> assign(:accent_picker, nil)
                |> assign(:confirm_leave?, false)
@@ -75,7 +78,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     end
   end
 
-  # ─── Grid structure events (owner only) ───
+  # ─── Grid structure events ───
 
   @impl true
   def handle_event("add_column", _params, socket) do
@@ -83,9 +86,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   # The note mode is a property of the template, and it decides how the
-  # canvases made from it behave. Only the owner may change it.
+  # canvases made from it behave.
   def handle_event("set_notes_mode", %{"mode" => mode}, socket) do
-    if socket.assigns.owner? and mode in NotesMode.modes() do
+    if socket.assigns.can_edit? and mode in NotesMode.modes() do
       {:noreply,
        update_layout(socket, fn lm ->
          lm
@@ -99,7 +102,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   # A note the template carries. A canvas made from it starts with a copy.
   def handle_event("add_note", _params, socket) do
-    if socket.assigns.owner? do
+    if socket.assigns.can_edit? do
       {:noreply,
        update_layout(socket, fn lm ->
          notes = Map.get(lm, "notes", []) ++ [empty_template_note()]
@@ -111,7 +114,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   def handle_event("remove_note", %{"index" => index}, socket) do
-    if socket.assigns.owner? do
+    if socket.assigns.can_edit? do
       {:noreply,
        update_layout(socket, fn lm ->
          Map.put(lm, "notes", List.delete_at(Map.get(lm, "notes", []), String.to_integer(index)))
@@ -165,7 +168,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     {:noreply, update_layout(socket, &update_row_label(&1, String.to_integer(index), label))}
   end
 
-  # ─── Accent colors (owner only) ───
+  # ─── Accent colors ───
 
   @impl true
   def handle_event("toggle_accent_picker", %{"group" => group, "index" => index}, socket)
@@ -193,7 +196,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
      |> assign(:accent_picker, nil)}
   end
 
-  # ─── Cell metadata events (owner only) ───
+  # ─── Cell metadata events ───
 
   @impl true
   def handle_event(
@@ -285,7 +288,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   def handle_event(
         "save_template",
         %{"name" => name, "description" => description} = params,
-        socket
+        %{assigns: %{can_edit?: true}} = socket
       ) do
     user = socket.assigns.current_scope.user
 
@@ -312,6 +315,10 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Failed to save template")}
     end
+  end
+
+  def handle_event("save_template", _params, socket) do
+    {:noreply, put_flash(socket, :error, "This template cannot be edited")}
   end
 
   @impl true
@@ -599,9 +606,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       container_class="w-full mx-auto max-w-screen-xl"
     >
       <div>
-        <%= if @editing_layout && !@owner? do %>
+        <%= if @editing_layout && !@can_edit? do %>
           <div class="mb-6 p-3 rounded-lg border border-base-content/10 bg-base-200 text-sm text-base-content/60">
-            You have read-only access to this template. Ask the owner to make changes.
+            Built-in templates are read-only. Create your own template to change the structure.
           </div>
         <% end %>
 
@@ -646,7 +653,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                 field={@template_form[:name]}
                 type="text"
                 required
-                disabled={!@owner?}
+                disabled={!@can_edit?}
               />
             </div>
 
@@ -655,13 +662,13 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
               <UITextarea.textarea
                 field={@template_form[:description]}
                 rows="2"
-                disabled={!@owner?}
+                disabled={!@can_edit?}
               />
             </div>
 
-            <%= if @owner? do %>
-              <%!-- Publishing is the owner's choice, and it is saved with the
-              template like any other field: no separate publish action. --%>
+            <%= if @can_edit? do %>
+              <%!-- Publishing is saved with the template like any other field:
+              no separate publish action. --%>
               <label class="flex items-start gap-2.5 rounded-lg border border-base-content/10 bg-base-200/60 p-3 text-sm text-base-content transition-colors hover:border-base-content/20">
                 <UICheckbox.checkbox
                   id="template-public"
@@ -678,7 +685,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
               </label>
             <% end %>
 
-            <%= if @owner? do %>
+            <%= if @can_edit? do %>
               <div class="flex items-center justify-end gap-3 border-t border-base-content/10 pt-4">
                 <span
                   :if={@dirty?}
@@ -715,7 +722,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                   id={"notes-mode-" <> mode}
                   phx-click="set_notes_mode"
                   phx-value-mode={mode}
-                  disabled={not @owner?}
+                  disabled={not @can_edit?}
                   aria-pressed={to_string(@layout_map["notes_mode"] == mode)}
                   class={[
                     "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
@@ -742,7 +749,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                   <% end %>
                 </h3>
 
-                <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
+                <%= if @can_edit? and @layout_map["notes_mode"] != "single" do %>
                   <UIButton.button variant="outline" size="sm" phx-click="add_note">
                     <.icon name="hero-plus" class="size-4" /> Add note
                   </UIButton.button>
@@ -780,7 +787,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                         />
                       </form>
 
-                      <%= if @owner? and @layout_map["notes_mode"] != "single" do %>
+                      <%= if @can_edit? and @layout_map["notes_mode"] != "single" do %>
                         <button
                           type="button"
                           phx-click="remove_note"
@@ -818,7 +825,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           </.section>
 
           <.section id="template-grid" title="Grid" hint={grid_hint(@layout_map)} open>
-            <%= if @owner? do %>
+            <%= if @can_edit? do %>
               <div class="mb-3 flex flex-wrap justify-end gap-2">
                 <UIButton.button variant="outline" size="sm" phx-click="add_column">
                   Add Column
@@ -865,12 +872,12 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                     name="label"
                                     value={col["label"]}
                                     phx-debounce="300"
-                                    disabled={!@owner?}
+                                    disabled={!@can_edit?}
                                     class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
                                   />
                                 </form>
 
-                                <%= if @owner? do %>
+                                <%= if @can_edit? do %>
                                   <button
                                     type="button"
                                     id={"accent-swatch-column-#{col["id"]}"}
@@ -899,7 +906,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                               </div>
 
                               <div
-                                :if={@owner? and @accent_picker == {:column, ci}}
+                                :if={@can_edit? and @accent_picker == {:column, ci}}
                                 id={"accent-picker-column-#{col["id"]}"}
                                 class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
                               >
@@ -959,12 +966,12 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                   name="label"
                                   value={row_meta["label"]}
                                   phx-debounce="300"
-                                  disabled={!@owner?}
+                                  disabled={!@can_edit?}
                                   class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
                                 />
                               </form>
 
-                              <%= if @owner? do %>
+                              <%= if @can_edit? do %>
                                 <button
                                   type="button"
                                   id={"accent-swatch-row-#{row_meta["id"]}"}
@@ -993,7 +1000,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                             </div>
 
                             <div
-                              :if={@owner? and @accent_picker == {:row, ri}}
+                              :if={@can_edit? and @accent_picker == {:row, ri}}
                               id={"accent-picker-row-#{row_meta["id"]}"}
                               class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
                             >
@@ -1042,7 +1049,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                   phx-debounce="300"
                                   name="value"
                                   placeholder={cell_key}
-                                  disabled={!@owner?}
+                                  disabled={!@can_edit?}
                                   class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
                                 />
                               </form>
@@ -1070,7 +1077,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                         name="value"
                                         placeholder={field}
                                         title={"Section title for #{field} (empty hides it)"}
-                                        disabled={!@owner?}
+                                        disabled={!@can_edit?}
                                         class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                                       />
                                     </form>
@@ -1096,13 +1103,13 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                         phx-debounce="300"
                                         name="value"
                                         placeholder="Default"
-                                        disabled={!@owner?}
+                                        disabled={!@can_edit?}
                                         class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                                       />
                                     </form>
 
                                     <button
-                                      :if={@owner?}
+                                      :if={@can_edit?}
                                       type="button"
                                       phx-click="remove_cell_field"
                                       phx-value-cell_key={cell_key}
@@ -1118,7 +1125,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                               </ul>
 
                               <form
-                                :if={@owner?}
+                                :if={@can_edit?}
                                 id={"cell-#{cell_key}-add-field-form"}
                                 phx-submit="add_cell_field"
                                 class="mt-2 flex gap-1"
@@ -1172,7 +1179,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
         </div>
 
         <UIDialog.dialog
-          :if={@owner?}
+          :if={@can_edit?}
           id="discard-template-dialog"
           open={@confirm_leave?}
           on-close="leave_dialog_closed"

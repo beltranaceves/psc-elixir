@@ -254,10 +254,11 @@ the PSC mark while the **Templates** nav item stays current (highlighted,
 **Name** and **Description** fields, a **Public** toggle, and the Cancel / Save Template
 actions.
 
-The **Public** toggle is the owner's choice to list the template in the
-[catalog](catalog.md). It is a checkbox in the save form, so publishing is saved with the
-template like any other field — there is no separate publish action and no second save
-button. A read-only viewer sees no toggle and no save controls.
+The **Public** toggle lists the template in the [catalog](catalog.md). It is a
+checkbox in the save form, so publishing is saved with the template like any other
+field — there is no separate publish action and no second save button. Anyone who
+can edit the template can set it. A built-in template is read-only: its viewer sees
+no toggle and no save controls, and the page says so.
 
 The rest of the designer is **collapsible sections** (`PscWeb.Components.Section`, a
 native `<details>`): **Notes**, **Grid**, **Analysis** and **Agent**. Each section's
@@ -280,13 +281,14 @@ The existing `CanvasLayoutLive.Editor` already supports add/remove rows and colu
 
    **Templates are not autosaved.** All edits (grid structure, cell labels/fields, accents, name, description) live in the LiveView's in-memory `layout_map` until **Save Template** is submitted; leaving the page discards them. The designer therefore shows an **“Unsaved changes”** indicator once anything is edited, and a **Cancel** button that opens a `UIDialog` confirmation (“Discard unsaved changes?” → **Keep editing** / **Discard and leave**) before leaving the library. Cancel with nothing dirty navigates straight back without a prompt. (Canvases and documents behave differently — they autosave.)
 
-4. **Share** — a **Share** combo button in the header (share icon + label) opens a modal containing the email invite form, the list of people with access (each with a remove ×), and a Done action. The dialog is the shared `PscWeb.Components.ShareDialog` used by the canvas and document editors too.
+4. **Share** — a **Share** combo button in the header (share icon + label) opens a modal containing the email invite form, the list of people with access (each with a remove ×), and a Done action. The dialog is the shared `PscWeb.Components.ShareDialog` used by the canvas and document editors too. Sharing and deletion stay owner-only; everyone the template is shared with can edit it.
 
 5. **Note mode** — the **Notes** section picks how the canvases made from this
    template handle notes: **Multiple notes** (a list) or **Single note** (a
    scratchpad — one note for the whole canvas). The setting is stored in the
    template's `layout_map` as `"notes_mode"` and copied onto the canvas as
-   `notes_mode` when it is instantiated. Only the owner may change it. See
+   `notes_mode` when it is instantiated. Anyone with edit access may change
+   it. See
    [ADR-029](../design-decisions.md#adr-029--a-template-picks-its-note-mode) and
    [canvas-notes.md](canvas-notes.md).
 

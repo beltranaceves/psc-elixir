@@ -594,17 +594,46 @@ defmodule PscWeb.CanvasLayoutLiveTest do
                live(conn, ~p"/templates/#{template.id}")
     end
 
-    test "shared non-owner sees read-only view without save controls", %{conn: conn, user: user} do
+    test "shared non-owner can edit and save", %{conn: conn, user: user} do
       owner = Psc.AccountsFixtures.user_fixture()
-      template = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id, name: "RO Tpl"})
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: owner.id, name: "Shared Tpl"})
       {:ok, _} = Canvas.share_template_with(template, user.email)
+
+      {:ok, lv, html} = live(conn, ~p"/templates/#{template.id}")
+
+      refute html =~ "read-only"
+      assert html =~ "Save Template"
+      assert has_element?(lv, "#template-public")
+      # Sharing stays an owner action.
+      refute has_element?(lv, "#share-template-button")
+
+      lv |> element("button[phx-click='add_column']") |> render_click()
+      lv |> element("button[phx-click='add_row']") |> render_click()
+
+      assert {:error, {:redirect, %{to: "/templates"}}} =
+               lv
+               |> form("#template-form", %{
+                 "name" => "Shared Tpl Edited",
+                 "description" => "Edited by a collaborator"
+               })
+               |> render_submit()
+
+      saved = Canvas.get_template_with_author(template.id)
+      assert saved.name == "Shared Tpl Edited"
+      assert saved.description == "Edited by a collaborator"
+      assert length(saved.layout_map["columns"]) == 3
+      assert length(saved.layout_map["rows"]) == 3
+    end
+
+    test "built-in templates stay read-only", %{conn: conn} do
+      Canvas.seed_builtin_templates()
+      template = Canvas.get_template_by_slug("psc")
 
       {:ok, _lv, html} = live(conn, ~p"/templates/#{template.id}")
 
-      assert html =~ "read-only"
+      assert html =~ "Built-in templates are read-only"
       refute html =~ "Save Template"
       refute html =~ "Add Column"
-      # Publishing is the owner's choice.
       refute html =~ ~s(id="template-public")
     end
 
