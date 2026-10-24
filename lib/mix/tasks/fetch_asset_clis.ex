@@ -1,38 +1,31 @@
 defmodule Mix.Tasks.Psc.FetchAssetClis do
-  @shortdoc "Fetches the tailwind/esbuild CLIs when Erlang's HTTP client cannot"
+  @shortdoc "Fetches the tailwind/esbuild CLIs that their Mix packages cannot download"
 
   @moduledoc """
-  Pre-fetches the Tailwind and esbuild executables that their Mix packages would
-  otherwise download themselves.
+  Pre-fetches the Tailwind and esbuild executables into the paths their Mix
+  packages probe, so `mix tailwind` and `mix esbuild` never attempt their own
+  download.
 
-  Both packages use Erlang's `:httpc` with its default 10 KB response-header
-  limit. The GitHub release redirect that Tailwind's download follows exceeds
-  that behind a proxy, so the build dies with
-  `{:header_too_long, {:max, 10240}}`; esbuild's package fetches from the npm
-  registry and fails the same way there.
+  Both packages download with Erlang's `:httpc`, which rejects response headers
+  over 10 KB. The GitHub release redirect behind a proxy exceeds that, so a
+  proxied build dies with `{:header_too_long, {:max, 10240}}`; esbuild's npm
+  registry fetch fails the same way. `:httpc` cannot raise the limit for the
+  packages' own request, hence this task: it downloads with `curl` (which
+  streams the 100+ MB Tailwind binary to disk) and unpacks the esbuild tarball
+  with `:erl_tar`.
 
-  This task downloads both to the exact paths the packages probe
-  (`Tailwind.bin_path/1`, `Esbuild.bin_path/0`), so their `install` step finds
-  them and does nothing. `curl` is used when it is installed, and `:httpc` with
-  `max_header_size` raised when it is not — the slim Elixir images ship without
-  `curl`, and `:erl_tar` replaces `tar` for the esbuild tarball. It therefore
-  needs nothing beyond OTP, which is why it lives here rather than in a
-  Dockerfile or a compose bootstrap: `mix assets.build` and `mix assets.deploy`
-  run it in every build path.
+  **It needs `curl`.** The Dokploy compose bootstrap installs it, and the
+  Dockerfile's builder stage already has it. A host without curl is reported
+  plainly rather than worked around — keep the dependency there instead of
+  growing this task into a second HTTP client.
 
-  It no-ops when the binaries are already present (including when
-  `TAILWIND_PATH` / `ESBUILD_PATH` point at an installed CLI), and a failure is
-  reported rather than raised so the packages still get their own attempt.
+  `assets.build` and `assets.deploy` run it, so every build path gets it. It
+  no-ops when the binaries are already present, and reports failures rather than
+  raising, leaving the packages to produce their own error.
   """
 
   use Mix.Task
 
-  # The GitHub release redirect's headers are well over httpc's 10 KB default.
-  @max_header_size 512 * 1024
-
-  @doc """
-  Fetches both CLIs, reporting rather than raising.
-  """
   @impl Mix.Task
   def run(_args) do
     report(ensure_tailwind())
@@ -104,8 +97,7 @@ defmodule Mix.Tasks.Psc.FetchAssetClis do
 
   The tarball holds the executable alone: `package/bin/esbuild` on Unix,
   `package/esbuild.exe` on Windows — the same two layouts esbuild's own
-  installer reads. `:erl_tar` is used instead of the `tar` command so a slim
-  build image needs no external tools.
+  installer reads. `:erl_tar` keeps this independent of the `tar` command.
   """
   def extract_esbuild(tarball) when is_binary(tarball) do
     with {:ok, entries} <- :erl_tar.extract({:binary, tarball}, [:compressed, :memory]) do
@@ -140,55 +132,28 @@ defmodule Mix.Tasks.Psc.FetchAssetClis do
     if String.ends_with?(url, ".tgz") do
       tmp = path <> ".tgz"
 
-      with :ok <- fetch_to_file(url, tmp),
+      with :ok <- fetch(url, tmp),
            {:ok, binary} <- extract_esbuild(File.read!(tmp)) do
         File.rm(tmp)
         File.write(path, binary)
       end
     else
-      fetch_to_file(url, path)
+      fetch(url, path)
     end
   end
 
-  # curl streams a 100+ MB binary to disk without holding it in memory; httpc is
-  # the fallback for images that do not ship curl, which is the usual case for
-  # slim Elixir base images.
-  defp fetch_to_file(url, path) do
+  defp fetch(url, path) do
     case System.find_executable("curl") do
-      nil -> fetch_with_httpc(url, path)
-      exe -> run_curl(exe, url, path)
-    end
-  end
+      nil ->
+        {:error, "curl is not installed, so the CLIs cannot be fetched"}
 
-  defp run_curl(exe, url, path) do
-    args = ["-fsSL", "--retry", "3", "--retry-delay", "2", "-o", path, url]
+      exe ->
+        args = ["-fsSL", "--retry", "3", "--retry-delay", "2", "-o", path, url]
 
-    case System.cmd(exe, args, stderr_to_stdout: true) do
-      {_out, 0} -> :ok
-      {out, code} -> {:error, "curl exited #{code} for #{url}: #{String.trim(out)}"}
-    end
-  end
-
-  defp fetch_with_httpc(url, path) do
-    # httpc refuses headers over 10 KB, which is exactly the failure this task
-    # exists to avoid; the limit is a per-request option.
-    {:ok, _} = Application.ensure_all_started(:inets)
-    {:ok, _} = Application.ensure_all_started(:ssl)
-
-    request = {String.to_charlist(url), []}
-    http_options = [timeout: 300_000, connect_timeout: 30_000, autoredirect: true]
-    options = [body_format: :binary, max_header_size: @max_header_size]
-
-    case :httpc.request(:get, request, http_options, options) do
-      {:ok, {{_, 200, _}, _headers, body}} ->
-        File.write!(path, body)
-        :ok
-
-      {:ok, {{_, status, _}, _headers, _body}} ->
-        {:error, "GET #{url} returned #{status}"}
-
-      {:error, reason} ->
-        {:error, "GET #{url} failed: #{inspect(reason)}"}
+        case System.cmd(exe, args, stderr_to_stdout: true) do
+          {_out, 0} -> :ok
+          {out, code} -> {:error, "curl exited #{code} for #{url}: #{String.trim(out)}"}
+        end
     end
   end
 

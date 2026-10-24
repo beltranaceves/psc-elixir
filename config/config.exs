@@ -63,16 +63,9 @@ config :backpex,
   translator_function: {PscWeb.CoreComponents, :translate_backpex},
   error_translator_function: {PscWeb.CoreComponents, :translate_error}
 
-# Configure esbuild (the version is required).
-#
-# ESBUILD_PATH / TAILWIND_PATH point the Mix tasks at CLIs the build host
-# already has. Erlang's HTTP client refuses response headers over 10 KB, which
-# proxied GitHub release redirects exceed, so a proxied build host cannot use
-# the packages' own download step; the Docker image fetches the binaries with
-# curl and sets these. Unset (dev, Gigalixir) keeps the managed download.
+# Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",
-  path: System.get_env("ESBUILD_PATH"),
   psc: [
     args:
       ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
@@ -83,7 +76,6 @@ config :esbuild,
 # Configure tailwind (the version is required)
 config :tailwind,
   version: "4.1.12",
-  path: System.get_env("TAILWIND_PATH"),
   psc: [
     args: ~w(
       --input=assets/css/app.css

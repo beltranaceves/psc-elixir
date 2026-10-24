@@ -299,24 +299,18 @@ sees: `https` on 443 when a proxy terminates TLS in front of the app (both Gigal
 Dokploy/Traefik do). A deployment served over plain HTTP on a port of its own sets
 `PSC_URL_SCHEME=http` and `PSC_URL_PORT=<port>`.
 
-**The asset CLIs are fetched from mix, with no external tools.** `mix assets.deploy`
-runs the `tailwind` and `esbuild` Hex packages, which download their standalone binaries
-themselves with Erlang's `:httpc` and its default 10 KB response-header limit. The GitHub
-release redirect Tailwind follows exceeds that behind a proxy, so the build dies with
-`{:header_too_long, {:max, 10240}}`; esbuild's npm-registry download fails the same way.
+**The asset CLIs are fetched with curl.** `mix assets.deploy` runs the `tailwind` and
+`esbuild` packages, which download their CLIs with Erlang's `:httpc`; that client rejects
+response headers over 10 KB, and the GitHub release redirect Tailwind follows exceeds it
+behind a proxy — `{:header_too_long, {:max, 10240}}`. `mix psc.fetch_asset_clis` runs
+first in `assets.build` and `assets.deploy` and downloads both into the paths the packages
+probe (`_build/tailwind-<target>-<version>`, `_build/esbuild-<target>`), so their own
+download never starts; the esbuild tarball is unpacked with `:erl_tar`.
 
-`mix psc.fetch_asset_clis` therefore runs first in `assets.build` and `assets.deploy`. It
-downloads both CLIs into the exact paths the packages probe
-(`_build/tailwind-<target>-<version>`, `_build/esbuild-<target>`), so their own download
-never starts. It uses `curl` when present and `:httpc` with `max_header_size` raised when
-not (the slim Elixir images ship no `curl`), and unpacks the esbuild tarball with
-`:erl_tar`, so it needs nothing beyond OTP. A failure is reported, not raised, and the
-packages then try their own download as before.
-
-The `Dockerfile` and the Dokploy `bootstrap` service can also pre-install the binaries and
-set `TAILWIND_PATH` / `ESBUILD_PATH` (passed through as `:path` in `config/config.exs`);
-that only saves the Mix task a download. Keep the versions there in step with
-`config/config.exs`.
+It requires `curl`: the Dokploy `bootstrap` service installs it, and the Dockerfile's
+builder stage already has it. Without curl the task reports that and leaves the packages
+to produce their own error, so keep curl in the build image rather than adding a second
+HTTP client.
 
 ### Toolchain
 
