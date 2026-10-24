@@ -173,4 +173,94 @@ defmodule PscWeb.CanvasAgentTabTest do
 
     assert has_element?(view, "#canvas-agent-title", "renamed")
   end
+
+  test "stopping clears the status phase even without a running turn", %{
+    conn: conn,
+    user: user
+  } do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, _session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    # A turn's status is broadcast on the session topic; seed one directly so
+    # the test does not need a model call.
+    send(view.pid, {:status, 1, "waiting for the model…"})
+    assert render(view) =~ "waiting for the model…"
+
+    render_click(view, "agent_stop", %{})
+    refute render(view) =~ "waiting for the model…"
+  end
+
+  test "starting a new chat clears the previous phase", %{conn: conn, user: user} do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, _session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    send(view.pid, {:status, 1, "running canvas_cell"})
+    assert render(view) =~ "running canvas_cell"
+
+    view |> element(~s|button[phx-click="agent_new"]|) |> render_click()
+
+    refute render(view) =~ "running canvas_cell"
+  end
+
+  test "stopping cancels the streaming message", %{conn: conn, user: user} do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+    {:ok, _user_message} = Agent.append_user_message(session, "hello")
+    {:ok, _assistant} = Agent.start_assistant_message(session)
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    # A streaming message is in the transcript; Stop must cancel that row, not
+    # put the context's `{:ok, message}` tuple into the list.
+    render_click(view, "agent_stop", %{})
+
+    assert render(view) =~ "Stopped."
+  end
+
+  # Deltas are broadcast, not persisted until the turn completes. A tab switch
+  # must not replace the in-memory transcript with the (still empty) DB row.
+  test "switching tabs keeps deltas already streamed into the transcript", %{
+    conn: conn,
+    user: user
+  } do
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+    {:ok, _user_message} = Agent.append_user_message(session, "hello")
+    {:ok, assistant} = Agent.start_assistant_message(session)
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    Phoenix.PubSub.broadcast(
+      Psc.PubSub,
+      Turn.topic(session.id),
+      {:delta, assistant.id, "partial answer"}
+    )
+
+    assert render(view) =~ "partial answer"
+
+    view |> element("#canvas-tab-editor") |> render_click()
+    view |> element("#canvas-tab-agent") |> render_click()
+
+    assert render(view) =~ "partial answer"
+  end
 end

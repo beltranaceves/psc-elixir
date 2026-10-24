@@ -18,6 +18,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias Psc.Notes
   alias PscWeb.Markdown
   alias PscWeb.Presence
+  alias PscWeb.UnstrCanvasLive.Save
   require Logger
 
   @idle_save_interval 1500
@@ -97,6 +98,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:notes, [])
         |> assign(:note, nil)
         |> assign(:note_content, "")
+        |> assign(:note_html, "")
         |> assign(:note_last_saved_content, "")
         |> assign(:note_idle_timer_ref, nil)
         |> assign(:note_save_state, :saved)
@@ -140,42 +142,68 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   defp process_operation(socket, operation) do
-    Canvas.apply_unstr_canvas_operation(
-      socket.assigns.canvas_id,
-      socket.assigns.user_id,
-      socket.assigns.client_id,
-      operation
-    )
-
     cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
 
-    Logger.debug(
-      "[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}"
-    )
+    # A blur can send the value that was already there (the cell hook does this
+    # for every field), and structure edits are idempotent. Recording those
+    # would create an event row and flip the pill to Unsaved for no change.
+    if cells == socket.assigns.cells do
+      socket
+    else
+      socket = record_operation(socket, operation)
 
-    c_name = Map.get(cells, "$name", socket.assigns.c_name)
-    c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
+      Logger.debug(fn ->
+        "[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}"
+      end)
 
-    socket =
-      if socket.assigns.idle_timer_ref do
-        Process.cancel_timer(socket.assigns.idle_timer_ref)
-        assign(socket, idle_timer_ref: nil)
-      else
+      c_name = Map.get(cells, "$name", socket.assigns.c_name)
+      c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
+
+      socket =
+        if socket.assigns.idle_timer_ref do
+          Process.cancel_timer(socket.assigns.idle_timer_ref)
+          assign(socket, idle_timer_ref: nil)
+        else
+          socket
+        end
+
+      idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
+
+      socket
+      |> assign(:cells, cells)
+      |> assign(:c_name, c_name)
+      |> assign(:c_desc, c_desc)
+      |> assign(:idle_timer_ref, idle_timer_ref)
+      |> assign(:save_state, :unsaved)
+    end
+  end
+
+  defp record_operation(socket, operation) do
+    case Canvas.apply_unstr_canvas_operation(
+           socket.assigns.canvas_id,
+           socket.assigns.user_id,
+           socket.assigns.client_id,
+           operation
+         ) do
+      {:ok, _seq} ->
         socket
-      end
 
-    idle_timer_ref = Process.send_after(self(), :idle_save, @idle_save_interval)
+      {:error, _changeset} ->
+        Logger.error(
+          "[UnstrCanvasLive] operation was not recorded: canvas_id=#{socket.assigns.canvas_id} op=#{inspect(operation["type"])}"
+        )
 
-    socket
-    |> assign(:cells, cells)
-    |> assign(:c_name, c_name)
-    |> assign(:c_desc, c_desc)
-    |> assign(:idle_timer_ref, idle_timer_ref)
-    |> assign(:save_state, :unsaved)
+        put_flash(
+          socket,
+          :error,
+          "Could not record the change. It will be saved with the next snapshot."
+        )
+    end
   end
 
   @impl true
   def handle_event("agent_new", _params, socket) do
+    socket = stop_running_turn(socket)
     user = socket.assigns.current_scope.user
 
     case Psc.Agent.create_session(user.id, %{canvas_id: socket.assigns.canvas.id}) do
@@ -228,16 +256,30 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         # milliseconds, and a late subscription loses them.
         socket = subscribe_agent(socket, session)
 
-        {:ok, user_message} = Psc.Agent.append_user_message(session, content)
-        {:ok, assistant} = Psc.Agent.start_assistant_message(session)
-        {:ok, pid} = Psc.Agent.Turn.start(session, assistant, scope)
+        with {:ok, user_message} <- Psc.Agent.append_user_message(session, content),
+             {:ok, assistant} <- Psc.Agent.start_assistant_message(session) do
+          case Psc.Agent.Turn.start(session, assistant, scope) do
+            {:ok, pid} ->
+              {:noreply,
+               socket
+               |> assign(:agent_session, Psc.Agent.get_session(session.id, session.user_id))
+               |> assign(
+                 :agent_messages,
+                 socket.assigns.agent_messages ++ [user_message, assistant]
+               )
+               |> assign(:agent_turn_pid, pid)
+               |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
 
-        {:noreply,
-         socket
-         |> assign(:agent_session, Psc.Agent.get_session(session.id, session.user_id))
-         |> assign(:agent_messages, socket.assigns.agent_messages ++ [user_message, assistant])
-         |> assign(:agent_turn_pid, pid)
-         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
+            {:error, reason} ->
+              Psc.Agent.fail_message(assistant, reason)
+
+              {:noreply,
+               put_flash(socket, :error, "Could not start the answer. Please try again.")}
+          end
+        else
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Could not start the answer. Please try again.")}
+        end
     end
   end
 
@@ -295,17 +337,26 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         {:noreply, put_flash(socket, :error, "That chat is no longer available.")}
 
       session ->
-        {:ok, copy} = Psc.Agent.duplicate_session(session)
+        # Stop before copying: an in-flight message would otherwise be copied
+        # as `:streaming` into a chat that has no turn behind it.
+        socket = stop_running_turn(socket)
 
-        {:noreply,
-         socket
-         |> subscribe_agent(copy)
-         |> assign(:agent_session, copy)
-         |> assign(:agent_messages, Psc.Agent.list_messages(copy))
-         |> assign(:agent_sessions, Psc.Agent.list_sessions_for_canvas(copy.canvas_id, user.id))
-         |> assign(:agent_turn_pid, nil)
-         |> assign(:agent_phase, nil)
-         |> assign(:agent_menu_session, nil)}
+        case Psc.Agent.duplicate_session(session) do
+          {:ok, copy} ->
+            {:noreply,
+             socket
+             |> subscribe_agent(copy)
+             |> assign(:agent_session, copy)
+             |> assign(:agent_messages, Psc.Agent.list_messages(copy))
+             |> assign(
+               :agent_sessions,
+               Psc.Agent.list_sessions_for_canvas(copy.canvas_id, user.id)
+             )
+             |> assign(:agent_menu_session, nil)}
+
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Could not duplicate the chat.")}
+        end
     end
   end
 
@@ -317,36 +368,41 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         {:noreply, socket}
 
       session ->
-        {:ok, _} = Psc.Agent.delete_session(session)
-        sessions = Psc.Agent.list_sessions_for_canvas(session.canvas_id, user.id)
+        case Psc.Agent.delete_session(session) do
+          {:ok, _} ->
+            sessions = Psc.Agent.list_sessions_for_canvas(session.canvas_id, user.id)
 
-        deleted_current? =
-          socket.assigns.agent_session && socket.assigns.agent_session.id == session.id
+            deleted_current? =
+              socket.assigns.agent_session && socket.assigns.agent_session.id == session.id
 
-        socket =
-          if deleted_current? do
-            case List.first(sessions) do
-              nil ->
+            socket =
+              if deleted_current? do
+                socket = stop_running_turn(socket)
+
+                case List.first(sessions) do
+                  nil ->
+                    socket
+                    |> assign(:agent_session, nil)
+                    |> assign(:agent_messages, [])
+
+                  next ->
+                    socket
+                    |> subscribe_agent(next)
+                    |> assign(:agent_session, next)
+                    |> assign(:agent_messages, Psc.Agent.list_messages(next))
+                end
+              else
                 socket
-                |> assign(:agent_session, nil)
-                |> assign(:agent_messages, [])
+              end
 
-              next ->
-                socket
-                |> subscribe_agent(next)
-                |> assign(:agent_session, next)
-                |> assign(:agent_messages, Psc.Agent.list_messages(next))
-            end
-          else
-            socket
-          end
+            {:noreply,
+             socket
+             |> assign(:agent_sessions, sessions)
+             |> assign(:agent_menu_session, nil)}
 
-        {:noreply,
-         socket
-         |> assign(:agent_sessions, sessions)
-         |> assign(:agent_menu_session, nil)
-         |> assign(:agent_turn_pid, nil)
-         |> assign(:agent_phase, nil)}
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Could not delete the chat.")}
+        end
     end
   end
 
@@ -368,33 +424,27 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       session ->
         Psc.Agent.cancel_stale_streaming(session)
 
+        same_session? =
+          socket.assigns.agent_session && socket.assigns.agent_session.id == session.id
+
+        socket = if same_session?, do: socket, else: stop_running_turn(socket)
+
+        messages =
+          if same_session?,
+            do: socket.assigns.agent_messages,
+            else: Psc.Agent.list_messages(session)
+
         {:noreply,
          socket
          |> subscribe_agent(session)
          |> assign(:agent_session, session)
-         |> assign(:agent_messages, Psc.Agent.list_messages(session))
-         |> assign(:agent_phase, nil)
-         |> assign(:agent_turn_pid, nil)
+         |> assign(:agent_messages, messages)
          |> assign(:agent_list_open, false)}
     end
   end
 
   def handle_event("agent_stop", _params, socket) do
-    case socket.assigns.agent_turn_pid do
-      nil ->
-        {:noreply, socket}
-
-      pid ->
-        Task.Supervisor.terminate_child(Psc.Agent.TurnSupervisor, pid)
-
-        socket =
-          case Enum.find(socket.assigns.agent_messages, &(&1.status == :streaming)) do
-            nil -> socket
-            message -> update_agent_message(socket, message.id, &Psc.Agent.cancel_message/1)
-          end
-
-        {:noreply, assign(socket, :agent_turn_pid, nil)}
-    end
+    {:noreply, stop_running_turn(socket)}
   end
 
   @impl true
@@ -450,13 +500,21 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     if socket.assigns.canvas.author_id == socket.assigns.user_id do
       case Notes.get_note(note_id) do
         %{canvas_id: canvas_id} = note when canvas_id == socket.assigns.canvas_id ->
-          {:ok, _note} = Notes.delete_note(note)
+          case Notes.delete_note(note) do
+            {:ok, _note} ->
+              {:noreply,
+               socket
+               |> assign(:note, nil)
+               |> assign(:note_content, "")
+               |> assign(:note_html, "")
+               |> assign(:note_last_saved_content, "")
+               |> reload_notes()
+               |> push_patch(to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes", replace: true)
+               |> put_flash(:success, "Note deleted")}
 
-          {:noreply,
-           socket
-           |> reload_notes()
-           |> push_patch(to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=notes", replace: true)
-           |> put_flash(:success, "Note deleted")}
+            {:error, _changeset} ->
+              {:noreply, put_flash(socket, :error, "Could not delete the note")}
+          end
 
         _other ->
           {:noreply, socket}
@@ -473,12 +531,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         {:noreply, socket}
 
       note ->
-        {:ok, updated} = Notes.update_note(note, %{title: title})
+        case Notes.update_note(note, %{title: title}) do
+          {:ok, updated} ->
+            {:noreply,
+             socket
+             |> assign(:note, updated)
+             |> reload_notes()}
 
-        {:noreply,
-         socket
-         |> assign(:note, updated)
-         |> reload_notes()}
+          {:error, _changeset} ->
+            {:noreply, put_flash(socket, :error, "Could not rename the note.")}
+        end
     end
   end
 
@@ -513,6 +575,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         {:noreply,
          socket
          |> assign(:note_content, new_content)
+         |> assign(:note_html, render_note_html(new_content))
          |> assign(:note_idle_timer_ref, note_idle_timer_ref)
          |> assign(:note_save_state, :unsaved)}
     end
@@ -885,11 +948,21 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       session ->
         Psc.Agent.cancel_stale_streaming(session)
 
+        # Deltas are broadcast, not persisted, until the turn completes. Keep
+        # the transcript already on screen when the same session is reopened by
+        # a tab switch; reloading from the database would drop them.
+        messages =
+          if socket.assigns.agent_session && socket.assigns.agent_session.id == session.id do
+            socket.assigns.agent_messages
+          else
+            Psc.Agent.list_messages(session)
+          end
+
         socket
         |> subscribe_agent(session)
         |> assign(:agent_session, session)
         |> assign(:agent_sessions, sessions)
-        |> assign(:agent_messages, Psc.Agent.list_messages(session))
+        |> assign(:agent_messages, messages)
         |> assign(:agent_enabled?, enabled?)
         |> assign(:agent_missing, missing)
     end
@@ -973,6 +1046,33 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     assign(socket, :agent_messages, messages)
   end
 
+  # A turn belongs to the chat that started it. Switching chats (or stopping)
+  # must terminate the task, cancel the streaming message and clear the phase;
+  # otherwise the pid stays set, the composer stays disabled and the task keeps
+  # consuming tokens into a topic nobody reads.
+  defp stop_running_turn(socket) do
+    if pid = socket.assigns.agent_turn_pid do
+      Task.Supervisor.terminate_child(Psc.Agent.TurnSupervisor, pid)
+    end
+
+    socket =
+      case Enum.find(socket.assigns.agent_messages, &(&1.status == :streaming)) do
+        nil -> socket
+        message -> update_agent_message(socket, message.id, &cancel_message/1)
+      end
+
+    assign(socket, agent_turn_pid: nil, agent_phase: nil)
+  end
+
+  # `Psc.Agent.cancel_message/1` returns a result tuple; the transcript holds
+  # message structs.
+  defp cancel_message(message) do
+    case Psc.Agent.cancel_message(message) do
+      {:ok, updated} -> updated
+      {:error, _changeset} -> %{message | status: :cancelled}
+    end
+  end
+
   defp normalize_accent(""), do: nil
   defp normalize_accent(accent), do: accent
 
@@ -1004,9 +1104,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply, socket}
   end
 
-  # The notes of the canvas, most recently touched first.
+  # The notes of the canvas, most recently touched first. The snippet is
+  # derived once here instead of on every render.
   defp reload_notes(socket) do
-    assign(socket, :notes, Notes.list_notes(socket.assigns.canvas_id))
+    assign(socket, :notes, with_snippets(Notes.list_notes(socket.assigns.canvas_id)))
+  end
+
+  defp with_snippets(notes) do
+    Enum.map(notes, &Map.put(&1, :snippet, note_snippet(&1.content)))
   end
 
   # A scratchpad canvas has exactly one note, and no list. It is created the
@@ -1025,11 +1130,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp ensure_scratchpad(socket) do
     case socket.assigns.notes do
       [note | _] ->
+        content = Notes.get_note_content(note.id)
+
         socket
         |> leave_note()
         |> assign(:note, note)
-        |> assign(:note_content, Notes.get_note_content(note.id))
-        |> assign(:note_last_saved_content, Notes.get_note_content(note.id))
+        |> assign(:note_content, content)
+        |> assign(:note_html, render_note_html(content))
+        |> assign(:note_last_saved_content, content)
         # Single-note canvases never went through load_note_by_id/2, so they
         # never subscribed: remote operations were broadcast to nobody.
         |> subscribe_to_note(note.id)
@@ -1043,9 +1151,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
              ) do
           {:ok, note} ->
             socket
-            |> assign(:notes, [note])
+            |> assign(:notes, with_snippets([note]))
             |> assign(:note, note)
             |> assign(:note_content, "")
+            |> assign(:note_html, "")
             |> assign(:note_last_saved_content, "")
             |> assign(:note_save_state, :saved)
             |> assign(:note_save_stats, @initial_save_stats)
@@ -1074,7 +1183,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> leave_note()
     |> assign(:note, nil)
     |> assign(:note_content, "")
+    |> assign(:note_html, "")
     |> assign(:note_last_saved_content, "")
+    |> assign(:note_save_state, :saved)
+    |> assign(:note_save_stats, @initial_save_stats)
   end
 
   defp load_note_by_id(socket, note_id) do
@@ -1086,6 +1198,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> leave_note()
         |> assign(:note, note)
         |> assign(:note_content, content)
+        |> assign(:note_html, render_note_html(content))
         |> assign(:note_last_saved_content, content)
         |> assign(:note_save_state, :saved)
         |> assign(:note_save_stats, @initial_save_stats)
@@ -1097,12 +1210,20 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> leave_note()
         |> assign(:note, nil)
         |> assign(:note_content, "")
+        |> assign(:note_html, "")
+        |> assign(:note_last_saved_content, "")
+        |> assign(:note_save_state, :saved)
+        |> assign(:note_save_stats, @initial_save_stats)
     end
   end
 
   # Stop listening to the note that was open, so a stale topic cannot deliver
-  # operations for a note that is no longer on screen.
+  # operations for a note that is no longer on screen. Flush first: the idle
+  # timer is about to be cancelled, and the note's events would otherwise stay
+  # unfolded until it was edited and saved again.
   defp leave_note(socket) do
+    socket = flush_note(socket)
+
     if socket.assigns[:note_topic] do
       Phoenix.PubSub.unsubscribe(Psc.PubSub, socket.assigns.note_topic)
       Presence.untrack(self(), socket.assigns.note_topic, socket.assigns.user_id)
@@ -1113,6 +1234,20 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
 
     assign(socket, note_topic: nil, note_presence: %{}, note_idle_timer_ref: nil)
+  end
+
+  defp flush_note(socket) do
+    case socket.assigns[:note] do
+      nil ->
+        socket
+
+      note ->
+        if socket.assigns.note_content != socket.assigns.note_last_saved_content do
+          save_note_content(socket, note)
+        else
+          socket
+        end
+    end
   end
 
   defp subscribe_to_note(socket, note_id) do
@@ -1162,13 +1297,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp apply_remote_note_operation(socket, user_id, operation) do
     if socket.assigns.note do
       new_content = Psc.Text.apply_operation(operation, socket.assigns.note_content)
+      html = render_note_html(new_content)
 
       {:noreply,
        socket
        |> assign(:note_content, new_content)
+       |> assign(:note_html, html)
        |> push_event("note_content_updated", %{
          content: new_content,
-         html: render_note_html(new_content),
+         html: html,
          from_user_id: user_id
        })}
     else
@@ -1217,91 +1354,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
-    # New broadcasts include a per-client id so multiple tabs by same user get updates
-    if user_id != socket.assigns.user_id do
-      Logger.debug(
-        "[UnstrCanvasLive] received broadcast operation from user_id=#{user_id} client_id=#{client_id}: #{inspect(operation)}"
-      )
-
-      cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
-      c_name = Map.get(cells, "$name", socket.assigns.c_name)
-      c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
-
-      Logger.debug(
-        "[UnstrCanvasLive] after broadcast apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}"
-      )
-
-      # If this operation updated a cell field, notify the client-side hooks
-      socket =
-        case operation do
-          %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
-            new_value =
-              get_in(cells, ["cells", cell_key, field]) ||
-                (cells[cell_key] && Map.get(cells[cell_key], field)) || ""
-
-            push_event(socket, "cell_updated", %{
-              cell_key: cell_key,
-              field: field,
-              new_value: new_value,
-              from_user_id: user_id
-            })
-
-          _ ->
-            socket
-        end
-
-      {:noreply,
-       socket
-       |> assign(:cells, cells)
-       |> assign(:c_name, c_name)
-       |> assign(:c_desc, c_desc)}
-    else
-      {:noreply, socket}
-    end
+    apply_remote_operation(socket, user_id, client_id, operation)
   end
 
+  # Backwards-compatible shape for operations applied straight through the
+  # context (no client id). The user is the only identity available, so an echo
+  # from the same account cannot be distinguished from another tab.
   def handle_info({:operation, user_id, operation, _seq}, socket) do
-    # Backwards-compatible handler for broadcasts without client_id
-    if user_id != socket.assigns.user_id do
-      Logger.debug(
-        "[UnstrCanvasLive] received legacy broadcast operation from user_id=#{user_id}: #{inspect(operation)}"
-      )
-
-      cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
-      c_name = Map.get(cells, "$name", socket.assigns.c_name)
-      c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
-
-      Logger.debug(
-        "[UnstrCanvasLive] after legacy apply resulting_cells_sample=#{inspect(Map.take(cells, ["cells"]))}"
-      )
-
-      # Notify client-side hooks for cell updates (legacy broadcasts)
-      socket =
-        case operation do
-          %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
-            new_value =
-              get_in(cells, ["cells", cell_key, field]) ||
-                (cells[cell_key] && Map.get(cells[cell_key], field)) || ""
-
-            push_event(socket, "cell_updated", %{
-              cell_key: cell_key,
-              field: field,
-              new_value: new_value,
-              from_user_id: user_id
-            })
-
-          _ ->
-            socket
-        end
-
-      {:noreply,
-       socket
-       |> assign(:cells, cells)
-       |> assign(:c_name, c_name)
-       |> assign(:c_desc, c_desc)}
-    else
-      {:noreply, socket}
-    end
+    apply_remote_operation(socket, user_id, nil, operation)
   end
 
   @impl true
@@ -1318,19 +1378,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   @impl true
   def handle_info(:idle_save, socket) do
     if socket.assigns.cells != socket.assigns.last_saved_cells do
-      socket = assign(socket, save_state: :saving)
+      socket =
+        socket
+        |> assign(:save_state, :saving)
+        |> update_canvas_meta()
+        |> save_cells()
 
-      Canvas.update_unstr_canvas(socket.assigns.canvas, %{
-        name: socket.assigns.c_name,
-        description: socket.assigns.c_desc
-      })
-
-      {:noreply,
-       socket
-       |> save_cells()
-       |> assign(:last_saved_cells, socket.assigns.cells)
-       |> assign(:idle_timer_ref, nil)
-       |> assign(:save_state, :saved)}
+      {:noreply, assign(socket, :idle_timer_ref, nil)}
     else
       {:noreply, assign(socket, idle_timer_ref: nil)}
     end
@@ -1344,17 +1398,30 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
       note ->
         if socket.assigns.note_content != socket.assigns.note_last_saved_content do
-          socket = assign(socket, note_save_state: :saving)
+          socket =
+            socket
+            |> assign(:note_save_state, :saving)
+            |> save_note_content(note)
+            |> assign(:note_idle_timer_ref, nil)
 
-          {:noreply,
-           socket
-           |> save_note_content(note)
-           |> assign(:note_last_saved_content, socket.assigns.note_content)
-           |> assign(:note_idle_timer_ref, nil)
-           |> assign(:note_save_state, :saved)
-           # The list shows a snippet of the note's content, so it has to be
-           # re-read now that the content has been folded.
-           |> reload_notes()}
+          socket =
+            cond do
+              socket.assigns.note_save_state != :unsaved ->
+                # The list shows a snippet of the note's content, so it has to
+                # be re-read now that the content has been folded.
+                reload_notes(socket)
+
+              Notes.get_note(note.id) ->
+                # The note still exists: retry shortly instead of waiting for
+                # the user to type again.
+                ref = Process.send_after(self(), :note_idle_save, @idle_save_interval)
+                assign(socket, :note_idle_timer_ref, ref)
+
+              true ->
+                socket
+            end
+
+          {:noreply, socket}
         else
           {:noreply, assign(socket, note_idle_timer_ref: nil)}
         end
@@ -1387,17 +1454,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   def handle_info(:periodic_save, socket) do
     socket =
       if socket.assigns.cells != socket.assigns.last_saved_cells do
-        socket = assign(socket, save_state: :saving)
-
-        Canvas.update_unstr_canvas(socket.assigns.canvas, %{
-          name: socket.assigns.c_name,
-          description: socket.assigns.c_desc
-        })
-
         socket
+        |> assign(:save_state, :saving)
+        |> update_canvas_meta()
         |> save_cells()
-        |> assign(:last_saved_cells, socket.assigns.cells)
-        |> assign(:save_state, :saved)
       else
         socket
       end
@@ -1406,68 +1466,94 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply, socket}
   end
 
-  # Write the cells and record what happened, so the status pill can report
-  # it. A failed write keeps the state "unsaved": the changes are still only
-  # in the event log, and the next save will try again.
-  defp save_cells(socket) do
-    started = System.monotonic_time(:millisecond)
+  defp apply_remote_operation(socket, user_id, client_id, operation) do
+    # The client id, not the user id, identifies the writer: another tab of the
+    # same account is a different client and must still apply the operation.
+    if client_id == socket.assigns.client_id or
+         (is_nil(client_id) and user_id == socket.assigns.user_id) do
+      {:noreply, socket}
+    else
+      Logger.debug(fn ->
+        "[UnstrCanvasLive] received broadcast operation user_id=#{user_id} client_id=#{inspect(client_id)}: #{inspect(operation)}"
+      end)
 
-    result =
-      Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
+      cells = Psc.Canvas.UnstrCanvasCRDT.apply_operation(operation, socket.assigns.cells)
+      c_name = Map.get(cells, "$name", socket.assigns.c_name)
+      c_desc = Map.get(cells, "$description", socket.assigns.c_desc)
 
-    elapsed = System.monotonic_time(:millisecond) - started
-    stats = socket.assigns.save_stats
+      # If this operation updated a cell field, notify the client-side hooks.
+      socket =
+        case operation do
+          %{"type" => "update_cell", "cell_key" => cell_key, "field" => field, "value" => _value} ->
+            new_value =
+              get_in(cells, ["cells", cell_key, field]) ||
+                (cells[cell_key] && Map.get(cells[cell_key], field)) || ""
 
-    case result do
-      {:ok, _canvas} ->
-        assign(socket,
-          save_stats: %{
-            stats
-            | writes: stats.writes + 1,
-              last_saved_at: DateTime.utc_now(),
-              last_write_ms: elapsed
-          }
-        )
+            push_event(socket, "cell_updated", %{
+              cell_key: cell_key,
+              field: field,
+              new_value: new_value,
+              from_user_id: user_id
+            })
 
-      {:error, _changeset} ->
-        Logger.error("[UnstrCanvasLive] save failed: canvas_id=#{socket.assigns.canvas_id}")
+          _ ->
+            socket
+        end
 
-        assign(socket,
-          save_state: :unsaved,
-          save_stats: %{stats | failures: stats.failures + 1}
-        )
+      {:noreply,
+       socket
+       |> assign(:cells, cells)
+       |> assign(:c_name, c_name)
+       |> assign(:c_desc, c_desc)}
     end
   end
 
-  # Write the note's content and record what happened, so the status pill can
-  # report it. A failed write keeps the state "unsaved": the changes are
-  # still only in the event log, and the next save will try again.
+  # Persist the cells through the context. `Save.commit/3` advances the dirty
+  # fingerprint only when the write succeeded, so a failure is retried by the
+  # next idle/periodic tick and the status pill can tell the truth.
+  defp save_cells(socket) do
+    socket =
+      Save.commit(socket, :canvas, fn ->
+        Canvas.save_unstr_canvas_content_to_db(socket.assigns.canvas_id, socket.assigns.cells)
+      end)
+
+    if socket.assigns.save_state == :unsaved do
+      Logger.error("[UnstrCanvasLive] save failed: canvas_id=#{socket.assigns.canvas_id}")
+    end
+
+    socket
+  end
+
   defp save_note_content(socket, note) do
-    started = System.monotonic_time(:millisecond)
+    socket =
+      Save.commit(socket, :note, fn ->
+        Notes.save_content_to_db(note.id, socket.assigns.note_content)
+      end)
 
-    result = Notes.save_content_to_db(note.id, socket.assigns.note_content)
+    if socket.assigns.note_save_state == :unsaved do
+      Logger.error("[UnstrCanvasLive] note save failed: note_id=#{note.id}")
+    end
 
-    elapsed = System.monotonic_time(:millisecond) - started
-    stats = socket.assigns.note_save_stats
+    socket
+  end
 
-    case result do
-      {:ok, _note} ->
-        assign(socket,
-          note_save_stats: %{
-            stats
-            | writes: stats.writes + 1,
-              last_saved_at: DateTime.utc_now(),
-              last_write_ms: elapsed
-          }
-        )
+  # The name and description are a separate row update from the cells snapshot.
+  # A stale or invalid row must not take the socket down (or hide the cell
+  # save); the snapshot itself still carries `$name`/`$description`.
+  defp update_canvas_meta(socket) do
+    case Canvas.update_unstr_canvas(socket.assigns.canvas, %{
+           name: socket.assigns.c_name,
+           description: socket.assigns.c_desc
+         }) do
+      {:ok, canvas} ->
+        assign(socket, :canvas, canvas)
 
       {:error, _changeset} ->
-        Logger.error("[UnstrCanvasLive] note save failed: note_id=#{note.id}")
-
-        assign(socket,
-          note_save_state: :unsaved,
-          note_save_stats: %{stats | failures: stats.failures + 1}
+        Logger.error(
+          "[UnstrCanvasLive] canvas metadata update failed: canvas_id=#{socket.assigns.canvas_id}"
         )
+
+        socket
     end
   end
 
@@ -2075,6 +2161,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                           id={"cell-" <> cell_key <> "-label"}
                                           name="label"
                                           value={Map.get(cell_data, "label", "")}
+                                          phx-debounce="300"
                                           placeholder={cell_key}
                                           class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
                                         />
@@ -2110,6 +2197,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                                                 id={"cell-" <> cell_key <> "-field-" <> field <> "-title"}
                                                 name="title"
                                                 value={field_title}
+                                                phx-debounce="300"
                                                 placeholder={field}
                                                 class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                                               />
@@ -2210,6 +2298,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               notes={@notes}
               note={@note}
               note_content={@note_content}
+              note_html={@note_html}
               note_save_state={@note_save_state}
               note_save_stats={@note_save_stats}
               note_presence={@note_presence}
@@ -2616,6 +2705,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   attr :notes, :list, required: true
   attr :note, :map, default: nil
   attr :note_content, :string, default: ""
+  attr :note_html, :string, default: ""
   attr :note_save_state, :atom, required: true
   attr :note_save_stats, :map, required: true
   attr :note_presence, :map, default: %{}
@@ -2677,7 +2767,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   </span>
 
                   <span class="mt-1 block truncate text-xs text-base-content/50">
-                    {note_snippet(note.content)}
+                    {note.snippet}
                   </span>
                 </button>
               </li>
@@ -2747,6 +2837,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 id="canvas-note-delete"
                 phx-click="delete_note"
                 phx-value-note={@note.id}
+                data-confirm="Delete this note? This cannot be undone."
                 variant="outline"
                 size="sm"
                 class="text-error hover:text-error"
@@ -2762,7 +2853,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             form_id="canvas-note-form"
             preview_id="canvas-note-preview"
             content={@note_content}
-            html={Markdown.render(@note_content, empty_message: "Start writing in the editor.")}
+            html={@note_html}
             current_user_id={@user_id}
             change_event="update_note_content"
             preview_event="render_note"

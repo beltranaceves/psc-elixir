@@ -8,6 +8,10 @@ export default {
     this.display = this.el.querySelector('.md-render')
 
     const initialValue = this.input ? this.input.value : ''
+    // The value the server already has. Blur must not send it again: a click
+    // into a cell and out would otherwise record an event and mark the canvas
+    // unsaved without the user changing anything.
+    this.lastSyncedValue = initialValue
 
     // Request server-side render for initial value
     this.pushEvent('render_field', { cell_key: this.cellKey, field: this.field, value: initialValue })
@@ -36,6 +40,7 @@ export default {
 
       const cursorPos = this.input && this.input.selectionStart ? this.input.selectionStart : 0
       if (this.input) this.input.value = new_value || ''
+      this.lastSyncedValue = this.input ? this.input.value : ''
 
       if (document.activeElement !== this.input) {
         this.pushEvent('render_field', { cell_key: this.cellKey, field: this.field, value: new_value })
@@ -60,20 +65,27 @@ export default {
     let debounceTimer = null
     const DEBOUNCE_MS = 500
 
+    const sendValue = value => {
+      if (value === this.lastSyncedValue) return
+      this.lastSyncedValue = value
+      this.pushEvent('update_cell', { cell_key: this.cellKey, field: this.field, value })
+    }
+
     if (this.input) {
       this.input.addEventListener('input', e => {
         const val = e.target.value
         if (debounceTimer) clearTimeout(debounceTimer)
         debounceTimer = setTimeout(() => {
-          this.pushEvent('update_cell', { cell_key: this.cellKey, field: this.field, value: val })
+          sendValue(val)
         }, DEBOUNCE_MS)
       })
 
-      // On blur, send final update and request render
+      // On blur, send the final value if it changed and request a render. The
+      // render is harmless when nothing changed; `update_cell` is not.
       this.input.addEventListener('blur', e => {
         const val = e.target.value
         if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null }
-        this.pushEvent('update_cell', { cell_key: this.cellKey, field: this.field, value: val })
+        sendValue(val)
         this.pushEvent('render_field', { cell_key: this.cellKey, field: this.field, value: val })
         this.input.classList.add('hidden')
         this.display.classList.remove('hidden')

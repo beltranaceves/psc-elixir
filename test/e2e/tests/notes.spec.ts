@@ -118,6 +118,7 @@ test.describe('canvas notes', () => {
     await page.locator('#new-note-button').click();
     await expect(page.locator('#canvas-note-title-form')).toBeVisible();
 
+    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('#canvas-note-delete').click();
     await expect(page.locator('#canvas-notes-empty')).toBeVisible();
   });

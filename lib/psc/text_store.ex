@@ -109,7 +109,13 @@ defmodule Psc.TextStore do
   can never drop events that are not yet represented in the saved content.
   """
   def save_content(adapter, id, content) do
-    store = Repo.get!(adapter.store(), id)
+    case Repo.get(adapter.store(), id) do
+      nil -> {:error, :not_found}
+      store -> do_save_content(adapter, id, content, store)
+    end
+  end
+
+  defp do_save_content(adapter, id, content, store) do
     event = adapter.event()
     fk = adapter.foreign_key()
 
@@ -126,7 +132,7 @@ defmodule Psc.TextStore do
         adapter.content_field() => content,
         snapshot_seq: max_seq
       })
-      |> Repo.update()
+      |> Repo.update(stale_error_field: :base)
 
     with {:ok, _store} <- result do
       Repo.delete_all(from(e in event, where: field(e, ^fk) == ^id and e.seq <= ^max_seq))

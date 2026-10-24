@@ -411,6 +411,27 @@ test.describe('canvas editor (single player)', () => {
     await expect(card.locator('textarea')).toBeFocused();
   });
 
+  test('clicking a cell without typing leaves the canvas saved', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('No-op Cell'));
+
+    const card = page.locator('.canvas-cell').first();
+    await expect(card).toBeVisible();
+
+    // Open the field, then blur without typing. The cell hook used to send
+    // `update_cell` on every blur, even when the value was unchanged.
+    await card.click({ position: { x: 12, y: 12 } });
+    await expect(card.locator('textarea')).toBeVisible();
+    await page.getByRole('heading', { name: 'Canvas Editor' }).click();
+
+    // Check without retrying: the 1.5s idle save would turn Unsaved back into
+    // Saved and hide the regression.
+    await page.waitForTimeout(400);
+    expect(await page.locator('#canvas-save-state-pill').innerText()).toContain('Saved');
+
+    await page.waitForTimeout(1_600);
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved');
+  });
+
   test('creates a canvas, edits a cell, autosaves and persists across reload', async ({
     page,
   }) => {

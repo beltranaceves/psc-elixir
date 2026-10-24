@@ -94,7 +94,7 @@ defmodule Psc.Notes do
   def update_note(note, attrs) do
     note
     |> Note.changeset(attrs)
-    |> Repo.update()
+    |> Repo.update(stale_error_field: :base)
   end
 
   @doc """
