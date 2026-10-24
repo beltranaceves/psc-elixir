@@ -29,7 +29,20 @@ defmodule Psc.Agent do
   `AGENT_MODEL`.
   """
   def enabled?(%Psc.Accounts.User{} = user) do
-    Psc.Accounts.User.agent_key?(user) and not is_nil(model_for(user))
+    is_nil(missing_configuration(user))
+  end
+
+  @doc """
+  What keeps a user from using the agent: `:key`, `:model`, or `nil` when the
+  user is ready. The interface reports the actual gap, so someone with a saved
+  key is not told to save it again.
+  """
+  def missing_configuration(%Psc.Accounts.User{} = user) do
+    cond do
+      not Psc.Accounts.User.agent_key?(user) -> :key
+      is_nil(model_for(user)) -> :model
+      true -> nil
+    end
   end
 
   @doc """

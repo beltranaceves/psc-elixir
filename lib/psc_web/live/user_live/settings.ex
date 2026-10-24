@@ -115,6 +115,10 @@ defmodule PscWeb.UserLive.Settings do
           A key is saved{@agent_model_label}. Saving a new one replaces it.
         </p>
 
+        <p :if={@agent_key? and @agent_missing == :model} class="mt-1 text-sm text-warning">
+          The agent stays off until you choose a model.
+        </p>
+
         <.form for={@agent_key_form} id="agent-key-form" phx-submit="save_agent_key" class="mt-4">
           <UIForm.form_item>
             <UIForm.form_label field={@agent_key_form[:provider]}>Provider</UIForm.form_label>
@@ -147,8 +151,11 @@ defmodule PscWeb.UserLive.Settings do
                 placeholder={@agent_default_model}
               />
             </UIForm.form_control>
-            <p class="mt-1 text-xs text-base-content/50">
+            <p :if={@agent_default_model} class="mt-1 text-xs text-base-content/50">
               Leave blank to use this instance's default ({@agent_default_model}).
+            </p>
+            <p :if={is_nil(@agent_default_model)} class="mt-1 text-xs text-base-content/50">
+              Required: this instance has no default model.
             </p>
           </UIForm.form_item>
 
@@ -157,8 +164,12 @@ defmodule PscWeb.UserLive.Settings do
               API key
             </UIForm.form_label>
             <UIForm.form_control>
+              <%!-- `value=""` is deliberate: the form is built from the user struct,
+              so binding the field alone would render the saved key back into the
+              HTML. The key is write-only; the placeholder reports that one exists. --%>
               <UIInput.input
                 field={@agent_key_form[:agent_api_key]}
+                value=""
                 type="password"
                 autocomplete="off"
                 spellcheck="false"
@@ -185,6 +196,15 @@ defmodule PscWeb.UserLive.Settings do
       </div>
     </Layouts.app>
     """
+  end
+
+  # The socket's user is the row as it was at mount. Ecto compares a change
+  # against that snapshot, so a stale struct can turn a real save into "no
+  # changes" and silently skip the write - after removing a key, saving the same
+  # key again would do nothing and the UI would still claim it was saved.
+  defp fresh_user(socket) do
+    Accounts.get_user(socket.assigns.current_scope.user.id) ||
+      socket.assigns.current_scope.user
   end
 
   # A blank key field means "keep the saved one": only an explicit removal
@@ -220,7 +240,7 @@ defmodule PscWeb.UserLive.Settings do
   defp default_agent_model do
     case Application.get_env(:jido_ai, :model_aliases, %{}) do
       %{default: model} when is_binary(model) -> model
-      _other -> "AGENT_MODEL"
+      _other -> nil
     end
   end
 
@@ -254,6 +274,7 @@ defmodule PscWeb.UserLive.Settings do
       |> assign(:password_form, to_form(password_changeset))
       |> assign(:agent_key_form, to_form(Accounts.change_agent_key(user, %{})))
       |> assign(:agent_key?, Psc.Accounts.User.agent_key?(user))
+      |> assign(:agent_missing, Psc.Agent.missing_configuration(user))
       |> assign(:agent_providers, Psc.Accounts.User.agent_providers())
       |> assign(:agent_provider, agent_provider(user))
       |> assign(:agent_model_id, agent_model_id(user))
@@ -300,7 +321,7 @@ defmodule PscWeb.UserLive.Settings do
 
   def handle_event("save_agent_key", params, socket) do
     user_params = params["user"] || %{}
-    user = socket.assigns.current_scope.user
+    user = fresh_user(socket)
 
     attrs =
       %{"agent_model" => build_agent_model(user_params)}
@@ -310,8 +331,10 @@ defmodule PscWeb.UserLive.Settings do
       {:ok, user} ->
         {:noreply,
          socket
+         |> assign(:current_scope, Psc.Accounts.Scope.for_user(user))
          |> assign(:agent_key_form, to_form(Accounts.change_agent_key(user, %{})))
          |> assign(:agent_key?, Psc.Accounts.User.agent_key?(user))
+         |> assign(:agent_missing, Psc.Agent.missing_configuration(user))
          |> assign(:agent_provider, agent_provider(user))
          |> assign(:agent_model_id, agent_model_id(user))
          |> assign(:agent_model_label, agent_model_label(user))
@@ -323,13 +346,15 @@ defmodule PscWeb.UserLive.Settings do
   end
 
   def handle_event("clear_agent_key", _params, socket) do
-    user = socket.assigns.current_scope.user
+    user = fresh_user(socket)
 
     case Accounts.update_agent_key(user, %{"agent_api_key" => ""}) do
       {:ok, user} ->
         {:noreply,
          socket
+         |> assign(:current_scope, Psc.Accounts.Scope.for_user(user))
          |> assign(:agent_key?, false)
+         |> assign(:agent_missing, :key)
          |> assign(:agent_model_label, agent_model_label(user))
          |> put_flash(:info, "Agent API key removed.")}
 

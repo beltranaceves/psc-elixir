@@ -89,7 +89,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:agent_phase, nil)
         |> assign(:focus_cell, nil)
         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))
-        |> assign(:agent_enabled?, Psc.Agent.enabled?())
+        |> assign(:agent_enabled?, Psc.Agent.enabled?(socket.assigns.current_scope.user))
+        |> assign(
+          :agent_missing,
+          Psc.Agent.missing_configuration(socket.assigns.current_scope.user)
+        )
         |> assign(:notes, [])
         |> assign(:note, nil)
         |> assign(:note_content, "")
@@ -197,6 +201,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     content = String.trim(content)
     session = socket.assigns.agent_session
 
+    # Settings live in another tab - or on another device - and this socket's
+    # user was loaded at mount. Re-read it *before* gating: a key or model saved
+    # since then must take effect without reloading the canvas, and a user who
+    # already saved a key must never be told to add it again.
+    socket = refresh_agent_scope(socket)
+    scope = socket.assigns.current_scope
+
     cond do
       content == "" ->
         {:noreply, socket}
@@ -204,19 +215,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       is_nil(session) ->
         {:noreply, put_flash(socket, :error, "Start a chat first.")}
 
-      not Psc.Agent.enabled?(socket.assigns.current_scope.user) ->
+      socket.assigns.agent_missing == :key ->
         {:noreply, put_flash(socket, :error, "Add your API key in settings first.")}
+
+      socket.assigns.agent_missing == :model ->
+        {:noreply, put_flash(socket, :error, "Choose a model in settings first.")}
 
       socket.assigns.agent_turn_pid ->
         {:noreply, put_flash(socket, :error, "Wait for the current answer to finish.")}
 
       true ->
-        # Settings live in another tab: the socket's user was loaded at mount, so
-        # a key or model saved since then is not on this struct. Re-read it so a
-        # change takes effect without reloading the canvas.
-        scope = fresh_scope(socket.assigns.current_scope)
-        session = session
-
         # Subscribe before the turn starts: the first deltas can arrive within
         # milliseconds, and a late subscription loses them.
         socket = subscribe_agent(socket, session)
@@ -230,8 +238,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
          |> assign(:agent_session, Psc.Agent.get_session(session.id, session.user_id))
          |> assign(:agent_messages, socket.assigns.agent_messages ++ [user_message, assistant])
          |> assign(:agent_turn_pid, pid)
-         |> assign(:agent_enabled?, Psc.Agent.enabled?(scope.user))
          |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
+    end
+  end
+
+  def handle_event("agent_refresh", _params, socket) do
+    # Settings open in another tab (or on another device). When the user comes
+    # back to a tab that is still waiting on a key or a model, re-read the
+    # account, so saving settings enables the composer without a page reload.
+    if socket.assigns.active_tab == "agent" and not socket.assigns.agent_enabled? do
+      {:noreply, refresh_agent_scope(socket)}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -896,9 +914,22 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  # Re-read the signed-in account and everything the agent tab derives from it.
+  # The scope is a snapshot from mount time, so a key or model saved in settings
+  # since then is invisible until this runs.
+  defp refresh_agent_scope(socket) do
+    scope = fresh_scope(socket.assigns.current_scope)
+
+    socket
+    |> assign(:current_scope, scope)
+    |> assign(:agent_enabled?, Psc.Agent.enabled?(scope.user))
+    |> assign(:agent_missing, Psc.Agent.missing_configuration(scope.user))
+  end
+
   defp load_agent(socket) do
     user = socket.assigns.current_scope.user
     enabled? = Psc.Agent.enabled?(user)
+    missing = Psc.Agent.missing_configuration(user)
     sessions = Psc.Agent.list_sessions_for_canvas(socket.assigns.canvas.id, user.id)
 
     case Psc.Agent.latest_session(socket.assigns.canvas.id, user.id) do
@@ -908,6 +939,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:agent_sessions, sessions)
         |> assign(:agent_messages, [])
         |> assign(:agent_enabled?, enabled?)
+        |> assign(:agent_missing, missing)
 
       session ->
         Psc.Agent.cancel_stale_streaming(session)
@@ -918,6 +950,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:agent_sessions, sessions)
         |> assign(:agent_messages, Psc.Agent.list_messages(session))
         |> assign(:agent_enabled?, enabled?)
+        |> assign(:agent_missing, missing)
     end
   end
 
@@ -2257,6 +2290,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             id="canvas-panel-agent"
             role="tabpanel"
             aria-labelledby="canvas-tab-agent"
+            phx-window-focus="agent_refresh"
             class={[
               "flex min-h-0 w-full flex-1 flex-col",
               @active_tab != "agent" && "hidden"
@@ -2270,10 +2304,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   Ask about this canvas. The agent reads only what you can read and cannot change anything.
                 </p>
 
-                <p :if={not @agent_enabled?} class="mt-3 text-sm text-base-content/60">
+                <p :if={@agent_missing == :key} class="mt-3 text-sm text-base-content/60">
                   The agent needs a model provider key.
                   <.link navigate={~p"/users/settings"} class="link link-primary">
                     Add your API key in settings
+                  </.link>
+                </p>
+
+                <p :if={@agent_missing == :model} class="mt-3 text-sm text-base-content/60">
+                  Your key is saved; the agent still needs a model.
+                  <.link navigate={~p"/users/settings"} class="link link-primary">
+                    Choose a model in settings
                   </.link>
                 </p>
 
@@ -2549,7 +2590,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                         Read-only. Nothing is created or changed.
                       <% else %>
                         <.link navigate={~p"/users/settings"} class="link link-primary">
-                          Add your API key in settings
+                          {if @agent_missing == :key,
+                            do: "Add your API key in settings",
+                            else: "Choose a model in settings"}
                         </.link>
                       <% end %>
                     </p>

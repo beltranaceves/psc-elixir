@@ -59,6 +59,63 @@ defmodule PscWeb.CanvasAgentTabTest do
     assert render(view) =~ "hello from pubsub"
   end
 
+  test "a key saved after the canvas mounted is used without a reload", %{
+    conn: conn,
+    user: user
+  } do
+    # A user opens the canvas before saving a key, then saves one in settings -
+    # another tab or another device. The canvas socket still holds the user from
+    # mount time, so gating on that struct would reject a key that now exists.
+    {:ok, user} = Accounts.update_agent_key(user, %{"agent_api_key" => ""})
+
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+    assert render(view) =~ "Add your API key in settings"
+
+    {:ok, _} = Accounts.update_agent_key(user, %{"agent_api_key" => "sk-test"})
+
+    # Coming back to the window after saving in the settings tab refreshes the
+    # cached account; without it the composer stays disabled until a reload.
+    render_click(view, "agent_refresh", %{})
+    refute render(view) =~ "Add your API key in settings"
+
+    view |> element("button", "Start a chat") |> render_click()
+
+    view
+    |> form("#canvas-agent-composer", message: %{content: "hello"})
+    |> render_submit()
+
+    for pid <- Task.Supervisor.children(Psc.Agent.TurnSupervisor) do
+      Task.Supervisor.terminate_child(Psc.Agent.TurnSupervisor, pid)
+    end
+
+    refute render(view) =~ "Add your API key in settings"
+  end
+
+  test "a saved key without a model says so instead of asking for the key again", %{
+    conn: conn,
+    user: user
+  } do
+    aliases = Application.get_env(:jido_ai, :model_aliases)
+    on_exit(fn -> Application.put_env(:jido_ai, :model_aliases, aliases) end)
+    Application.put_env(:jido_ai, :model_aliases, %{})
+
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    html = render(view)
+    assert html =~ "Your key is saved; the agent still needs a model"
+    refute html =~ "Add your API key in settings"
+  end
+
   test "clicking away closes the chat list", %{conn: conn, user: user} do
     layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
 
