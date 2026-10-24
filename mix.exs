@@ -111,18 +111,8 @@ defmodule Psc.MixProject do
       ],
       test: ["nif.fix", "ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      # `psc.fetch_asset_clis` runs first so a build host behind a proxy gets the
-      # CLIs over curl: the packages' own download uses Erlang's HTTP client,
-      # which rejects the release redirect's headers (over 10 KB).
-      "assets.build": [
-        "compile",
-        "psc.fetch_asset_clis",
-        "tailwind psc",
-        "esbuild psc"
-      ],
+      "assets.build": ["compile", "tailwind psc", "esbuild psc"],
       "assets.deploy": [
-        "compile",
-        "psc.fetch_asset_clis",
         "tailwind psc --minify",
         "esbuild psc --minify",
         "phx.digest"

@@ -62,10 +62,10 @@ services:
         packages=""
         command -v git >/dev/null 2>&1 || packages="$$packages git"
         command -v make >/dev/null 2>&1 || packages="$$packages build-essential"
-        # The asset build fetches the Tailwind and esbuild CLIs with curl
-        # (`mix psc.fetch_asset_clis`): their own download uses Erlang's HTTP
-        # client, which cannot follow the GitHub release redirect behind the
-        # proxy. Keep curl installed here, or that step cannot run.
+        # The asset build needs curl: the tailwind and esbuild Hex packages
+        # download their CLIs with Erlang's HTTP client, which cannot follow the
+        # GitHub release redirect behind the proxy (it fails on headers over
+        # 10 KB). The build fetches them explicitly below.
         command -v curl >/dev/null 2>&1 || packages="$$packages curl"
         [ -s /etc/ssl/certs/ca-certificates.crt ] || packages="$$packages ca-certificates openssl"
 
@@ -115,6 +115,35 @@ services:
         if [ -n "$$previous" ] && [ "$$previous" != "$$current" ]; then
           # Previous beams and the previous release belong to other sources.
           rm -rf /workspace/_build
+        fi
+
+        # The tailwind and esbuild Hex packages download their CLIs themselves,
+        # using Erlang's HTTP client, which rejects response headers over 10 KB.
+        # The GitHub release redirect exceeds that behind the proxy, so the
+        # download dies with {:header_too_long, {:max, 10240}}. Fetch both with
+        # curl into the paths the packages probe and they skip their own
+        # download. Keep these versions in step with config/config.exs.
+        mkdir -p /workspace/_build
+
+        case "$$(dpkg --print-architecture)" in
+          amd64) tw=x64; eb=linux-x64 ;;
+          arm64) tw=arm64; eb=linux-arm64 ;;
+          *) tw=; eb= ;;
+        esac
+
+        if [ -n "$$tw" ] && [ ! -x "/workspace/_build/tailwind-linux-$$tw-4.1.12" ]; then
+          curl -fsSL -o "/workspace/_build/tailwind-linux-$$tw-4.1.12" \
+            "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.12/tailwindcss-linux-$$tw"
+          chmod 0755 "/workspace/_build/tailwind-linux-$$tw-4.1.12"
+        fi
+
+        # esbuild publishes its binaries to the npm registry, not as GitHub
+        # release assets; the tarball holds package/bin/esbuild.
+        if [ -n "$$eb" ] && [ ! -x "/workspace/_build/esbuild-$$eb" ]; then
+          curl -fsSL "https://registry.npmjs.org/@esbuild/$$eb/-/$$eb-0.25.4.tgz" | tar -xz -C /tmp
+          mv /tmp/package/bin/esbuild "/workspace/_build/esbuild-$$eb"
+          rm -rf /tmp/package
+          chmod 0755 "/workspace/_build/esbuild-$$eb"
         fi
 
         cd /workspace

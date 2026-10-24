@@ -299,18 +299,27 @@ sees: `https` on 443 when a proxy terminates TLS in front of the app (both Gigal
 Dokploy/Traefik do). A deployment served over plain HTTP on a port of its own sets
 `PSC_URL_SCHEME=http` and `PSC_URL_PORT=<port>`.
 
-**The asset CLIs are fetched with curl.** `mix assets.deploy` runs the `tailwind` and
-`esbuild` packages, which download their CLIs with Erlang's `:httpc`; that client rejects
-response headers over 10 KB, and the GitHub release redirect Tailwind follows exceeds it
-behind a proxy — `{:header_too_long, {:max, 10240}}`. `mix psc.fetch_asset_clis` runs
-first in `assets.build` and `assets.deploy` and downloads both into the paths the packages
-probe (`_build/tailwind-<target>-<version>`, `_build/esbuild-<target>`), so their own
-download never starts; the esbuild tarball is unpacked with `:erl_tar`.
+**The asset CLIs are fetched by the build host.** `mix assets.deploy` runs the `tailwind`
+and `esbuild` packages, which download their CLIs with Erlang's `:httpc`; that client
+rejects response headers over 10 KB, and the GitHub release redirect Tailwind follows
+exceeds it behind a proxy — `{:header_too_long, {:max, 10240}}`.
 
-It requires `curl`: the Dokploy `bootstrap` service installs it, and the Dockerfile's
-builder stage already has it. Without curl the task reports that and leaves the packages
-to produce their own error, so keep curl in the build image rather than adding a second
-HTTP client.
+The Dokploy `bootstrap` service therefore installs `curl` and downloads both binaries
+straight into the paths the packages probe:
+
+| CLI | Path under `/workspace` |
+|---|---|
+| Tailwind | `_build/tailwind-linux-<x64|arm64>-4.1.12` |
+| esbuild | `_build/esbuild-linux-<x64|arm64>` |
+
+When the file is already there the packages skip their download, so the build never
+touches `:httpc`. Nothing else is involved: no Mix task, no environment variable, no
+Dockerfile step. Keep the versions in that block in step with `config/config.exs`
+(`4.1.12`, `0.25.4`).
+
+Because the compose file is pasted into Dokploy by hand, this behaviour only reaches the
+host once you re-paste `docker-compose.dokploy.yml`. A build from a fresh volume also
+re-downloads, since `_build` is wiped when the commit changes.
 
 ### Toolchain
 
