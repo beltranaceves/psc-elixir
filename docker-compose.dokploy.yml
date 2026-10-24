@@ -62,6 +62,7 @@ services:
         packages=""
         command -v git >/dev/null 2>&1 || packages="$$packages git"
         command -v make >/dev/null 2>&1 || packages="$$packages build-essential"
+        command -v curl >/dev/null 2>&1 || packages="$$packages curl"
         [ -s /etc/ssl/certs/ca-certificates.crt ] || packages="$$packages ca-certificates openssl"
 
         if [ -n "$$packages" ]; then
@@ -111,6 +112,38 @@ services:
           # Previous beams and the previous release belong to other sources.
           rm -rf /workspace/_build
         fi
+
+        # The tailwind and esbuild Mix packages download their standalone CLIs
+        # with Erlang's HTTP client, which refuses headers over 10 KB. Behind
+        # the deploy host's proxy the GitHub release redirect exceeds that
+        # ({:header_too_long, {:max, 10240}}), so fetch the binaries with curl
+        # and point the tasks at them. Kept in the volume, which survives
+        # deploys; versioned names keep a version bump from reusing an old CLI.
+        tools=/workspace/.tools
+        mkdir -p "$$tools"
+
+        case "$$(dpkg --print-architecture)" in
+          amd64) tw=x64; eb=linux-x64 ;;
+          arm64) tw=arm64; eb=linux-arm64 ;;
+          *) echo "Unsupported architecture for the asset CLIs" >&2; exit 1 ;;
+        esac
+
+        if [ ! -x "$$tools/tailwindcss-4.1.12" ]; then
+          curl -fsSL -o "$$tools/tailwindcss-4.1.12" \
+            "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.12/tailwindcss-linux-$$tw"
+          chmod 0755 "$$tools/tailwindcss-4.1.12"
+        fi
+
+        if [ ! -x "$$tools/esbuild-0.25.4" ]; then
+          curl -fsSL "https://registry.npmjs.org/@esbuild/$$eb/-/$$eb-0.25.4.tgz" \
+            | tar -xz -C "$$tools"
+          mv "$$tools/package/bin/esbuild" "$$tools/esbuild-0.25.4"
+          rm -rf "$$tools/package"
+          chmod 0755 "$$tools/esbuild-0.25.4"
+        fi
+
+        export TAILWIND_PATH="$$tools/tailwindcss-4.1.12"
+        export ESBUILD_PATH="$$tools/esbuild-0.25.4"
 
         cd /workspace
 

@@ -299,6 +299,17 @@ sees: `https` on 443 when a proxy terminates TLS in front of the app (both Gigal
 Dokploy/Traefik do). A deployment served over plain HTTP on a port of its own sets
 `PSC_URL_SCHEME=http` and `PSC_URL_PORT=<port>`.
 
+**The asset CLIs are fetched with curl when the network needs it.** `mix assets.deploy`
+runs the `tailwind` and `esbuild` Hex packages, which download their standalone binaries
+with Erlang's HTTP client. That client refuses response headers over 10 KB, so a build
+host behind a proxy fails on the GitHub release redirect with
+`{:header_too_long, {:max, 10240}}`. Both the `Dockerfile` and the Dokploy `bootstrap`
+service therefore download the binaries with curl and set `TAILWIND_PATH` and
+`ESBUILD_PATH`; `config/config.exs` passes those to the packages as `:path`, and the
+packages skip their own download. Leave both unset on a host that can reach the releases
+(Gigalixir does), and the managed download stays in use. Keep the versions in the
+Dockerfile/compose block in step with `config/config.exs`.
+
 ### Toolchain
 
 - **NIF extension (`nif.fix`).** Erlang on Windows resolves NIFs as `.dll`, but `elixir_make`
