@@ -48,7 +48,9 @@ defmodule Psc.Canvas.Structure do
   # Table metadata is present on both a canvas and a template. `notes_mode`
   # and `notes` only exist on a template's layout map, and a bento template is
   # flat, so they sit beside the cards there.
-  @table_metadata ["rows", "columns", "layout"]
+  # `$name` and `$description` are the canvas header, stored in the cells map
+  # by the CRDT. They are not cells, and a table template never writes them.
+  @table_metadata ["rows", "columns", "layout", "$name", "$description"]
 
   @bento_metadata @table_metadata ++
                     ["layout_mode", "bento_columns", "bento_rows", "cells", "notes_mode", "notes"]
@@ -232,7 +234,10 @@ defmodule Psc.Canvas.Structure do
   defp raw_cards(map) do
     case mode(map) do
       :bento ->
-        for {key, cell} <- cells(map) do
+        # Only maps are cards: the map also holds the header strings and the
+        # grid settings, and a canvas written before a key existed must still
+        # render.
+        for {key, cell} <- cells(map), is_map(cell) do
           placement = placement(cell)
 
           %{
@@ -277,7 +282,7 @@ defmodule Psc.Canvas.Structure do
   end
 
   defp label(cell, key) do
-    case cell["label"] do
+    case is_map(cell) && cell["label"] do
       label when is_binary(label) and label != "" -> label
       _other -> key
     end
@@ -313,7 +318,7 @@ defmodule Psc.Canvas.Structure do
   end
 
   @doc "A cell's normalized placement. Table cells are one unit at their index."
-  def placement(cell) do
+  def placement(cell) when is_map(cell) do
     case cell["placement"] do
       %{} = placement ->
         %{
@@ -327,6 +332,9 @@ defmodule Psc.Canvas.Structure do
         %{x: 0, y: 0, w: 1, h: 1}
     end
   end
+
+  # Defensive: a value that is not a cell map has no placement.
+  def placement(_cell), do: %{x: 0, y: 0, w: 1, h: 1}
 
   @doc """
   Clamp a placement to the board.
@@ -532,10 +540,15 @@ defmodule Psc.Canvas.Structure do
       count = count |> normalize_int(@default_columns) |> min(@max_columns) |> max(@min_columns)
       map = Map.put(map, "bento_columns", count)
 
-      Enum.reduce(cells(map), map, fn {key, _cell}, acc ->
-        update_card(acc, key, fn cell ->
-          put_placement(cell, clamp_placement(acc, placement(cell)))
-        end)
+      cells(map)
+      |> Enum.reduce(map, fn
+        {key, cell}, acc when is_map(cell) ->
+          update_card(acc, key, fn cell ->
+            put_placement(cell, clamp_placement(acc, placement(cell)))
+          end)
+
+        _other, acc ->
+          acc
       end)
     else
       map
@@ -819,9 +832,12 @@ defmodule Psc.Canvas.Structure do
   end
 
   defp validate_bento_cell(key, cell, board_columns) do
-    placement = cell["placement"]
+    placement = if is_map(cell), do: cell["placement"]
 
     cond do
+      not is_map(cell) ->
+        {:error, :layout_map, "card #{key} is not a card"}
+
       not is_map(placement) ->
         {:error, :layout_map, "card #{key} has no placement"}
 
@@ -897,12 +913,16 @@ defmodule Psc.Canvas.Structure do
   defp validate_fields(map) do
     map
     |> cells()
-    |> Enum.find_value(:ok, fn {_key, cell} ->
-      fields = cell["fields"] || []
+    |> Enum.find_value(:ok, fn
+      {_key, cell} when is_map(cell) ->
+        fields = cell["fields"] || []
 
-      if length(fields) != length(Enum.uniq(fields)) do
-        {:error, :layout_map, "field keys must be unique within a cell"}
-      end
+        if length(fields) != length(Enum.uniq(fields)) do
+          {:error, :layout_map, "field keys must be unique within a cell"}
+        end
+
+      _other ->
+        nil
     end)
   end
 
@@ -914,6 +934,7 @@ defmodule Psc.Canvas.Structure do
     card_accents =
       map
       |> cells()
+      |> Enum.filter(fn {_key, cell} -> is_map(cell) end)
       |> Enum.map(fn {_key, cell} -> cell["accent"] end)
 
     cond do

@@ -33,6 +33,10 @@ A bento canvas (and a bento template) is flat, exactly like a canvas's `cells`:
 | `accent` | optional token from `Psc.Canvas.Accent` |
 | everything else | the cell's fields, `label` and `titles`, as in a table |
 
+`"$name"` and `"$description"` also live in the map: they are the canvas header, written by
+the name/description operations. They are metadata like `layout_mode`, never cards — a
+canvas that is renamed and then reloaded must still render its board.
+
 `placement` and `accent` are reserved cell keys: they can never be added, removed or
 rendered as editable fields.
 

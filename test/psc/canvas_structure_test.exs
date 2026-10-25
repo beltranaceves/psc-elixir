@@ -117,6 +117,28 @@ defmodule Psc.Canvas.StructureTest do
       assert Structure.rows(cells) == 4
     end
 
+    test "the canvas header keys are not cards" do
+      cells =
+        bento(%{
+          "$name" => "My canvas",
+          "$description" => "A description",
+          "a" => card(0, 0, 6, 2)
+        })
+
+      assert Structure.cell_keys(cells) == ["a"]
+      assert [%{key: "a"}] = Structure.cards(cells)
+      assert Structure.validate(cells) == :ok
+      assert Structure.rows(cells) == 4
+    end
+
+    test "a value that is not a cell map is skipped, not crashed on" do
+      cells = bento(%{"broken" => "not a card", "a" => card(0, 0, 6, 2)})
+
+      assert Enum.map(Structure.cards(cells), & &1.key) == ["a"]
+      assert Structure.placement("not a card") == %{x: 0, y: 0, w: 1, h: 1}
+      assert {:error, _, "card broken is not a card"} = Structure.validate(cells)
+    end
+
     test "an empty bento has no cards" do
       assert Structure.empty?(bento())
       refute Structure.empty?(bento(%{"a" => card(0, 0, 6, 2)}))
@@ -304,7 +326,9 @@ defmodule Psc.Canvas.StructureTest do
     end
 
     test "set_columns clamps every card into the narrower board" do
-      cells = bento(%{"a" => card(8, 0, 4, 2), "b" => card(0, 0, 4, 2)})
+      cells =
+        bento(%{"a" => card(8, 0, 4, 2), "b" => card(0, 0, 4, 2), "$name" => "Header"})
+
       narrow = Structure.set_columns(cells, 6)
 
       assert narrow["bento_columns"] == 6

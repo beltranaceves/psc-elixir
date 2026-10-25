@@ -66,6 +66,20 @@ defmodule PscWeb.BentoLiveTest do
       refute has_element?(view, "#canvas-bento")
     end
 
+    test "renaming the canvas keeps the board rendering", %{conn: conn, user: user} do
+      canvas = bento_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      # The name is a CRDT operation that lands beside the cards as `$name`;
+      # it must not be mistaken for one.
+      render_change(view, "update_name", %{"value" => "Renamed bento"})
+
+      assert has_element?(view, "#bento-board")
+      assert has_element?(view, "#bento-card-big_picture")
+      assert has_element?(view, "#canvas-name-form input[value='Renamed bento']")
+      assert "$name" not in Structure.cell_keys(cells(canvas))
+    end
+
     test "a card carries its server-computed neighbours for the mobile swipe", %{
       conn: conn,
       user: user
