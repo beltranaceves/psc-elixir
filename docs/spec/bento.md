@@ -29,7 +29,7 @@ A bento canvas (and a bento template) is flat, exactly like a canvas's `cells`:
 | `layout_mode` | `"bento"`. Absent means a table. |
 | `bento_columns` | 4–16, default 12 |
 | `bento_rows` | 1–64, default 4. The container height: a board can reserve empty rows below its cards |
-| `placement` | `x`, `y` (0-based whole columns/rows), `w`, `h` (whole or half units). `h` is a **minimum** |
+| `placement` | `x`, `y`, `w`, `h` in half units, 0-based. `h` is a **minimum** |
 | `accent` | optional token from `Psc.Canvas.Accent` |
 | everything else | the cell's fields, `label` and `titles`, as in a table |
 
@@ -40,11 +40,11 @@ rendered as editable fields.
 
 - `bento_rows` is a floor: a card that reaches lower than the stored value grows the board,
   so shrinking the container can never hide a card.
-- `w`, `h` ≥ 0.5, in half steps; `x` ≥ 0, `y` ≥ 0, both whole; `x + w ≤ bento_columns`.
-  A card starts on a column, but its size can be half a column (or row), so a resize
-  is twice as fine as the template's grid. The board renders two CSS tracks per column
-  (`Structure.tracks_per_unit/0`) to make that possible; one row unit is 72px including
-  the 8px gap, so a half step is 40px.
+- `x`, `y`, `w`, `h` are multiples of 0.5; `x`, `y` ≥ 0; `w`, `h` ≥ 0.5; `x + w ≤ bento_columns`.
+  A card can be **moved and resized** in half-column steps, so the two gestures share one
+  granularity and a card can be nudged without resizing it. The board renders two CSS
+  tracks per column (`Structure.tracks_per_unit/0`) to make that possible; one row unit is
+  72px including the 8px gap, so a half step is 40px.
 - A template needs at least one card to save; a canvas may be empty (the empty state adds
   the first card).
 - Unknown accents and columns outside 4–16 are rejected by the schema.
@@ -81,7 +81,8 @@ smaller board, so it clamps the cards instead.
 - `Edit layout` shows the drag grip, the resize corner, the accent swatch, the remove
   action and `Add card`. Without it a card behaves like a table cell.
 - Dragging or resizing previews locally (`BentoBoard`) and pushes the final rectangle.
-- Keyboard: focus the grip, arrow keys move one unit; shift+arrows resize. The shift path
+- Keyboard: focus the grip, arrow keys move half a unit; shift+arrows resize by the same
+  step. The shift path
   lives in the hook because the LiveView keydown payload does not carry modifier flags.
 - Removing a card with content opens the same confirmation as a row or column.
 - The toolbar reports the board's real grid (`12 × 5`: columns × rows) and, while Edit

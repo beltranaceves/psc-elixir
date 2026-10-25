@@ -711,7 +711,8 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           step = Structure.min_size()
           Structure.resize(lm, key, card.w + dx * step, card.h + dy * step)
         else
-          Structure.move(lm, key, card.x + dx, card.y + dy)
+          step = Structure.min_size()
+          Structure.move(lm, key, card.x + dx * step, card.y + dy * step)
         end
     end
   end

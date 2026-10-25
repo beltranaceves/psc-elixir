@@ -351,16 +351,16 @@ defmodule Psc.Canvas.Structure do
       |> min(@max_card_height)
       |> max(min_size())
 
-    # A card starts on a whole column: only its size is half-stepped, so the
-    # board keeps a tidy left edge and the neighbours stay easy to read.
+    # Position and size move in the same half units, so a card can be nudged
+    # half a column without resizing it first.
     x =
       placement
       |> get_number("x", 0)
-      |> round()
+      |> snap()
       |> max(0)
-      |> min(trunc(board_columns - w))
+      |> min(board_columns - w)
 
-    y = placement |> get_number("y", 0) |> round() |> max(0)
+    y = placement |> get_number("y", 0) |> snap() |> max(0)
 
     %{x: x, y: y, w: w, h: h}
   end
@@ -488,7 +488,8 @@ defmodule Psc.Canvas.Structure do
   def move(map, key, x, y) do
     update_bento_card(map, key, fn map, cell ->
       current = placement(cell)
-      x = x |> normalize_number(current.x) |> round()
+      x = x |> normalize_number(current.x) |> snap()
+      y = y |> normalize_number(current.y) |> snap()
       map = grow_columns(map, x + current.w)
 
       {map, put_placement(cell, clamp_placement(map, %{current | x: x, y: y}))}
@@ -825,8 +826,7 @@ defmodule Psc.Canvas.Structure do
         {:error, :layout_map, "card #{key} has no placement"}
 
       not valid_placement_units?(placement) ->
-        {:error, :layout_map,
-         "card #{key} must start on a column and be a whole number of half columns wide"}
+        {:error, :layout_map, "card #{key} must be placed and sized in half units"}
 
       placement["w"] < min_size() or placement["h"] < min_size() ->
         {:error, :layout_map, "card #{key} must be at least half a unit wide and tall"}
@@ -845,16 +845,16 @@ defmodule Psc.Canvas.Structure do
     end
   end
 
-  # A card starts on a whole column, and its size is a multiple of half a
-  # column - the granularity a resize moves in.
+  # Position and size both sit on half-unit boundaries: that is the step a
+  # move and a resize share.
   defp valid_placement_units?(placement) do
-    Enum.all?(["x", "y"], &is_number(placement[&1])) and
-      Enum.all?(["x", "y"], &(placement[&1] == round(placement[&1]))) and
-      Enum.all?(["w", "h"], &is_number(placement[&1])) and
-      Enum.all?(
-        ["w", "h"],
-        &(abs(placement[&1] * @tracks_per_unit - round(placement[&1] * @tracks_per_unit)) < 1.0e-9)
-      )
+    fields = ["x", "y", "w", "h"]
+
+    Enum.all?(fields, &is_number(placement[&1])) and
+      Enum.all?(fields, fn field ->
+        value = placement[field] * @tracks_per_unit
+        abs(value - round(value)) < 1.0e-9
+      end)
   end
 
   defp valid_label?(nil), do: true

@@ -195,14 +195,15 @@ defmodule PscWeb.BentoLiveTest do
       |> element("#bento-move-decision")
       |> render_keydown(%{"key" => "ArrowRight"})
 
-      assert %{"x" => 1, "y" => 3} = placement(canvas, "decision")
-      assert has_element?(view, ~s|#bento-card-decision[style*="grid-column: 3 / span 12"]|)
+      # One press moves half a column: the position step matches the size step.
+      assert %{"x" => 0.5, "y" => 3} = placement(canvas, "decision")
+      assert has_element?(view, ~s|#bento-card-decision[style*="grid-column: 2 / span 12"]|)
 
       view
       |> element("#bento-move-decision")
       |> render_keydown(%{"key" => "ArrowDown"})
 
-      assert %{"x" => 1, "y" => 4} = placement(canvas, "decision")
+      assert %{"x" => 0.5, "y" => 3.5} = placement(canvas, "decision")
     end
 
     test "shift with an arrow resizes a card in half units", %{conn: conn, user: user} do

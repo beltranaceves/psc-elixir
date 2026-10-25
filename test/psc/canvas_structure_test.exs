@@ -172,6 +172,14 @@ defmodule Psc.Canvas.StructureTest do
   end
 
   describe "move, resize and accents" do
+    test "moves a card in half units" do
+      cells = bento(%{"a" => card(0, 0, 6, 2)})
+      moved = Structure.move(cells, "a", 6.5, 2.5)
+
+      assert moved["a"]["placement"] == %{"x" => 6.5, "y" => 2.5, "w" => 6, "h" => 2}
+      assert Structure.columns(moved) == 13
+    end
+
     test "moves a card, growing the board to the right" do
       cells = bento(%{"a" => card(0, 0, 6, 2)})
       moved = Structure.move(cells, "a", 9, 3)
@@ -215,13 +223,14 @@ defmodule Psc.Canvas.StructureTest do
       assert snapped["a"]["placement"]["h"] == 2.0
     end
 
-    test "a half-width card is valid; a quarter-width card is not" do
+    test "a half-unit card is valid; a quarter-unit one is not" do
       assert Structure.validate(bento(%{"a" => card(0, 0, 0.5, 2)})) == :ok
+      assert Structure.validate(bento(%{"a" => card(1.5, 2.5, 0.5, 0.5)})) == :ok
 
       assert {:error, _, message} =
                Structure.validate(bento(%{"a" => card(0, 0, 1.25, 2)}))
 
-      assert message =~ "half columns"
+      assert message =~ "half units"
     end
 
     test "size labels print whole numbers without a decimal tail" do
@@ -378,7 +387,7 @@ defmodule Psc.Canvas.StructureTest do
       assert {:error, _, message} =
                Structure.validate(bento(%{"a" => card("0", 0, 6, 2)}))
 
-      assert message =~ "half columns"
+      assert message =~ "half units"
     end
 
     test "the column count is bounded" do

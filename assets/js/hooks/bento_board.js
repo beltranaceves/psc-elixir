@@ -91,8 +91,10 @@ export default {
     const next =
       this.mode === "move"
         ? {
-            x: clamp(this.origin.x + Math.round(dx), 0, maxColumns - this.origin.w),
-            y: Math.max(0, this.origin.y + Math.round(dy)),
+            // The same half-unit step a resize uses, so a card can be nudged
+            // half a column without changing its size first.
+            x: clamp(snap(this.origin.x + dx), 0, maxColumns - this.origin.w),
+            y: Math.max(0, snap(this.origin.y + dy)),
             w: this.origin.w,
             h: this.origin.h,
           }

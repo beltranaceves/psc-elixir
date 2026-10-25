@@ -1021,8 +1021,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       card ->
         operation =
           if resize? do
-            # Resize moves in half units; a move still goes one column at a
-            # time, so cards stay aligned to the template's grid.
+            # Position and size share the same half-unit step.
             step = Structure.min_size()
 
             %{
@@ -1032,7 +1031,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               "h" => card.h + dy * step
             }
           else
-            %{"type" => "move_card", "cell_key" => key, "x" => card.x + dx, "y" => card.y + dy}
+            step = Structure.min_size()
+
+            %{
+              "type" => "move_card",
+              "cell_key" => key,
+              "x" => card.x + dx * step,
+              "y" => card.y + dy * step
+            }
           end
 
         process_operation(socket, operation)

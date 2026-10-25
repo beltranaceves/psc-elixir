@@ -91,7 +91,8 @@ test.describe('bento board', () => {
     // The move grip takes arrow keys: one column left, then shift+down grows.
     await page.locator('#bento-move-card1').focus();
     await page.keyboard.press('ArrowRight');
-    await expect(card).toHaveCSS('grid-column-start', '3');
+    // Half a column: track 2 of 24, not track 3.
+    await expect(card).toHaveCSS('grid-column-start', '2');
 
     await page.locator('#bento-move-card1').focus();
     await page.keyboard.press('Shift+ArrowDown');
@@ -175,6 +176,30 @@ test.describe('bento board', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await expect(page.locator('#bento-size')).toContainText('8 × 9');
     await expect(page.locator('#bento-board')).toHaveCSS('min-height', '712px');
+  });
+
+  test('dragging a card moves it in half columns', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Half Move'));
+
+    await page.locator('#edit-layout-toggle').click();
+
+    const board = page.locator('#bento-board');
+    const unit = (await board.boundingBox())!.width / 12;
+    const card = page.locator('#bento-card-decision');
+    const gripBox = (await page.locator('#bento-move-decision').boundingBox())!;
+
+    // Half a column of travel is a half-unit placement, the same step a
+    // resize uses: track 2 rather than track 3.
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      gripBox.x + gripBox.width / 2 + unit / 2,
+      gripBox.y + gripBox.height / 2,
+      { steps: 6 },
+    );
+    await page.mouse.up();
+
+    await expect(card).toHaveCSS('grid-column-start', '2', { timeout: 10_000 });
   });
 
   test('widening the board opens room to drag a card into it', async ({ page }) => {
