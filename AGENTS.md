@@ -150,6 +150,11 @@ results, not a summary of intentions.
   (start `bin/psc`, never `bin/server`), and `def release` in `mix.exs`.
 - Only numeric `PSC_PORT`/`PORT` values are honored; otherwise listen on 4000. SSL for the
   database follows its host; `PSC_DB_SSL=true|false` overrides.
+- Root-level `priv/static` files (`manifest.webmanifest`, `sw.js`, `offline.html`,
+  `favicon.ico`) are in `PscWeb.static_paths/0`. Verified routes rewrite their `~p` links
+  to digested names in production (`manifest-<hash>.webmanifest`), so `Plug.Static` allows
+  those digested prefixes with `only_matching`. Without it the manifest 404s in production
+  while dev keeps working, and the app stops being installable as a PWA.
 - The free tier allows 1 app, 1 database, ~10k rows per table, 2 connections.
 
 ## Agent tab and MCP
