@@ -39,6 +39,7 @@ defmodule PscWeb.UserLive.SettingsAgentConnections do
     %{
       connection: connection,
       provider: provider,
+      provider_open: false,
       models: models,
       test: nil,
       tested_for: nil,
@@ -136,20 +137,61 @@ defmodule PscWeb.UserLive.SettingsAgentConnections do
             <UIForm.form_label field={@dialog.form[:provider]}>Provider</UIForm.form_label>
 
             <UIForm.form_control>
-              <select
-                name={@dialog.form[:provider].name}
-                id={@dialog.form[:provider].id}
-                phx-change="select_provider"
-                class="w-full rounded-lg border border-base-content/20 bg-base-100 px-3 py-2 text-sm"
+              <div
+                id="connection-provider-field"
+                class="relative"
+                phx-hook="ProviderSelect"
+                phx-click-away="close_provider_list"
               >
-                <option
-                  :for={provider <- @providers}
-                  value={provider.id}
-                  selected={provider.id == @dialog.provider}
+                <input type="hidden" name={@dialog.form[:provider].name} value={@dialog.provider} />
+
+                <button
+                  type="button"
+                  id={@dialog.form[:provider].id}
+                  phx-click="toggle_provider_list"
+                  aria-haspopup="listbox"
+                  aria-expanded={to_string(@dialog.provider_open)}
+                  aria-controls="connection-provider-list"
+                  aria-label={"Provider: " <> Connection.provider_label(@dialog.provider)}
+                  class="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs transition-colors focus:outline-hidden focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                 >
-                  {provider.label}
-                </option>
-              </select>
+                  <span class="truncate">{Connection.provider_label(@dialog.provider)}</span>
+                  <.icon
+                    name="hero-chevron-down"
+                    class="size-4 shrink-0 text-muted-foreground"
+                  />
+                </button>
+
+                <div
+                  :if={@dialog.provider_open}
+                  id="connection-provider-list"
+                  role="listbox"
+                  aria-label="Providers"
+                  class="absolute inset-x-0 top-full z-30 mt-1 max-h-64 overflow-y-auto overscroll-contain rounded-xl border border-base-content/10 bg-base-100 p-1 shadow-xl"
+                >
+                  <button
+                    :for={provider <- @providers}
+                    type="button"
+                    role="option"
+                    aria-selected={to_string(provider.id == @dialog.provider)}
+                    phx-click="select_provider"
+                    phx-value-provider={provider.id}
+                    class={[
+                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",
+                      if(provider.id == @dialog.provider,
+                        do: "bg-primary/10 text-primary",
+                        else: "text-base-content/80 hover:bg-base-200"
+                      )
+                    ]}
+                  >
+                    <.icon
+                      name="hero-check"
+                      class={["size-4 shrink-0", provider.id != @dialog.provider && "invisible"]}
+                    />
+                    <span class="truncate">{provider.label}</span>
+                  </button>
+                </div>
+              </div>
             </UIForm.form_control>
             <UIForm.form_message field={@dialog.form[:provider]} />
           </UIForm.form_item>
@@ -158,23 +200,59 @@ defmodule PscWeb.UserLive.SettingsAgentConnections do
             <UIForm.form_label field={@dialog.form[:model_id]}>Model</UIForm.form_label>
 
             <UIForm.form_control>
-              <UIInput.input
-                field={@dialog.form[:model_id]}
-                list="connection-models"
-                required
-                maxlength="120"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder={model_placeholder(@dialog)}
-              />
+              <div id="connection-model-field" phx-hook="ModelSuggestions" class="relative">
+                <UIInput.input
+                  field={@dialog.form[:model_id]}
+                  required
+                  maxlength="120"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder={model_placeholder(@dialog)}
+                />
+
+                <div
+                  id="connection-model-suggestions"
+                  data-suggestions
+                  role="listbox"
+                  aria-label="Model suggestions"
+                  hidden
+                  class="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-base-content/10 bg-base-100 shadow-xl"
+                >
+                  <div class="flex items-center justify-between border-b border-base-content/10 px-3 py-2">
+                    <span class="text-[11px] font-medium uppercase tracking-wider text-base-content/40">
+                      Models
+                    </span>
+                    <span data-suggestions-count class="text-[11px] text-base-content/40">
+                      {length(@dialog.models)}
+                    </span>
+                  </div>
+
+                  <div class="max-h-56 overflow-y-auto overscroll-contain p-1">
+                    <button
+                      :for={model <- @dialog.models}
+                      type="button"
+                      role="option"
+                      tabindex="-1"
+                      data-suggestion={model}
+                      class="block w-full truncate rounded-lg px-2.5 py-2 text-left text-sm text-base-content/80 transition-colors hover:bg-base-200 data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
+                    >
+                      {model}
+                    </button>
+
+                    <p
+                      data-suggestions-empty
+                      hidden
+                      class="px-2.5 py-3 text-sm text-base-content/50"
+                    >
+                      No matching models.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </UIForm.form_control>
-
-            <datalist id="connection-models">
-              <option :for={model <- @dialog.models} value={model}></option>
-            </datalist>
-
             <p class="mt-1 text-xs text-base-content/45">
-              Start typing for suggestions, or test the connection to fetch this provider's list.
+              Start typing to filter suggestions, or test the connection to fetch this provider's
+              list.
             </p>
             <UIForm.form_message field={@dialog.form[:model_id]} />
           </UIForm.form_item>

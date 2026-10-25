@@ -368,6 +368,27 @@ defmodule PscWeb.UserLive.Settings do
     {:noreply, assign(socket, :connection_dialog, nil)}
   end
 
+  def handle_event("toggle_provider_list", _params, socket) do
+    case socket.assigns.connection_dialog do
+      nil ->
+        {:noreply, socket}
+
+      dialog ->
+        {:noreply,
+         assign(socket, :connection_dialog, %{dialog | provider_open: not dialog.provider_open})}
+    end
+  end
+
+  def handle_event("close_provider_list", _params, socket) do
+    case socket.assigns.connection_dialog do
+      nil ->
+        {:noreply, socket}
+
+      dialog ->
+        {:noreply, assign(socket, :connection_dialog, %{dialog | provider_open: false})}
+    end
+  end
+
   def handle_event("select_provider", params, socket) do
     case socket.assigns.connection_dialog do
       nil ->
@@ -385,6 +406,7 @@ defmodule PscWeb.UserLive.Settings do
          assign(socket, :connection_dialog, %{
            dialog
            | provider: provider,
+             provider_open: false,
              models: models,
              test: nil,
              tested_for: nil,

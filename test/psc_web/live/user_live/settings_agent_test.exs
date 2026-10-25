@@ -30,7 +30,6 @@ defmodule PscWeb.UserLive.SettingsAgentTest do
         Map.merge(
           %{
             "name" => "Work OpenAI",
-            "provider" => "openai",
             "model_id" => "gpt-4.1-mini",
             "api_key" => "sk-secret-123",
             "base_url" => ""
@@ -47,12 +46,17 @@ defmodule PscWeb.UserLive.SettingsAgentTest do
     lv |> element("button", "Add your first connection") |> render_click()
     assert has_element?(lv, "#connection-form")
 
+    lv |> element("#connection_provider") |> render_click()
+
+    lv
+    |> element(~s|#connection-provider-list button[phx-value-provider="anthropic"]|)
+    |> render_click()
+
     html =
       lv
       |> form(
         "#connection-form",
         fill_form(%{
-          "provider" => "anthropic",
           "model_id" => "claude-haiku-4-5",
           "api_key" => "sk-ant-secret-123"
         })
@@ -123,6 +127,24 @@ defmodule PscWeb.UserLive.SettingsAgentTest do
     assert Connections.default(user).id == second.id
   end
 
+  test "the provider picker updates the dialog and carries its value", %{conn: conn} do
+    user = user_fixture()
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+
+    lv |> element("button", "Add your first connection") |> render_click()
+    lv |> element("#connection_provider") |> render_click()
+    assert has_element?(lv, "#connection-provider-list")
+
+    lv
+    |> element(~s|#connection-provider-list button[phx-value-provider="ollama"]|)
+    |> render_click()
+
+    refute has_element?(lv, "#connection-provider-list")
+    assert has_element?(lv, "#connection_provider", "Ollama")
+    assert has_element?(lv, ~s|input[name="connection[provider]"][value="ollama"]|)
+    assert render(lv) =~ "Not required for this provider."
+  end
+
   test "the test button fetches models and the save caches them", %{conn: conn} do
     user = user_fixture()
     previous = Application.get_env(:psc, :model_catalog_fetcher)
@@ -142,7 +164,11 @@ defmodule PscWeb.UserLive.SettingsAgentTest do
       |> render_submit(%{"action" => "test"})
 
     assert html =~ "Connected — 2 models available."
-    assert has_element?(lv, ~s|#connection-models option[value="gpt-4.1-mini"]|)
+
+    assert has_element?(
+             lv,
+             ~s|#connection-model-suggestions [data-suggestion="gpt-4.1-mini"]|
+           )
 
     # Testing does not save anything.
     assert Connections.list(user.id) == []
