@@ -89,7 +89,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                   class="h-8 w-12 rounded-md border border-base-content/15 bg-base-100 px-1 text-center text-xs tabular-nums text-base-content focus:border-primary focus:outline-none"
                 />
               </form>
-               <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
+              <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
               <form id="bento-rows-form" phx-change="set_bento_rows">
                 <input
                   type="number"
