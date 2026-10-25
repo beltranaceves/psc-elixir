@@ -19,15 +19,19 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **The canvas grid is the hero.** It occupies the full viewport width minus the sidebar. No max-width constraint on the grid itself.
 - **Cell cards** have a subtle border that brightens on focus. The cell label sits in a compact header bar. Fields are stacked vertically with 8px gaps.
 - **Presence indicators** are a 3px colored dot in the top-right corner of each cell card, with a tooltip showing the username. Multiple users in the same cell show multiple dots.
-- **Structure-editing controls** (add/remove row/column, add/remove field) are hidden behind a "Structure" toggle in the editor header. When active, they appear as small outline buttons with accent color on hover.
+- **Structure-editing controls** (add/remove row/column, add/remove field) are hidden behind an
+  "Edit structure" toggle in the layout toolbar. When active, they appear as small outline
+  buttons with accent color on hover.
 - **The sidebar** (presence + sharing) is fixed at 280px on the right, collapsible via a button in the header. On mobile, it becomes a slide-over panel.
-- **The editor header** contains: canvas name (editable inline), description (editable inline, below name), Structure toggle, Share button, and presence avatars.
-- **The description sits close to the grid.** The gap between the description and the table is
-  at most 16 px. The share dialog is rendered out of the flow, so its wrapper cannot act as a
-  flex item and open a gap of its own between the header and the grid.
+- **The editor header** is the canvas title, edited inline in the layout toolbar above the
+  grid, the bento board or the image board — the same row that holds **Edit structure**. The
+  only chrome above the panels is the presence pill, the save state and Share.
+- **The description lives in the Info view.** It is not shown above the grid: the canvas's
+  details, sharing and settings have a tab of their own at the right end of the strip.
 - **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
-- **The status pill reports more than the state.** The pill (the badge beside the title on
-  larger screens, an icon in the app header on phones) opens a tooltip with the details: when
+- **The status pill reports more than the state.** The pill (beside the presence button in the
+  status row above the panels, an icon in the app header on phones) opens a tooltip with the
+  details: when
   the last write landed ("just now", "2 min ago"), how many writes this session made, how
   many failed, and how long the last write took. Hovering opens it on a desktop; a tap opens
   it on a phone, where there is no hover. A failed write keeps the state "unsaved", because
@@ -37,10 +41,11 @@ See `template-designer.md` → **Design System** for the full design direction. 
   colours cannot drift apart: **Saved** is the primary colour, **Saving** the secondary one,
   and **Unsaved** the warning colour. The phone pill is a 32 px circle like the presence
   pill and the Share button next to it, so the three read as one cluster.
-- **View tabs** switch between Analysis, Notes, Editor, and Agent. The selected view is encoded as
-  `?tab=...` for deep links, but selecting tabs replaces the current URL entry so browser Back
-  leaves the canvas editor instead of stepping through view selections. The switch itself is
-  client-side: every view is rendered and the inactive ones are hidden, so the panel changes
+- **View tabs** switch between Analysis, Notes, Editor, Agent and Info. The selected view is
+  encoded as `?tab=...` for deep links, but selecting tabs replaces the current URL entry so
+  browser Back leaves the canvas editor instead of stepping through view selections. The
+  switch itself is client-side: every view is rendered and the inactive ones are hidden, so
+  the panel changes
   the moment the tab is clicked (0.4 ms) and the server only confirms it and the URL. The
   selected tab is styled from `aria-selected`, so the client can move the highlight too.
 - **The fullscreen cell is a URL state.** On phones the expanded cell is encoded as the

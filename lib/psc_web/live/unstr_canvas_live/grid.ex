@@ -5,6 +5,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
 
   import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [title_field: 1]
 
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
@@ -19,6 +20,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   @row_label_width_rem 11
 
   attr :cells, :map, required: true
+  attr :c_name, :string, required: true
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
   attr :focus_cell, :string, default: nil
@@ -32,7 +34,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
     >
       <%!-- Structure editing is available to everyone with access to the
               canvas: the toggle, and — while it is on — the add actions. --%>
-      <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
+      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
         <button
           type="button"
           id="edit-structure-toggle"
@@ -49,8 +51,12 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
           <.icon name="hero-pencil-square" class="size-4" /> Edit structure
         </button>
 
+        <div class="min-w-[8rem] flex-1">
+          <.title_field c_name={@c_name} />
+        </div>
+
         <%= if @edit_structure? do %>
-          <div class="flex gap-2">
+          <div class="ml-auto flex gap-2">
             <UIButton.button
               type="button"
               variant="outline"

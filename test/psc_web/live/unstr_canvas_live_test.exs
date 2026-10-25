@@ -335,6 +335,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert html =~ "Analysis"
       assert html =~ "Notes"
       assert html =~ "Agent"
+      assert html =~ "Info"
       assert has_element?(lv, "#canvas-tabs [role='tab']")
 
       # The tabs are rendered twice: in the app header for large screens and
@@ -363,10 +364,20 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#canvas-tab-agent[aria-selected='true']")
       assert has_element?(lv, "#canvas-panel-agent:not(.hidden)")
 
+      # The Info view is the rightmost tab; it holds the canvas details.
+      lv |> element("#canvas-tab-info") |> render_click()
+      assert has_element?(lv, "#canvas-tab-info[aria-selected='true']")
+      assert has_element?(lv, "#canvas-panel-info:not(.hidden)")
+      assert has_element?(lv, "#canvas-info-details")
+
       # Tabs are deep-linkable.
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
       assert has_element?(lv, "#canvas-tab-agent[aria-selected='true']")
       assert has_element?(lv, "#canvas-panel-agent:not(.hidden)")
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=info")
+      assert has_element?(lv, "#canvas-tab-info[aria-selected='true']")
+      assert has_element?(lv, "#canvas-panel-info:not(.hidden)")
     end
 
     test "titles the header Canvas Editor and leaves the Canvases nav item unhighlighted", %{
@@ -430,7 +441,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       refute html =~ ~s(name="values[semantics]")
     end
 
-    test "puts title, description, presence and actions in one header row", %{
+    test "puts the title in the layout toolbar and the details in the Info view", %{
       conn: conn,
       user: user
     } do
@@ -439,9 +450,10 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      # One compact header row: title, description, presence and the actions.
-      assert has_element?(lv, "#canvas-header #canvas-name-form")
-      assert has_element?(lv, "#canvas-header #canvas-description-form")
+      # The title is renamed where it is read: in the grid's toolbar.
+      assert has_element?(lv, "#canvas-grid #canvas-name-form")
+      # The description is not part of the editing surface.
+      refute has_element?(lv, "#canvas-panel-editor #canvas-description-form")
       assert has_element?(lv, "#canvas-header #active-users-tooltip")
       assert has_element?(lv, "#canvas-header #share-canvas-button")
 
@@ -454,6 +466,34 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       # ... and the grid itself stays always visible for editing.
       assert has_element?(lv, "#md-r1_c1-content")
+
+      # The name and the description live in the Info view.
+      lv |> element("#canvas-tab-info") |> render_click()
+      assert has_element?(lv, "#canvas-panel-info #canvas-info-name-form")
+      assert has_element?(lv, "#canvas-panel-info #canvas-description-form")
+    end
+
+    test "renames the canvas and edits its description from the Info view", %{
+      conn: conn,
+      user: user
+    } do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=info")
+
+      lv
+      |> element("#canvas-info-name-form")
+      |> render_change(%{"value" => "Renamed from info"})
+
+      lv
+      |> element("#canvas-description-form")
+      |> render_change(%{"value" => "Described from info"})
+
+      # Both write through the same CRDT operations as the toolbar title, so
+      # the editor sees them without leaving the Info view.
+      assert has_element?(lv, "#canvas-grid #canvas-name-form input[value='Renamed from info']")
+      assert has_element?(lv, "#canvas-description-form textarea", "Described from info")
     end
 
     test "structure editing is available to users the canvas is shared with", %{

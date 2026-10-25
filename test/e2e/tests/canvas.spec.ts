@@ -358,7 +358,7 @@ test.describe('canvas editor tabs', () => {
     await createCanvasAndOpen(page, uniqueName('Tabbed Canvas'));
 
     const tabs = page.locator('#canvas-tabs [role="tab"]');
-    await expect(tabs).toHaveCount(4);
+    await expect(tabs).toHaveCount(5);
     await expect(page.locator('#canvas-tab-editor')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#canvas-grid')).toBeVisible();
 
@@ -368,6 +368,12 @@ test.describe('canvas editor tabs', () => {
     // The grid stays in the DOM but is hidden, so the switch is instant.
     await expect(page.locator('#canvas-grid')).toBeHidden();
     await expect(page).toHaveURL(/tab=notes/);
+
+    await page.locator('#canvas-tab-info').click();
+    await expect(page.locator('#canvas-tab-info')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#canvas-panel-info')).toBeVisible();
+    await expect(page.locator('#canvas-info-details')).toBeVisible();
+    await expect(page).toHaveURL(/tab=info/);
 
     await page.locator('#canvas-tab-editor').click();
     await expect(page.locator('#canvas-grid')).toBeVisible();
@@ -570,27 +576,31 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
 });
 
 test.describe('canvas editor layout', () => {
-  test('keeps the header compact and the grid full-width', async ({ page }) => {
+  test('puts the canvas title in the editor toolbar and the grid full-width', async ({
+    page,
+  }) => {
     await createCanvasAndOpen(page, uniqueName('Layout Canvas'));
 
-    // Title and description share one compact header row.
-    const header = page.locator('#canvas-header');
-    const name = header.locator('#canvas-name-form input');
-    const description = header.locator('#canvas-description-form textarea');
+    // The title is renamed where it is read: in the layout toolbar, above the
+    // table. The description is not part of the editing surface.
+    const name = page.locator('#canvas-grid #canvas-name-form input');
     await expect(name).toBeVisible();
-    await expect(description).toBeVisible();
+    await expect(page.locator('#canvas-panel-editor #canvas-description-form')).toHaveCount(0);
 
     const nameBox = await name.boundingBox();
-    const descriptionBox = await description.boundingBox();
     expect(nameBox).not.toBeNull();
-    expect(descriptionBox).not.toBeNull();
-    // Same row: the name's centre falls inside the description's vertical
-    // span. A description inherited from a template may wrap to more than one
-    // line, so equal heights are not required — sharing the row is.
-    const nameCentre = nameBox!.y + nameBox!.height / 2;
-    expect(nameCentre).toBeGreaterThanOrEqual(descriptionBox!.y);
-    expect(nameCentre).toBeLessThanOrEqual(descriptionBox!.y + descriptionBox!.height);
-    expect(descriptionBox!.x).toBeGreaterThan(nameBox!.x);
+
+    // The structure toggle leads the row; the title follows it.
+    const toggleBox = await page.locator('#edit-structure-toggle').boundingBox();
+    expect(toggleBox).not.toBeNull();
+    expect(toggleBox!.x).toBeLessThan(nameBox!.x);
+
+    // The toolbar sits above the header row of the table, inside the grid card.
+    const grid = page.locator('#canvas-grid');
+    const gridBox = await grid.boundingBox();
+    expect(gridBox).not.toBeNull();
+    expect(nameBox!.y).toBeGreaterThanOrEqual(gridBox!.y);
+    expect(nameBox!.y).toBeLessThan(gridBox!.y + 48);
 
     // The editable grid itself stays visible.
     await expect(page.locator('#md-problem-content')).toBeVisible();
@@ -604,19 +614,16 @@ test.describe('canvas editor layout', () => {
     expect(ratio).toBeLessThan(0.97);
   });
 
-  test('keeps the gap between the description and the table tight', async ({ page }) => {
-    await createCanvasAndOpen(page, uniqueName('Tight Header'));
+  test('moves the description to the Info tab', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Info Canvas'));
 
-    const description = page.locator('#canvas-description-form textarea');
-    const grid = page.locator('#canvas-grid');
-    const descriptionBox = await description.boundingBox();
-    const gridBox = await grid.boundingBox();
-    expect(descriptionBox).not.toBeNull();
-    expect(gridBox).not.toBeNull();
+    // Hidden on the editor, where the grid is the point of the screen.
+    await expect(page.locator('#canvas-description-form')).toBeHidden();
 
-    // The share dialog is an out-of-flow element: it must not add a gap of
-    // its own between the header and the table.
-    expect(gridBox!.y - (descriptionBox!.y + descriptionBox!.height)).toBeLessThanOrEqual(16);
+    await page.locator('#canvas-tab-info').click();
+    await expect(page.locator('#canvas-panel-info')).toBeVisible();
+    await expect(page.locator('#canvas-info-name-form')).toBeVisible();
+    await expect(page.locator('#canvas-description-form textarea')).toBeVisible();
   });
 
   test('ends the grid just above the app bar, without a dead band or a page scroll', async ({

@@ -19,6 +19,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias PscWeb.UnstrCanvasLive.Grid
   alias PscWeb.UnstrCanvasLive.Header
   alias PscWeb.UnstrCanvasLive.ImageCanvas
+  alias PscWeb.UnstrCanvasLive.InfoPanel
   alias PscWeb.UnstrCanvasLive.NotesPanel
   alias PscWeb.UnstrCanvasLive.Save
   alias PscWeb.UnstrCanvasLive.Tabs
@@ -1877,12 +1878,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2"
       >
         <Header.header
-          canvas={@canvas}
-          c_name={@c_name}
-          c_desc={@c_desc}
           presence={@presence}
           status={@status}
-          user_id={@user_id}
           can_share?={@canvas.author_id == @user_id}
         />
         <Header.share_dialog
@@ -1956,6 +1953,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <% Structure.image?(@cells) -> %>
                 <ImageCanvas.board
                   cells={@cells}
+                  c_name={@c_name}
                   edit_structure?={@edit_structure?}
                   structure_accent_picker={@structure_accent_picker}
                   focus_cell={@focus_cell}
@@ -1964,6 +1962,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <% Structure.bento?(@cells) -> %>
                 <Bento.board
                   cells={@cells}
+                  c_name={@c_name}
                   edit_structure?={@edit_structure?}
                   structure_accent_picker={@structure_accent_picker}
                   focus_cell={@focus_cell}
@@ -1972,6 +1971,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               <% true -> %>
                 <Grid.grid
                   cells={@cells}
+                  c_name={@c_name}
                   edit_structure?={@edit_structure?}
                   structure_accent_picker={@structure_accent_picker}
                   focus_cell={@focus_cell}
@@ -2030,8 +2030,26 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             />
           </div>
 
+          <div
+            id="canvas-panel-info"
+            role="tabpanel"
+            aria-labelledby="canvas-tab-info"
+            class={[
+              "flex min-h-0 w-full flex-1 flex-col",
+              @active_tab != "info" && "hidden"
+            ]}
+          >
+            <InfoPanel.panel
+              canvas={@canvas}
+              cells={@cells}
+              c_name={@c_name}
+              c_desc={@c_desc}
+              can_share?={@canvas.author_id == @user_id}
+            />
+          </div>
+
           <%= for {tab_id, label, icon, blurb} <- @tabs do %>
-            <%= if tab_id not in ["editor", "notes", "agent"] do %>
+            <%= if tab_id not in ["editor", "notes", "agent", "info"] do %>
               <div
                 id={"canvas-panel-" <> tab_id}
                 role="tabpanel"

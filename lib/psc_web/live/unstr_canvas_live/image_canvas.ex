@@ -17,6 +17,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
 
   import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [title_field: 1]
 
   alias Psc.Canvas.Structure
   alias PscWeb.Components.ImageBoard, as: ImageFrame
@@ -24,6 +25,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   alias PscWeb.UnstrCanvasLive.Cell
 
   attr :cells, :map, required: true
+  attr :c_name, :string, required: true
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
   attr :focus_cell, :string, default: nil
@@ -37,7 +39,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
       id="canvas-image"
       class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
     >
-      <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
+      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
         <button
           type="button"
           id="edit-layout-toggle"
@@ -53,7 +55,11 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
           <.icon name="hero-pencil-square" class="size-4" /> Edit layout
         </button>
 
-        <div class="flex items-center gap-2">
+        <div class="min-w-[8rem] flex-1">
+          <.title_field c_name={@c_name} />
+        </div>
+
+        <div class="ml-auto flex items-center gap-2">
           <span
             id="image-size"
             class="inline-flex h-8 items-center gap-1.5 rounded-md border border-base-content/10 px-2.5 text-xs tabular-nums text-base-content/50"

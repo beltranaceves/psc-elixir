@@ -11,91 +11,81 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Tooltip, as: UITooltip
 
-  attr :canvas, :map, required: true
-  attr :c_name, :string, required: true
-  attr :c_desc, :string, default: ""
   attr :presence, :map, required: true
   attr :status, :map, required: true
-  attr :user_id, :integer, required: true
   attr :can_share?, :boolean, required: true
 
   def header(assigns) do
     ~H"""
-    <div id="canvas-header" class="flex shrink-0 flex-col gap-2 px-2 sm:px-0">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-2 sm:items-start">
-        <.form
-          for={%{}}
-          id="canvas-name-form"
-          phx-change="update_name"
-          class="order-1 min-w-0 flex-1 sm:flex-none"
-        >
-          <input
-            name="value"
-            type="text"
-            value={@c_name}
-            phx-debounce="1000"
-            class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-lg font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[24rem]"
-            placeholder="Canvas name"
-          />
-        </.form>
-
-        <%!-- Save state: beside the title on phones, with the other
-        actions on larger screens. The badge keeps the same height as the
-        other header controls so they line up on one line. Below `sm` the
-        app header carries a minimal version instead (see actions/1). --%>
-        <div id="canvas-save-state" class="order-2 hidden shrink-0 sm:order-4 sm:block">
-          <.status_pill
-            id="canvas-save-state-pill"
-            save_state={@status.state}
-            save_stats={@status.stats}
-            label={@status.label}
-            others={@status.others}
-          />
-        </div>
-
-        <.form
-          for={%{}}
-          id="canvas-description-form"
-          phx-change="update_description"
-          class="order-3 w-full min-w-0 sm:order-2 sm:w-auto sm:flex-1"
-        >
-          <textarea
-            name="value"
-            phx-debounce="1000"
-            class="field-sizing-content box-content max-h-12 min-h-8 w-full resize-none overflow-y-auto border-b-2 border-transparent bg-transparent p-0 text-sm leading-6 text-base-content/60 transition-colors placeholder-base-content/35 hover:border-base-content/20 focus:border-primary focus:text-base-content/85 focus:outline-none sm:max-h-16 sm:leading-8"
-            placeholder="Add a description..."
-            rows="1"
-          ><%= @c_desc %></textarea>
-        </.form>
-        <%!-- Active users: truncated, with the full list in a hover tooltip --%>
-        <div id="canvas-presence" class="order-4 hidden sm:order-3 sm:block">
-          <UITooltip.tooltip id="active-users-tooltip">
-            <UITooltip.tooltip_trigger>
-              <button
-                type="button"
-                class="inline-flex h-8 max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <span class="relative flex size-2 shrink-0">
-                  <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
-                  <span class="relative inline-flex size-2 rounded-full bg-success"></span>
-                </span>
-                <span class="truncate lg:hidden">{active_users_compact_label(@presence)}</span>
-                <span class="hidden truncate lg:inline">
-                  {active_users_label(active_usernames(@presence))}
-                </span>
-              </button>
-            </UITooltip.tooltip_trigger>
-            <.active_users_list presence={@presence} />
-          </UITooltip.tooltip>
-        </div>
-
-        <%= if @can_share? do %>
-          <div class="order-5 ml-auto hidden sm:ml-0 sm:block">
-            <.share_button id="share-canvas-button" label="Share" />
-          </div>
-        <% end %>
+    <div
+      id="canvas-header"
+      class="hidden shrink-0 items-center justify-end gap-2 px-2 sm:flex sm:px-0"
+    >
+      <%!-- Active users: truncated, with the full list in a hover tooltip --%>
+      <div id="canvas-presence">
+        <UITooltip.tooltip id="active-users-tooltip">
+          <UITooltip.tooltip_trigger>
+            <button
+              type="button"
+              class="inline-flex h-8 max-w-[13rem] items-center gap-2 rounded-full border border-base-content/10 px-3 text-xs text-base-content/70 transition-colors hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span class="relative flex size-2 shrink-0">
+                <span class="absolute inline-flex size-full rounded-full bg-success/50"></span>
+                <span class="relative inline-flex size-2 rounded-full bg-success"></span>
+              </span>
+              <span class="truncate lg:hidden">{active_users_compact_label(@presence)}</span>
+              <span class="hidden truncate lg:inline">
+                {active_users_label(active_usernames(@presence))}
+              </span>
+            </button>
+          </UITooltip.tooltip_trigger>
+          <.active_users_list presence={@presence} />
+        </UITooltip.tooltip>
       </div>
+
+      <div id="canvas-save-state" class="shrink-0">
+        <.status_pill
+          id="canvas-save-state-pill"
+          save_state={@status.state}
+          save_stats={@status.stats}
+          label={@status.label}
+          others={@status.others}
+        />
+      </div>
+
+      <%= if @can_share? do %>
+        <div>
+          <.share_button id="share-canvas-button" label="Share" />
+        </div>
+      <% end %>
     </div>
+    """
+  end
+
+  attr :c_name, :string, required: true
+
+  @doc """
+  The canvas title, rendered as the first control of the layout toolbar.
+
+  It keeps the `canvas-name-form` id and the `update_name` event, so the
+  title is renamed where it is read: in the grid, the bento board or the
+  image board. On a phone the field takes the toolbar's first line and the
+  structure controls wrap below it.
+  """
+  def title_field(assigns) do
+    ~H"""
+    <.form for={%{}} id="canvas-name-form" phx-change="update_name" class="min-w-0">
+      <input
+        name="value"
+        type="text"
+        value={@c_name}
+        phx-debounce="1000"
+        title={@c_name}
+        aria-label="Canvas name"
+        placeholder="Untitled canvas"
+        class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-base font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[28rem]"
+      />
+    </.form>
     """
   end
 

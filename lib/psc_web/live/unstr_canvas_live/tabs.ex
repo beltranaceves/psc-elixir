@@ -8,7 +8,8 @@ defmodule PscWeb.UnstrCanvasLive.Tabs do
      "Insights over the canvas: relevance, staleness and content coverage."},
     {"notes", "Notes", "hero-document-text", "Shared notes attached to this canvas."},
     {"editor", "Editor", "hero-pencil-square", "The canvas grid."},
-    {"agent", "Agent", "hero-sparkles", "Talk to an agent that can read and edit this canvas."}
+    {"agent", "Agent", "hero-sparkles", "Talk to an agent that can read and edit this canvas."},
+    {"info", "Info", "hero-information-circle", "Canvas details, sharing and settings."}
   ]
 
   use Phoenix.Component
@@ -50,7 +51,7 @@ defmodule PscWeb.UnstrCanvasLive.Tabs do
         <.icon name={icon} class="size-4" />
         <%!-- The names are dropped when the header gives the strip less room
         than it needs, so the tabs never overflow into a scrollbar. --%>
-        <span class="@max-[23rem]:hidden">{label}</span>
+        <span class="@max-[28rem]:hidden">{label}</span>
       </button>
     </nav>
     """

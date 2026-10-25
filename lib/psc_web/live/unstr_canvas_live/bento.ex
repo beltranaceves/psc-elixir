@@ -18,12 +18,14 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
 
   import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [title_field: 1]
 
   alias Psc.Canvas.Structure
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
 
   attr :cells, :map, required: true
+  attr :c_name, :string, required: true
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
   attr :focus_cell, :string, default: nil
@@ -54,7 +56,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
         ]
       }
     >
-      <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
+      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
         <button
           type="button"
           id="edit-layout-toggle"
@@ -70,7 +72,11 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           <.icon name="hero-pencil-square" class="size-4" /> Edit layout
         </button>
 
-        <div class="flex items-center gap-2">
+        <div class="min-w-[8rem] flex-1">
+          <.title_field c_name={@c_name} />
+        </div>
+
+        <div class="ml-auto flex items-center gap-2">
           <%!-- The board's real grid. In Edit layout it is the control itself:
           columns on the left of the ×, rows on the right. Outside it the same
           value is a read-only badge, so reading a canvas cannot restructure

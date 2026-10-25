@@ -44,6 +44,7 @@ it costs, and the evidence it was verified against.
 | [ADR-032](#adr-032--the-canvas-picker-shows-the-templates-and-creating-enters-the-canvas) | The canvas picker shows the templates, and creating enters the canvas | Accepted | 2026-10-21 |
 | [ADR-033](#adr-033--a-canvass-structure-is-editable-in-place) | A canvas's structure is editable in place | Accepted | 2026-10-21 |
 | [ADR-034](#adr-034--administration-is-a-role-and-the-defaults-are-rows) | Administration is a role, and the defaults are rows | Accepted | 2026-10-22 |
+| [ADR-040](#adr-040--the-canvas-title-lives-in-the-layout-toolbar-and-details-in-an-info-tab) | The canvas title lives in the layout toolbar, and details in an Info tab | Accepted | 2026-10-25 |
 
 ---
 
@@ -1689,3 +1690,42 @@ store on the free tier; a URL keeps the copy semantics of a template intact). Re
 SVG inline so it can use CSS variables (rejected: inline SVG is executable markup; `<img>`
 is the safe boundary).
 
+
+---
+
+## ADR-040 — The canvas title lives in the layout toolbar, and details in an Info tab
+
+**Context.** The canvas header stacked the editable name and description above the panels on
+every tab. On a phone those two rows pushed the structure controls and the grid down, and a
+description inherited from a template could wrap over two lines; the description itself was
+rarely read while editing. The name, by contrast, is read *with* the grid, but was separated
+from it by a whole row.
+
+**Decision.**
+- **The title is part of the layout toolbar.** `Header.title_field/1` renders the inline name
+  field as the first control of the same row that holds **Edit structure** / **Edit layout**,
+  in the table, bento and image modes. It keeps the `canvas-name-form` id and the
+  `update_name` event, so renaming is unchanged. On a phone the field takes the toolbar's
+  first line and the structure controls wrap below it; from `sm` up they share one line.
+- **The description leaves the editing surface.** It is rendered in the new rightmost **Info**
+  tab only, together with the name, the sharing state and read-only facts about the canvas
+  (layout mode, notes mode, owner, created date).
+- **`#canvas-header` is the status row.** Presence, save state and Share — nothing else. It is
+  hidden below `sm`, where the app header cluster already carries the same controls.
+- **Two name forms, one value.** Every panel is rendered at once, so the Info view's field has
+  its own id (`canvas-info-name-form`); both forms send `update_name` and both render
+  `@c_name`, and only one panel is visible at a time.
+- **The strip's label threshold grows.** The container query drops the tab names from `28rem`
+  of free space instead of `23rem`, because a fifth tab needs the room.
+
+**Consequences.** The grid gains the vertical space of the two removed rows and the title sits
+where it is read. The description is one tab away, and the Info tab owns future canvas
+settings without growing the editing surface. `?tab=info` is a deep link like every other
+view. No data, CRDT, event or schema change was needed: the same two operations save the same
+two fields.
+
+**Alternatives considered.** Keeping a one-line description under the title (still costs a row
+and clips long text); a title-only header with no title in the Info view (then settings and
+renaming live in different places); moving presence, save state and Share into the app header
+at every width (the desktop header overflows between 1024 px and 1280 px once the section nav
+and the account controls are on the same line).
