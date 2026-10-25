@@ -35,6 +35,12 @@ defmodule Psc.Canvas.Structure do
   @default_columns 12
   @min_columns 4
   @max_columns 16
+
+  # The board's height is a container: a template can leave empty rows at the
+  # bottom, and the stored value is a floor that the cards can outgrow.
+  @default_rows 4
+  @min_rows 1
+  @max_rows 64
   @default_card_width 6
   @default_card_height 2
   @max_card_height 40
@@ -45,7 +51,7 @@ defmodule Psc.Canvas.Structure do
   @table_metadata ["rows", "columns", "layout"]
 
   @bento_metadata @table_metadata ++
-                    ["layout_mode", "bento_columns", "cells", "notes_mode", "notes"]
+                    ["layout_mode", "bento_columns", "bento_rows", "cells", "notes_mode", "notes"]
 
   @metadata_keys @bento_metadata
 
@@ -87,6 +93,38 @@ defmodule Psc.Canvas.Structure do
   @doc "The smallest and largest column counts a bento may have."
   def column_range, do: @min_columns..@max_columns
 
+  @doc "The smallest and largest row counts a bento may have."
+  def row_range, do: @min_rows..@max_rows
+
+  @doc """
+  The board's height in rows.
+
+  The stored `"bento_rows"` is the container the template asked for; a card
+  that reaches lower grows the board past it, so the value can never hide a
+  card.
+  """
+  def rows(map) do
+    stored =
+      map
+      |> Map.get("bento_rows", @default_rows)
+      |> normalize_int(@default_rows)
+      |> min(@max_rows)
+      |> max(@min_rows)
+
+    max(stored, content_rows(map))
+  end
+
+  @doc "The rows the cards actually reach (rounded up), at least one."
+  def content_rows(map) do
+    bottom =
+      map
+      |> cards()
+      |> Enum.map(&(&1.y + &1.h))
+      |> Enum.max(fn -> 0 end)
+
+    bottom |> :math.ceil() |> trunc() |> max(@min_rows)
+  end
+
   @doc "How many CSS grid tracks one column (or row unit) spans."
   def tracks_per_unit, do: @tracks_per_unit
 
@@ -105,7 +143,7 @@ defmodule Psc.Canvas.Structure do
   Two tracks per unit keep the template's column grid intact while letting a
   card be resized by half a column.
   """
-  def board_style(columns) do
+  def board_style(columns, rows \\ @default_rows) do
     tracks = round(columns * @tracks_per_unit)
 
     # A card of `h` units spans `2h` tracks and the gaps between them, so the
@@ -115,12 +153,17 @@ defmodule Psc.Canvas.Structure do
     row_height = div(@unit_px - gap, @tracks_per_unit)
 
     # `minmax` rather than a fixed height: a card's `h` is a minimum, so a card
-    # holding a long note grows and takes its grid rows with it.
+    # holding a long note grows and takes its grid rows with it. The `min-height`
+    # is the requested container height, so empty rows are real space.
     "--bento-columns: #{columns}; " <>
       "grid-template-columns: repeat(#{tracks}, minmax(0, 1fr)); " <>
       "grid-auto-rows: minmax(#{row_height}px, auto); " <>
-      "gap: #{gap}px;"
+      "gap: #{gap}px; " <>
+      "min-height: #{height_px(rows)}px;"
   end
+
+  @doc "The pixel height of `rows` row units, including the gaps between them."
+  def height_px(rows), do: round(rows * (@unit_px + @row_gap_px) - @row_gap_px)
 
   @doc "The CSS grid placement of one card."
   def placement_style(card) do
@@ -254,16 +297,15 @@ defmodule Psc.Canvas.Structure do
   end
 
   @doc """
-  The extent of the board: columns and the last used row.
+  The extent of the board: columns and rows.
 
-  A table reports its matrix size; a bento reports its column count and the
-  deepest card edge.
+  A table reports its matrix size; a bento reports its column count and its
+  height (the stored container floor, or the deepest card when that is lower).
   """
   def bounds(map) do
     case mode(map) do
       :bento ->
-        bottom = map |> cards() |> Enum.map(&(&1.y + &1.h)) |> Enum.max(fn -> 0 end)
-        %{columns: columns(map), rows: bottom}
+        %{columns: columns(map), rows: rows(map)}
 
       :table ->
         %{columns: length(map["columns"] || []), rows: length(map["layout"] || [])}
@@ -489,6 +531,27 @@ defmodule Psc.Canvas.Structure do
     end
   end
 
+  @doc """
+  Change the board's height.
+
+  The cards are the floor: a request shorter than the deepest card is clamped
+  up, so shrinking the container can never hide work.
+  """
+  def set_rows(map, count) do
+    if bento?(map) do
+      count =
+        count
+        |> normalize_int(@default_rows)
+        |> max(content_rows(map))
+        |> min(@max_rows)
+        |> max(@min_rows)
+
+      Map.put(map, "bento_rows", count)
+    else
+      map
+    end
+  end
+
   defp update_card(map, key, fun) do
     if bento?(map) do
       case Map.fetch(cells(map), key) do
@@ -672,6 +735,16 @@ defmodule Psc.Canvas.Structure do
   defp validate_bento(map) do
     board_columns = columns(map)
 
+    cond do
+      not valid_rows?(map) ->
+        {:error, :layout_map, "bento must have between #{@min_rows} and #{@max_rows} rows"}
+
+      true ->
+        validate_bento_cards(map, board_columns)
+    end
+  end
+
+  defp validate_bento_cards(map, board_columns) do
     if valid_columns?(map) do
       map
       |> cells()
@@ -690,6 +763,14 @@ defmodule Psc.Canvas.Structure do
     case map["bento_columns"] do
       nil -> true
       count when is_integer(count) -> count in @min_columns..@max_columns
+      _other -> false
+    end
+  end
+
+  defp valid_rows?(map) do
+    case map["bento_rows"] do
+      nil -> true
+      count when is_integer(count) -> count in @min_rows..@max_rows
       _other -> false
     end
   end

@@ -32,21 +32,58 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
     assigns =
       assigns
       |> assign(:cards, Structure.cards(assigns.layout_map))
-      |> assign(:columns, Structure.columns(assigns.layout_map))
-      |> assign(:board_size, Structure.size_label(bounds.columns, bounds.rows))
+      |> assign(:columns, bounds.columns)
+      |> assign(:rows, bounds.rows)
+      |> assign(:min_rows, Structure.content_rows(assigns.layout_map))
+      |> assign(:column_range, Structure.column_range())
+      |> assign(:row_range, Structure.row_range())
 
     ~H"""
     <div class="flex flex-col gap-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <%!-- The board's real grid: columns × the rows its cards reach. --%>
-        <span
+        <%!-- The board's own grid: the template's columns and its container
+        height. Rows can exceed the cards, so a board can reserve space. --%>
+        <div
           id="designer-bento-size"
-          class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/50"
-          title={"Board grid: #{@board_size} (columns × rows)"}
-          aria-label={"Board grid: #{@board_size} columns by rows"}
+          class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/60"
         >
-          <.icon name="hero-table-cells" class="size-3" /> {@board_size}
-        </span>
+          <.icon name="hero-table-cells" class="size-3" />
+          <form id="designer-columns-form" phx-change="set_bento_columns">
+            <input
+              type="number"
+              id="designer-bento-columns"
+              name="value"
+              value={@columns}
+              min={@column_range.first}
+              max={@column_range.last}
+              step="1"
+              inputmode="numeric"
+              phx-debounce="400"
+              disabled={!@can_edit?}
+              aria-label="Board columns"
+              title={"Board columns (#{@column_range.first}–#{@column_range.last})"}
+              class="w-9 rounded border border-base-content/10 bg-base-100 px-1 py-0.5 text-center tabular-nums text-base-content focus:border-primary focus:outline-none disabled:opacity-60"
+            />
+          </form>
+          <span aria-hidden="true">×</span>
+          <form id="designer-rows-form" phx-change="set_bento_rows">
+            <input
+              type="number"
+              id="designer-bento-rows"
+              name="value"
+              value={@rows}
+              min={@min_rows}
+              max={@row_range.last}
+              step="1"
+              inputmode="numeric"
+              phx-debounce="400"
+              disabled={!@can_edit?}
+              aria-label="Board rows"
+              title={"Board rows (#{@min_rows}–#{@row_range.last}); cards set the minimum"}
+              class="w-9 rounded border border-base-content/10 bg-base-100 px-1 py-0.5 text-center tabular-nums text-base-content focus:border-primary focus:outline-none disabled:opacity-60"
+            />
+          </form>
+        </div>
 
         <UIButton.button
           :if={@can_edit?}
@@ -71,7 +108,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
             phx-hook="BentoBoard"
             data-columns={@columns}
             class="bento-board grid gap-2"
-            style={Structure.board_style(@columns)}
+            style={Structure.board_style(@columns, @rows)}
           >
             <div
               :for={card <- @cards}

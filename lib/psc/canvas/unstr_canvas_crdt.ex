@@ -295,6 +295,10 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     Structure.set_columns(cells, count)
   end
 
+  def apply_operation(%{"type" => "set_bento_rows", "rows" => count}, cells) do
+    Structure.set_rows(cells, count)
+  end
+
   def apply_operation(_op, cells), do: cells
 
   defp valid_accent?(nil), do: true

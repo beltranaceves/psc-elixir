@@ -816,6 +816,37 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  # The board's own grid. A value outside the allowed range is ignored rather
+  # than clamped, so typing "1" on the way to "12" does not resize the board.
+  def handle_event("set_bento_columns", %{"value" => value}, socket) do
+    case parse_size(value) do
+      count when is_integer(count) ->
+        if count in Structure.column_range() do
+          {:noreply,
+           process_operation(socket, %{"type" => "set_bento_columns", "columns" => count})}
+        else
+          {:noreply, socket}
+        end
+
+      _other ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_bento_rows", %{"value" => value}, socket) do
+    case parse_size(value) do
+      count when is_integer(count) ->
+        if count in Structure.row_range() do
+          {:noreply, process_operation(socket, %{"type" => "set_bento_rows", "rows" => count})}
+        else
+          {:noreply, socket}
+        end
+
+      _other ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("set_card_accent", %{"cell_key" => key, "accent" => accent}, socket) do
     {:noreply,
      socket
@@ -1026,6 +1057,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
       _other ->
         0
+    end
+  end
+
+  defp parse_size(value) do
+    case Integer.parse(to_string(value)) do
+      {int, ""} -> int
+      _other -> nil
     end
   end
 

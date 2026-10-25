@@ -386,6 +386,7 @@ defmodule Psc.Canvas do
     %{
       "layout_mode" => "bento",
       "bento_columns" => 12,
+      "bento_rows" => 5,
       "big_picture" => card.("Big picture", ["content"], 0, 0, 8, 3, "sky"),
       "evidence" => card.("Evidence", ["content"], 8, 0, 4, 3, "emerald"),
       "decision" => card.("Decision", ["content"], 0, 3, 6, 2, "violet"),
@@ -701,6 +702,7 @@ defmodule Psc.Canvas do
     cards
     |> Map.put("layout_mode", "bento")
     |> Map.put("bento_columns", Structure.columns(lm))
+    |> Map.put("bento_rows", Structure.rows(lm))
   end
 
   defp maybe_put_accent(data, accent) when accent in [nil, ""], do: data

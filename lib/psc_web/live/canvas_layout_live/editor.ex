@@ -289,6 +289,36 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     {:noreply, update_layout(socket, &add_bento_card/1)}
   end
 
+  # The board's own grid. Out-of-range values are ignored rather than clamped,
+  # so typing "1" on the way to "12" does not resize the board.
+  def handle_event("set_bento_columns", %{"value" => value}, socket) do
+    case parse_size(value) do
+      count when is_integer(count) ->
+        if count in Structure.column_range() do
+          {:noreply, update_layout(socket, &Structure.set_columns(&1, count))}
+        else
+          {:noreply, socket}
+        end
+
+      _other ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_bento_rows", %{"value" => value}, socket) do
+    case parse_size(value) do
+      count when is_integer(count) ->
+        if count in Structure.row_range() do
+          {:noreply, update_layout(socket, &Structure.set_rows(&1, count))}
+        else
+          {:noreply, socket}
+        end
+
+      _other ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("remove_card", %{"cell_key" => key}, socket) do
     {:noreply,
      update_layout(socket, fn lm ->
@@ -711,6 +741,13 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
       _other ->
         0
+    end
+  end
+
+  defp parse_size(value) do
+    case Integer.parse(to_string(value)) do
+      {int, ""} -> int
+      _other -> nil
     end
   end
 

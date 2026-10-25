@@ -1622,5 +1622,10 @@ viewport-fit behaviour. On a phone the board keeps its spatial layout and pans
 horizontally with a minimum column width, rather than squeezing twelve columns into the
 viewport or collapsing into one column (ADR-035's "the arrangement is the point").
 
+The height is also a *container*: `bento_rows` is stored and editable, so a board can
+reserve empty rows below its cards. The stored value is a floor, clamped up to the
+deepest card, which makes "shrink the board" unable to hide work. Both dimensions are
+edited with two number inputs in the editor toolbar, shown only while Edit layout is on.
+
 **Consequences.** The two modes scroll differently on purpose; the board is a document,
 the table is a dashboard.

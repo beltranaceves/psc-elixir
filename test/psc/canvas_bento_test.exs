@@ -31,6 +31,8 @@ defmodule Psc.CanvasBentoTest do
 
       assert Structure.mode(cells) == :bento
       assert Structure.columns(cells) == 12
+      # The template's container height is copied, not recomputed.
+      assert cells["bento_rows"] == 5
 
       assert Enum.map(Structure.cards(cells), & &1.key) == [
                "big_picture",
@@ -141,6 +143,24 @@ defmodule Psc.CanvasBentoTest do
                %{"type" => "add_card", "cell_key" => "b"},
                table
              ) == table
+    end
+
+    test "changing the row count keeps the cards as the floor" do
+      cells = %{
+        "layout_mode" => "bento",
+        "bento_columns" => 12,
+        "a" => %{"placement" => %{"x" => 0, "y" => 0, "w" => 6, "h" => 2}}
+      }
+
+      cells =
+        UnstrCanvasCRDT.apply_operation(%{"type" => "set_bento_rows", "rows" => 9}, cells)
+
+      assert cells["bento_rows"] == 9
+      assert Structure.rows(cells) == 9
+
+      low = UnstrCanvasCRDT.apply_operation(%{"type" => "set_bento_rows", "rows" => 1}, cells)
+      assert low["bento_rows"] == 2
+      assert Structure.rows(low) == 2
     end
 
     test "changing the column count clamps every card" do

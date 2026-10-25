@@ -23,7 +23,8 @@ defmodule PscWeb.BentoDesignerTest do
 
     assert has_element?(view, "#designer-bento")
     assert has_element?(view, "#bento-card-card1")
-    assert has_element?(view, "#designer-bento-size", "12 × 2")
+    assert has_element?(view, ~s|#designer-bento-columns[value="12"]|)
+    assert has_element?(view, ~s|#designer-bento-rows[value="4"]|)
     assert has_element?(view, "#designer-size-card1", "6 × 2")
     assert has_element?(view, "#card-card1-label")
     refute has_element?(view, "#template-grid table")
@@ -107,6 +108,29 @@ defmodule PscWeb.BentoDesignerTest do
     # A template needs at least one card to be valid, so the designer keeps the
     # last one rather than letting a save fail later.
     assert has_element?(view, "#bento-card-card1")
+  end
+
+  test "the template's board size is editable and saved", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/templates/new?mode=bento")
+
+    render_change(view, "set_bento_columns", %{"value" => "16"})
+    render_change(view, "set_bento_rows", %{"value" => "10"})
+
+    assert has_element?(view, ~s|#designer-bento-columns[value="16"]|)
+    assert has_element?(view, ~s|#designer-bento-rows[value="10"]|)
+
+    view
+    |> form("#template-form", %{"name" => "Bento size #{user.id}", "description" => ""})
+    |> render_submit()
+
+    template = Canvas.list_templates(user) |> Enum.find(&(&1.name == "Bento size #{user.id}"))
+    assert template.layout_map["bento_columns"] == 16
+    assert template.layout_map["bento_rows"] == 10
+
+    {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+    cells = Canvas.get_unstr_canvas_content(canvas.id)
+    assert Structure.columns(cells) == 16
+    assert Structure.rows(cells) == 10
   end
 
   test "a saved bento template instantiates a bento canvas", %{conn: conn, user: user} do

@@ -96,11 +96,50 @@ defmodule PscWeb.BentoLiveTest do
       # Every card shows its own width × height while arranging.
       assert has_element?(view, "#bento-size-decision", "6 × 2")
 
+      # The board's own grid is editable while arranging.
+      assert has_element?(view, ~s|#bento-columns-input[value="12"]|)
+      assert has_element?(view, ~s|#bento-rows-input[value="5"]|)
+
       view |> element("#add-card-button") |> render_click()
 
       # The board already fills two rows; the new card starts below them.
       assert %{"x" => 0, "y" => 5, "w" => 6, "h" => 2} = placement(canvas, "card1")
       assert has_element?(view, "#bento-card-card1")
+    end
+
+    test "the board's columns and rows are editable numbers", %{conn: conn, user: user} do
+      canvas = bento_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      view |> element("#edit-layout-toggle") |> render_click()
+
+      # Narrowing the board clamps the cards that no longer fit.
+      render_change(view, "set_bento_columns", %{"value" => "8"})
+
+      assert %{"x" => 0, "y" => 0, "w" => 8, "h" => 3} = placement(canvas, "big_picture")
+      assert %{"x" => 4, "y" => 0, "w" => 4, "h" => 3} = placement(canvas, "evidence")
+      assert has_element?(view, ~s|#bento-columns-input[value="8"]|)
+
+      # A taller board reserves empty space below the cards.
+      render_change(view, "set_bento_rows", %{"value" => "9"})
+      assert Map.get(cells(canvas), "bento_rows") == 9
+      assert has_element?(view, ~s|#bento-rows-input[value="9"]|)
+
+      # The cards are the floor: a shorter request is ignored by the input's
+      # minimum, and the board keeps its content.
+      assert has_element?(view, ~s|#bento-rows-input[min="5"]|)
+
+      # Out-of-range values are ignored, not clamped, so typing 1 on the way
+      # to 12 does not resize anything.
+      render_change(view, "set_bento_columns", %{"value" => "1"})
+      assert Map.get(cells(canvas), "bento_columns") == 8
+
+      render_change(view, "set_bento_columns", %{"value" => "200"})
+      assert Map.get(cells(canvas), "bento_columns") == 8
+
+      # Back to reading: the badge reports the new grid.
+      view |> element("#edit-layout-toggle") |> render_click()
+      assert has_element?(view, "#bento-size", "8 × 9")
     end
 
     test "an empty board offers the first card", %{conn: conn, user: user} do

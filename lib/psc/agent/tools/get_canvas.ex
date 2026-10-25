@@ -11,6 +11,8 @@ defmodule Psc.Agent.Tools.GetCanvas do
         "Result shape:\n" <>
         "- `layout_mode` is `\"table\"` (a rows x columns matrix) or `\"bento\"` (free-form cards on " <>
         "a fixed column grid, up to 16 columns).\n" <>
+        "- `grid` is the board's size: `columns` and `rows` (a bento's rows include any empty " <>
+        "rows the template reserved; a table's are its matrix size).\n" <>
         "- `cards` lists the reading order for both modes: `key`, `label`, and the rectangle it " <>
         "occupies (`x`, `y`, `w`, `h`, in grid units, 0-based).\n" <>
         "- For a table, `cells` holds `rows` and `columns` (each with `id`, `label`, optional " <>
@@ -63,6 +65,7 @@ defmodule Psc.Agent.Tools.GetCanvas do
          name: canvas.name,
          description: canvas.description,
          layout_mode: if(Structure.bento?(cells), do: "bento", else: "table"),
+         grid: Structure.bounds(cells),
          cells: cells,
          cards:
            Enum.map(structure, fn card ->

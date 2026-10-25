@@ -95,9 +95,26 @@ defmodule Psc.Canvas.StructureTest do
       assert [%{x: 0, y: 0, w: 1, h: 1}] = Structure.cards(cells)
     end
 
-    test "bounds report the column count and the deepest edge" do
+    test "bounds report the column count and the container height" do
       cells = bento(%{"a" => card(6, 2, 6, 3)})
+
+      # Four is the default container; the card reaches five, so the board is
+      # as tall as the card, never shorter.
       assert Structure.bounds(cells) == %{columns: 12, rows: 5}
+      assert Structure.rows(cells) == 5
+
+      taller = Map.put(cells, "bento_rows", 9)
+      assert Structure.rows(taller) == 9
+      assert Structure.bounds(taller) == %{columns: 12, rows: 9}
+
+      shorter = Map.put(cells, "bento_rows", 2)
+      assert Structure.rows(shorter) == 5
+    end
+
+    test "a fractional card edge rounds the board up" do
+      cells = bento(%{"a" => card(0, 0, 6, 2.5)})
+      assert Structure.content_rows(cells) == 3
+      assert Structure.rows(cells) == 4
     end
 
     test "an empty bento has no cards" do
@@ -208,7 +225,7 @@ defmodule Psc.Canvas.StructureTest do
 
       assert Structure.board_style(12) ==
                "--bento-columns: 12; grid-template-columns: repeat(24, minmax(0, 1fr)); " <>
-                 "grid-auto-rows: minmax(32px, auto); gap: 8px;"
+                 "grid-auto-rows: minmax(32px, auto); gap: 8px; min-height: 312px;"
 
       assert [card] = Structure.cards(cells)
       assert Structure.placement_style(card) == "grid-column: 3 / span 3; grid-row: 5 / span 5;"
@@ -226,6 +243,17 @@ defmodule Psc.Canvas.StructureTest do
       assert Structure.set_accent(cells, "a", "sky")["a"]["accent"] == "sky"
       assert Structure.set_accent(cells, "a", "not-a-token") == cells
       refute Map.has_key?(Structure.set_accent(cells, "a", "")["a"], "accent")
+    end
+
+    test "set_rows stores the container and never cuts a card off" do
+      cells = bento(%{"a" => card(0, 0, 6, 2)})
+
+      assert Structure.set_rows(cells, 9)["bento_rows"] == 9
+      assert Structure.set_rows(cells, 200)["bento_rows"] == 64
+
+      # The card reaches row 2, so the board can never be shorter than that.
+      assert Structure.set_rows(cells, 0)["bento_rows"] == 2
+      assert Structure.set_rows(cells, 1)["bento_rows"] == 2
     end
 
     test "set_columns clamps every card into the narrower board" do
@@ -320,6 +348,15 @@ defmodule Psc.Canvas.StructureTest do
                Structure.validate(%{"layout_mode" => "bento", "bento_columns" => 40})
 
       assert message =~ "between 4 and 16 columns"
+    end
+
+    test "the row count is bounded" do
+      assert Structure.validate(bento(%{"bento_rows" => 9})) == :ok
+
+      assert {:error, _, message} =
+               Structure.validate(%{"layout_mode" => "bento", "bento_rows" => 200})
+
+      assert message =~ "between 1 and 64 rows"
     end
 
     test "a template needs at least one card" do

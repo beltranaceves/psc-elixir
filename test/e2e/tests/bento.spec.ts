@@ -144,6 +144,39 @@ test.describe('bento board', () => {
     });
   });
 
+  test('edits the board grid from the toolbar', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Grid'));
+
+    await expect(page.locator('#bento-columns-input')).toHaveCount(0);
+    await page.locator('#edit-layout-toggle').click();
+
+    // Columns: type a number, and the board reflows to it.
+    await page.locator('#bento-columns-input').fill('8');
+    await expect(page.locator('#bento-board')).toHaveAttribute(
+      'style',
+      /--bento-columns: 8;/,
+      { timeout: 10_000 },
+    );
+
+    // Rows: the container reserves the space even where no card reaches.
+    await page.locator('#bento-rows-input').fill('9');
+    await expect(page.locator('#bento-board')).toHaveCSS('min-height', '712px', {
+      timeout: 10_000,
+    });
+
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
+      timeout: 15_000,
+    });
+
+    // Reading mode shows the same grid as a badge, and it survives a reload.
+    await page.locator('#edit-layout-toggle').click();
+    await expect(page.locator('#bento-size')).toContainText('8 × 9');
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.locator('#bento-size')).toContainText('8 × 9');
+    await expect(page.locator('#bento-board')).toHaveCSS('min-height', '712px');
+  });
+
   test('removes an empty card straight away and confirms one with content', async ({ page }) => {
     await createBentoAndOpen(page, uniqueName('Bento Remove'));
 

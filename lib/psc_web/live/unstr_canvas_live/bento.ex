@@ -35,7 +35,11 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
     assigns =
       assigns
       |> assign(:cards, Structure.cards(assigns.cells))
-      |> assign(:board_size, Structure.size_label(bounds.columns, bounds.rows))
+      |> assign(:columns, bounds.columns)
+      |> assign(:rows, bounds.rows)
+      |> assign(:min_rows, Structure.content_rows(assigns.cells))
+      |> assign(:column_range, Structure.column_range())
+      |> assign(:row_range, Structure.row_range())
 
     ~H"""
     <div
@@ -59,16 +63,60 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
         </button>
 
         <div class="flex items-center gap-2">
-          <%!-- The board's real grid: columns × the rows its cards reach. Small
-          enough to stay out of the way, but always there to check a layout. --%>
-          <span
-            id="bento-size"
-            class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/50"
-            title={"Board grid: #{@board_size} (columns × rows)"}
-            aria-label={"Board grid: #{@board_size} columns by rows"}
-          >
-            <.icon name="hero-table-cells" class="size-3" /> {@board_size}
-          </span>
+          <%!-- The board's real grid. In Edit layout it is the control itself:
+          columns on the left of the ×, rows on the right. Outside it the same
+          value is a read-only badge, so reading a canvas cannot restructure
+          it by accident. --%>
+          <%= if @edit_structure? do %>
+            <div
+              id="bento-size"
+              class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/60"
+            >
+              <.icon name="hero-table-cells" class="size-3" />
+              <form id="bento-columns-form" phx-change="set_bento_columns">
+                <input
+                  type="number"
+                  id="bento-columns-input"
+                  name="value"
+                  value={@columns}
+                  min={@column_range.first}
+                  max={@column_range.last}
+                  step="1"
+                  inputmode="numeric"
+                  phx-debounce="400"
+                  aria-label="Board columns"
+                  title={"Board columns (#{@column_range.first}–#{@column_range.last})"}
+                  class="w-9 rounded border border-base-content/10 bg-base-100 px-1 py-0.5 text-center tabular-nums text-base-content focus:border-primary focus:outline-none"
+                />
+              </form>
+              <span aria-hidden="true">×</span>
+              <form id="bento-rows-form" phx-change="set_bento_rows">
+                <input
+                  type="number"
+                  id="bento-rows-input"
+                  name="value"
+                  value={@rows}
+                  min={@min_rows}
+                  max={@row_range.last}
+                  step="1"
+                  inputmode="numeric"
+                  phx-debounce="400"
+                  aria-label="Board rows"
+                  title={"Board rows (#{@min_rows}–#{@row_range.last}); cards set the minimum"}
+                  class="w-9 rounded border border-base-content/10 bg-base-100 px-1 py-0.5 text-center tabular-nums text-base-content focus:border-primary focus:outline-none"
+                />
+              </form>
+            </div>
+          <% else %>
+            <span
+              id="bento-size"
+              class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/50"
+              title={"Board grid: #{@columns} × #{@rows} (columns × rows)"}
+              aria-label={"Board grid: #{@columns} by #{@rows} rows"}
+            >
+              <.icon name="hero-table-cells" class="size-3" /> {@columns} × {@rows}
+            </span>
+          <% end %>
 
           <UIButton.button
             :if={@edit_structure?}
@@ -110,7 +158,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
             data-unit-x={bento_unit_x(Structure.columns(@cells))}
             data-unit-y={Structure.unit_px()}
             class="bento-board grid gap-2"
-            style={Structure.board_style(Structure.columns(@cells))}
+            style={Structure.board_style(@columns, @rows)}
           >
             <div
               :for={card <- @cards}

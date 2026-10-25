@@ -13,6 +13,7 @@ A bento canvas (and a bento template) is flat, exactly like a canvas's `cells`:
 {
   "layout_mode": "bento",
   "bento_columns": 12,
+  "bento_rows": 5,
   "big_picture": {
     "label": "Big picture",
     "content": "",
@@ -27,6 +28,7 @@ A bento canvas (and a bento template) is flat, exactly like a canvas's `cells`:
 |---|---|
 | `layout_mode` | `"bento"`. Absent means a table. |
 | `bento_columns` | 4–16, default 12 |
+| `bento_rows` | 1–64, default 4. The container height: a board can reserve empty rows below its cards |
 | `placement` | `x`, `y` (0-based whole columns/rows), `w`, `h` (whole or half units). `h` is a **minimum** |
 | `accent` | optional token from `Psc.Canvas.Accent` |
 | everything else | the cell's fields, `label` and `titles`, as in a table |
@@ -36,6 +38,8 @@ rendered as editable fields.
 
 ## Constraints
 
+- `bento_rows` is a floor: a card that reaches lower than the stored value grows the board,
+  so shrinking the container can never hide a card.
 - `w`, `h` ≥ 0.5, in half steps; `x` ≥ 0, `y` ≥ 0, both whole; `x + w ≤ bento_columns`.
   A card starts on a column, but its size can be half a column (or row), so a resize
   is twice as fine as the template's grid. The board renders two CSS tracks per column
@@ -59,6 +63,7 @@ reducer, the editor, the designer, the previews and the agent tools all call it.
 | `resize_card` | `cell_key`, `w`, `h` | The left edge stays put |
 | `set_card_accent` | `cell_key`, `accent` | Validated against the token list |
 | `set_bento_columns` | `columns` | Clamps every card into the new width |
+| `set_bento_rows` | `rows` | Sets the container height; clamps up to the deepest card |
 
 Cell content keeps the existing operations (`update_cell`, `update_cell_label`,
 `add_cell_field`, `remove_cell_field`, `update_cell_field_title`).
@@ -74,10 +79,15 @@ started sends nothing.
 - Keyboard: focus the grip, arrow keys move one unit; shift+arrows resize. The shift path
   lives in the hook because the LiveView keydown payload does not carry modifier flags.
 - Removing a card with content opens the same confirmation as a row or column.
-- The toolbar reports the board's real grid (`12 × 5`: columns × the rows its cards reach),
-  and while Edit layout is on every card carries its own `w × h` (`8 × 3`, or `6.5 × 2` after
-  a half-step resize). Outside edit mode the size is the card's `title` tooltip and its
-  `data-bento-size` attribute.
+- The toolbar reports the board's real grid (`12 × 5`: columns × rows) and, while Edit
+  layout is on, it is the control itself: two number inputs set the columns and the
+  container height. Values outside the allowed ranges are ignored rather than clamped, so
+  typing `1` on the way to `12` does not resize anything. Outside edit mode it is a
+  read-only badge, because restructuring a canvas while reading it should not be one
+  stray keystroke away.
+- Every card carries its own `w × h` (`8 × 3`, or `6.5 × 2` after a half-step resize) in
+  its control bar while Edit layout is on; outside edit mode the size is the card's
+  `title` tooltip and its `data-bento-size` attribute.
 - Cards carry `data-cell-nav` for the mobile fullscreen swipe (ADR-037).
 - A card's body is in the flow, so the card grows with its Markdown and takes its grid
   rows along; `h` is a minimum, never a clip.
