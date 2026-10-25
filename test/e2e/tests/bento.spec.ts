@@ -137,12 +137,14 @@ test.describe('bento board', () => {
     );
     await page.mouse.up();
 
-    // One half-column step, not a whole one.
-    await expect(card).toHaveCSS('grid-column-end', 'span 13');
-
+    // One half-column step, not a whole one — checked after the server saved
+    // it and the page reloaded, so the local preview cannot satisfy it.
     await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
       timeout: 15_000,
     });
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.locator('#bento-card-decision')).toHaveCSS('grid-column-end', 'span 13');
   });
 
   test('edits the board grid from the toolbar', async ({ page }) => {
@@ -230,7 +232,14 @@ test.describe('bento board', () => {
     );
     await page.mouse.up();
 
-    await expect(card).toHaveCSS('grid-column-start', '2', { timeout: 10_000 });
+    // Wait for the server to fold the move, then reload: the position must be
+    // stored as a half, not rounded on the way in.
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
+      timeout: 15_000,
+    });
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.locator('#bento-card-decision')).toHaveCSS('grid-column-start', '2');
   });
 
   test('widening the board opens room to drag a card into it', async ({ page }) => {
@@ -262,9 +271,13 @@ test.describe('bento board', () => {
     );
     await page.mouse.up();
 
-    // x = 8 → the ninth column → track 17.
-    await expect(card).toHaveAttribute('style', /grid-column: 17 \//);
-    await expect(page.locator('#bento-columns-input')).toHaveValue('16');
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
+      timeout: 15_000,
+    });
+
+    // x = 8 → the ninth column → track 17, and it survived the round trip.
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.locator('#bento-card-decision')).toHaveCSS('grid-column-start', '17');
   });
 
   test('dragging a card past the right edge widens the board', async ({ page }) => {
@@ -287,8 +300,12 @@ test.describe('bento board', () => {
     );
     await page.mouse.up();
 
-    await expect(board).toHaveAttribute('style', /--bento-columns: 13;/, { timeout: 10_000 });
-    await expect(page.locator('#bento-columns-input')).toHaveValue('13');
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
+      timeout: 15_000,
+    });
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.locator('#bento-board')).toHaveAttribute('style', /--bento-columns: 13;/);
   });
 
   test('removes an empty card straight away and confirms one with content', async ({ page }) => {

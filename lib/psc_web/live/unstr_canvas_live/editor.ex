@@ -861,23 +861,28 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # One operation per completed gesture: the drag hook pushes the final cell,
   # and the arrow keys push one step at a time.
   def handle_event("move_card", %{"cell_key" => key} = params, socket) do
-    {:noreply,
-     process_operation(socket, %{
-       "type" => "move_card",
-       "cell_key" => key,
-       "x" => to_unit(params["x"]),
-       "y" => to_unit(params["y"])
-     })}
+    with x when is_number(x) <- to_number(params["x"]),
+         y when is_number(y) <- to_number(params["y"]) do
+      {:noreply,
+       process_operation(socket, %{"type" => "move_card", "cell_key" => key, "x" => x, "y" => y})}
+    else
+      _other -> {:noreply, socket}
+    end
   end
 
   def handle_event("resize_card", %{"cell_key" => key} = params, socket) do
-    {:noreply,
-     process_operation(socket, %{
-       "type" => "resize_card",
-       "cell_key" => key,
-       "w" => to_size(params["w"]),
-       "h" => to_size(params["h"])
-     })}
+    with w when is_number(w) <- to_number(params["w"]),
+         h when is_number(h) <- to_number(params["h"]) do
+      {:noreply,
+       process_operation(socket, %{
+         "type" => "resize_card",
+         "cell_key" => key,
+         "w" => w,
+         "h" => h
+       })}
+    else
+      _other -> {:noreply, socket}
+    end
   end
 
   # Arrow keys on the card's drag grip move it by one unit; holding shift
@@ -1045,27 +1050,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
-  defp to_unit(value) do
-    case value do
-      int when is_integer(int) ->
-        int
-
-      float when is_float(float) ->
-        trunc(float)
-
-      binary when is_binary(binary) ->
-        binary
-        |> Integer.parse()
-        |> case do
-          {int, _rest} -> int
-          :error -> 0
-        end
-
-      _other ->
-        0
-    end
-  end
-
   defp parse_size(value) do
     case Integer.parse(to_string(value)) do
       {int, ""} -> int
@@ -1073,17 +1057,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
-  # A size keeps its half: 2.5 rows must not become 2.
-  defp to_size(value) when is_integer(value) or is_float(value), do: value
+  # A coordinate keeps its half: 6.5 columns must not become 6.
+  defp to_number(value) when is_integer(value) or is_float(value), do: value
 
-  defp to_size(value) when is_binary(value) do
+  defp to_number(value) when is_binary(value) do
     case Float.parse(value) do
       {number, _rest} -> number
-      :error -> 0
+      :error -> nil
     end
   end
 
-  defp to_size(_other), do: 0
+  defp to_number(_other), do: nil
 
   defp structure_has_content?(cells, ref_key, ref_id) do
     Enum.any?(cells, fn

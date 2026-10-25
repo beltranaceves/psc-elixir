@@ -251,6 +251,32 @@ defmodule PscWeb.BentoLiveTest do
       assert Map.get(cells(canvas), "bento_columns") == 13
     end
 
+    test "a drag keeps a half-unit position", %{conn: conn, user: user} do
+      canvas = bento_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      render_hook(view, "move_card", %{"cell_key" => "decision", "x" => 6.5, "y" => 3.5})
+
+      # The hook sends floats; they must not be truncated on the way in.
+      assert %{"x" => 6.5, "y" => 3.5} = placement(canvas, "decision")
+
+      # And the half survives the snapshot round trip.
+      cells = cells(canvas)
+      {:ok, _canvas} = Psc.Canvas.save_unstr_canvas_content_to_db(canvas.id, cells)
+
+      assert %{"x" => 6.5, "y" => 3.5} =
+               Psc.Canvas.get_unstr_canvas_content(canvas.id)["decision"]["placement"]
+    end
+
+    test "a malformed position leaves the card where it was", %{conn: conn, user: user} do
+      canvas = bento_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      render_hook(view, "move_card", %{"cell_key" => "decision", "x" => "abc", "y" => 3})
+
+      assert %{"x" => 0, "y" => 3} = placement(canvas, "decision")
+    end
+
     test "a drag's final rectangle is applied like any other operation", %{
       conn: conn,
       user: user

@@ -79,6 +79,28 @@ defmodule PscWeb.BentoDesignerTest do
     assert card.accent == "teal"
   end
 
+  test "a dragged card keeps a half-unit position through a save", %{conn: conn, user: user} do
+    {:ok, view, _html} = live(conn, ~p"/templates/new?mode=bento")
+
+    view
+    |> form("#designer-columns-form", %{"value" => "12"})
+    |> render_change()
+
+    render_hook(view, "move_card", %{"cell_key" => "card1", "x" => 2.5, "y" => 1.5})
+
+    assert has_element?(view, "#designer-size-card1", "6 × 2")
+    assert has_element?(view, ~s|#bento-card-card1[style*="grid-column: 6 / span 12"]|)
+
+    view
+    |> form("#template-form", %{"name" => "Bento half #{user.id}", "description" => ""})
+    |> render_submit()
+
+    template = Canvas.list_templates(user) |> Enum.find(&(&1.name == "Bento half #{user.id}"))
+    card = Structure.card(template.layout_map, "card1")
+
+    assert {card.x, card.y} == {2.5, 1.5}
+  end
+
   test "a card can take another field and its section title", %{conn: conn, user: user} do
     {:ok, view, _html} = live(conn, ~p"/templates/new?mode=bento")
 

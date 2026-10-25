@@ -343,19 +343,21 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   def handle_event("move_card", %{"cell_key" => key} = params, socket) do
-    {:noreply,
-     update_layout(
-       socket,
-       &Structure.move(&1, key, to_unit(params["x"]), to_unit(params["y"]))
-     )}
+    with x when is_number(x) <- to_number(params["x"]),
+         y when is_number(y) <- to_number(params["y"]) do
+      {:noreply, update_layout(socket, &Structure.move(&1, key, x, y))}
+    else
+      _other -> {:noreply, socket}
+    end
   end
 
   def handle_event("resize_card", %{"cell_key" => key} = params, socket) do
-    {:noreply,
-     update_layout(
-       socket,
-       &Structure.resize(&1, key, to_size(params["w"]), to_size(params["h"]))
-     )}
+    with w when is_number(w) <- to_number(params["w"]),
+         h when is_number(h) <- to_number(params["h"]) do
+      {:noreply, update_layout(socket, &Structure.resize(&1, key, w, h))}
+    else
+      _other -> {:noreply, socket}
+    end
   end
 
   def handle_event("nudge_card", %{"key" => key, "cell_key" => cell_key} = params, socket) do
@@ -723,28 +725,6 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   defp nudge_delta("ArrowDown"), do: {0, 1}
   defp nudge_delta(_key), do: nil
 
-  defp to_unit(value) do
-    case value do
-      int when is_integer(int) ->
-        int
-
-      float when is_float(float) ->
-        trunc(float)
-
-      "" ->
-        0
-
-      binary when is_binary(binary) ->
-        case Integer.parse(binary) do
-          {int, _rest} -> int
-          :error -> 0
-        end
-
-      _other ->
-        0
-    end
-  end
-
   defp parse_size(value) do
     case Integer.parse(to_string(value)) do
       {int, ""} -> int
@@ -752,17 +732,17 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     end
   end
 
-  # A size keeps its half: 2.5 rows must not become 2.
-  defp to_size(value) when is_integer(value) or is_float(value), do: value
+  # A coordinate keeps its half: 6.5 columns must not become 6.
+  defp to_number(value) when is_integer(value) or is_float(value), do: value
 
-  defp to_size(value) when is_binary(value) do
+  defp to_number(value) when is_binary(value) do
     case Float.parse(value) do
       {number, _rest} -> number
-      :error -> 0
+      :error -> nil
     end
   end
 
-  defp to_size(_other), do: 0
+  defp to_number(_other), do: nil
 
   defp add_column(lm) do
     idx = length(lm["columns"]) + 1
