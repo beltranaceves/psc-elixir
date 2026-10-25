@@ -219,9 +219,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                     {template.name}
                   </span>
                   <span class="text-xs text-base-content/50">
-                    {length(template.layout_map["rows"] || [])} × {length(
-                      template.layout_map["columns"] || []
-                    )}
+                    {PscWeb.Components.TemplatePreview.dimensions(template.layout_map)}
                   </span>
                 </button>
               </div>

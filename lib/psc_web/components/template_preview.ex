@@ -35,7 +35,11 @@ defmodule PscWeb.Components.TemplatePreview do
     ~H"""
     <div class={["min-w-0", @class]}>
       <%= if bento?(@lm) do %>
-        <.bento_mini lm={@lm} />
+        <%!-- A fixed slot: the picture takes the board's proportions inside it,
+        so every card in a row starts its name at the same height. --%>
+        <div class="flex h-16 w-full items-center">
+          <.bento_mini lm={@lm} />
+        </div>
       <% else %>
         <%= if rows(@lm) == [] or columns(@lm) == [] do %>
           <div class="flex h-16 items-center justify-center rounded-[3px] border border-dashed border-base-content/20 text-xs text-base-content/40">
@@ -78,52 +82,80 @@ defmodule PscWeb.Components.TemplatePreview do
 
   @doc """
   A schematic of a bento board: one box per card, at its placement.
+
+  The whole board is drawn: every card keeps its own row, so a card near the
+  bottom is not folded back over the ones above it. The picture takes the
+  board's proportions, with a floor and a ceiling so a very flat or very tall
+  board still reads as a thumbnail.
   """
   attr :lm, :map, required: true
 
   def bento_mini(assigns) do
     cards = Structure.cards(assigns.lm)
-    columns = Structure.columns(assigns.lm)
+    columns = max(Structure.columns(assigns.lm), 1)
     rows = max(Structure.bounds(assigns.lm).rows, 1)
-
-    clipped = clamp_int(rows, 1, 8)
+    tracks = Structure.tracks_per_unit()
 
     assigns =
       assigns
       |> assign(:cards, cards)
-      |> assign(:columns, columns)
-      |> assign(:cell_rows, clipped)
-      |> assign(
-        :boxes,
-        Enum.map(cards, fn card ->
-          {card, clamp_int(Structure.track(card.y) + 1, 1, clipped),
-           clamp_int(Structure.track(card.h), 1, clipped * Structure.tracks_per_unit())}
-        end)
-      )
+      |> assign(:tracks_x, columns * tracks)
+      |> assign(:tracks_y, rows * tracks)
+      |> assign(:aspect, "#{columns} / #{rows}")
 
     ~H"""
     <div
-      class="grid h-16 w-full gap-1"
+      :if={@cards == []}
+      class="flex h-full w-full items-center justify-center rounded-[3px] border border-dashed border-base-content/20 text-[0.65rem] text-base-content/40"
+      aria-hidden="true"
+    >
+      Empty board
+    </div>
+
+    <div
+      :if={@cards != []}
+      class="grid max-h-full min-h-6 w-full gap-px overflow-hidden rounded-[3px] bg-base-content/5"
       style={
-        "grid-template-columns: repeat(#{@columns * Structure.tracks_per_unit()}, minmax(0, 1fr));" <>
-          "grid-template-rows: repeat(#{@cell_rows * Structure.tracks_per_unit()}, minmax(0, 1fr));"
+        "aspect-ratio: #{@aspect};" <>
+          "grid-template-columns: repeat(#{@tracks_x}, minmax(0, 1fr));" <>
+          "grid-template-rows: repeat(#{@tracks_y}, minmax(0, 1fr));"
       }
+      aria-hidden="true"
     >
       <div
-        :for={{card, row_start, row_span} <- @boxes}
-        class={[
-          "relative min-h-0 rounded-[3px] bg-base-content/10",
-          card.accent && swatch_class(card.accent)
-        ]}
-        style={
-          "grid-column: #{Structure.track(card.x) + 1} / span #{Structure.track(card.w)};" <>
-            "grid-row: #{row_start} / span #{row_span};"
+        :for={card <- @cards}
+        data-card-key={card.key}
+        class={
+          [
+            "min-h-0 rounded-[2px]",
+            # One background only: two utilities for the same property would let
+            # the stylesheet order, not the accent, decide the colour.
+            if(card.accent, do: swatch_class(card.accent), else: "bg-base-content/20")
+          ]
         }
-        title={card.label}
+        style={Structure.placement_style(card)}
       >
       </div>
     </div>
     """
+  end
+
+  @doc """
+  The caption a picker shows under a template's name.
+
+  A table is described by its matrix (rows × columns, the numbers it is
+  authored with); a bento by its board (columns × rows, the order the editor's
+  column and row inputs use).
+  """
+  def dimensions(lm) do
+    lm = lm || %{}
+
+    if Structure.bento?(lm) do
+      bounds = Structure.bounds(lm)
+      "#{bounds.columns} × #{bounds.rows}"
+    else
+      "#{length(lm["rows"] || [])} × #{length(lm["columns"] || [])}"
+    end
   end
 
   @doc """
@@ -144,6 +176,7 @@ defmodule PscWeb.Components.TemplatePreview do
           <thead>
             <tr>
               <th class="w-16 border border-base-content/10 p-1 sm:w-24 sm:p-2"></th>
+
               <th
                 :for={column <- columns(@lm)}
                 class="border border-base-content/10 bg-base-content/5 p-1 font-medium text-base-content/70 sm:p-2"
@@ -152,11 +185,13 @@ defmodule PscWeb.Components.TemplatePreview do
               </th>
             </tr>
           </thead>
+
           <tbody>
             <tr :for={{row, ri} <- Enum.with_index(rows(@lm))}>
               <th class="border border-base-content/10 bg-base-content/5 p-1 text-left font-medium text-base-content/70 sm:p-2">
                 {row["label"]}
               </th>
+
               <td
                 :for={cell_key <- cell_keys(@lm, ri)}
                 class="border border-base-content/10 p-1 align-top text-base-content/80 sm:p-2"
@@ -183,7 +218,7 @@ defmodule PscWeb.Components.TemplatePreview do
       assigns
       |> assign(:cards, cards)
       |> assign(:columns, columns)
-      |> assign(:rows, min(rows, 12))
+      |> assign(:rows, rows)
 
     ~H"""
     <div
@@ -214,20 +249,16 @@ defmodule PscWeb.Components.TemplatePreview do
     lm = lm || %{}
 
     if Structure.bento?(lm) do
-      case length(Structure.cards(lm)) do
-        1 -> "1 card on #{Structure.columns(lm)} columns"
-        count -> "#{count} cards on #{Structure.columns(lm)} columns"
-      end
+      cards = length(Structure.cards(lm))
+      "#{plural(cards, "card")} on #{plural(Structure.columns(lm), "column")}"
     else
-      "#{length(lm["rows"] || [])} rows × #{length(lm["columns"] || [])} columns"
+      "#{plural(length(lm["rows"] || []), "row")} × " <>
+        "#{plural(length(lm["columns"] || []), "column")}"
     end
   end
 
-  defp clamp_int(value, low, high) do
-    value
-    |> max(low)
-    |> then(&if(&1 > high, do: high, else: &1))
-  end
+  defp plural(1, word), do: "1 #{word}"
+  defp plural(count, word), do: "#{count} #{word}s"
 
   defp bento?(lm), do: Structure.bento?(lm || %{})
 

@@ -64,6 +64,36 @@ test.describe('catalog', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test('a bento template previews its board in the picker', async ({ page }) => {
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    const card = page.locator('#template-picker-bento');
+    await card.scrollIntoViewIfNeeded();
+
+    // The caption is the board's own grid, not the empty rows/columns matrix.
+    await expect(card).toContainText('12 × 5');
+    await expect(card).not.toContainText('0 × 0');
+
+    // Every card is drawn, and the two bottom cards sit below the top ones
+    // instead of being folded back over them.
+    for (const key of ['big_picture', 'evidence', 'decision', 'open_questions']) {
+      await expect(card.locator(`[data-card-key="${key}"]`)).toBeVisible();
+    }
+
+    const rows = await card.evaluate(el => {
+      const pick = key =>
+        Number(
+          getComputedStyle(el.querySelector(`[data-card-key="${key}"]`)!).gridRowStart,
+        );
+      return { top: pick('big_picture'), bottom: pick('open_questions') };
+    });
+
+    // h = 3 of 5 rows → 6 tracks, so the second row starts at track 7.
+    expect(rows.top).toBe(1);
+    expect(rows.bottom).toBe(7);
+  });
+
   test('the catalog leads the template picker', async ({ page }) => {
     await page.goto('/canvas');
     await page.locator('.phx-connected').first().waitFor();

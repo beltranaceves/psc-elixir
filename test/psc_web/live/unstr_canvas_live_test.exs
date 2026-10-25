@@ -98,6 +98,32 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert form_html =~ ~s|name="template_id" value="#{template.id}"|
     end
 
+    test "a bento template's picker card previews its board", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      card = element(lv, "#template-picker-bento")
+
+      # The caption is the board's own grid, not an empty matrix.
+      assert render(card) =~ "12 × 5"
+      refute render(card) =~ "0 × 0"
+
+      # Every card is drawn at its real row: the two bottom cards stay at the
+      # bottom instead of being folded back over the top ones.
+      for key <- ["big_picture", "evidence", "decision", "open_questions"] do
+        assert has_element?(lv, ~s|#template-picker-bento [data-card-key="#{key}"]|)
+      end
+
+      assert has_element?(
+               lv,
+               ~s|#template-picker-bento [data-card-key="open_questions"][style*="grid-row: 7 / span 4"]|
+             )
+
+      assert has_element?(
+               lv,
+               ~s|#template-picker-bento [data-card-key="big_picture"][style*="grid-column: 1 / span 16"]|
+             )
+    end
+
     test "picking the built-in PSC card selects it", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/canvas")
 
