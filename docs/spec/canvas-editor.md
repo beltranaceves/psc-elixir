@@ -64,11 +64,13 @@ Specs and implementations are validated with screenshots. The app is screenshott
 
 ## Layout modes
 
-The editor renders one of two structures from the same cells: the table described below,
-or a free-form **bento** board of cards on a fixed column grid. The mode is a property of
-the template (`layout_mode`) and is copied to the canvas. See [bento.md](bento.md) and
-ADR-035 to ADR-038; everything in this document about cells, fields, autosave, presence
-and notes applies to both.
+The editor renders one of three structures from the same cells: the table described
+below, a free-form **bento** board of cards on a fixed column grid, or an **image
+board** of floating cells over a backdrop picture. The mode is a property of the
+template (`layout_mode`, absent meaning `table`) and is copied to the canvas. See
+[bento.md](bento.md) and [image-canvas.md](image-canvas.md), plus ADR-035 to ADR-039.
+Everything in this document about cells, fields, autosave, presence and notes applies
+to all three modes.
 
 ## Data Model
 

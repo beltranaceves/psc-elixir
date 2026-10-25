@@ -21,6 +21,8 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
   alias PscWeb.CanvasLayoutLive.BentoEditor
+  alias PscWeb.CanvasLayoutLive.ImageEditor
+  alias PscWeb.Components.ImageBoard, as: ImageFrame
   alias PscWeb.Markdown
 
   @impl true
@@ -29,7 +31,12 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
     case Map.get(params, "id") do
       nil ->
-        mode = if Map.get(params, "mode") == "bento", do: :bento, else: :table
+        mode =
+          case Map.get(params, "mode") do
+            "bento" -> :bento
+            "image" -> :image
+            _other -> :table
+          end
 
         {:ok,
          socket
@@ -286,7 +293,26 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # ─── Bento board events ───
 
   def handle_event("add_card", _params, socket) do
-    {:noreply, update_layout(socket, &add_bento_card/1)}
+    {:noreply, update_layout(socket, &add_freeform_cell(&1, "card", "card", "Card"))}
+  end
+
+  def handle_event("add_text", _params, socket) do
+    {:noreply, update_layout(socket, &add_freeform_cell(&1, "text", "text", "Text"))}
+  end
+
+  # The backdrop belongs to the template, so it is part of the draft until the
+  # template is saved. `Structure` validates the URL, shape and fit.
+  def handle_event("set_backdrop", params, socket) when is_map(params) do
+    if socket.assigns.can_edit? and Structure.image?(socket.assigns.layout_map) do
+      {:noreply,
+       update_layout(socket, &Structure.set_backdrop(&1, ImageFrame.backdrop_attrs(params)))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_cell_kind", %{"cell_key" => key, "kind" => kind}, socket) do
+    {:noreply, update_layout(socket, &Structure.set_kind(&1, key, kind))}
   end
 
   # The board's own grid. Out-of-range values are ignored rather than clamped,
@@ -322,7 +348,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   def handle_event("remove_card", %{"cell_key" => key}, socket) do
     {:noreply,
      update_layout(socket, fn lm ->
-       if length(Structure.cards(lm)) <= 1 do
+       # A template needs at least one cell to be saveable, so the last one
+       # stays.
+       if Structure.freeform?(lm) and length(Structure.cards(lm)) <= 1 do
          lm
        else
          Structure.remove_card(lm, key)
@@ -514,11 +542,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     |> assign(:dirty?, true)
   end
 
-  # A table template keeps its cells under "cells"; a bento template is flat,
-  # exactly like a bento canvas. These two accessors are the only place the
+  # A table template keeps its cells under "cells"; a bento or image template
+  # is flat, exactly like a canvas. These two accessors are the only place the
   # difference shows.
   defp cell_meta(lm, key) do
-    if Structure.bento?(lm) do
+    if Structure.freeform?(lm) do
       Map.get(lm, key) || BentoEditor.empty_cell_meta()
     else
       get_in(lm, ["cells", key]) || empty_cell_meta()
@@ -526,7 +554,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   end
 
   defp put_cell_meta(lm, key, cell) do
-    if Structure.bento?(lm) do
+    if Structure.freeform?(lm) do
       Map.put(lm, key, cell)
     else
       put_in(lm, ["cells", key], cell)
@@ -554,6 +582,42 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       "notes_mode" => NotesMode.default()
     }
     |> Structure.add_card("card1", %{"x" => 0, "y" => 0, "w" => 6, "h" => 2}, "Card 1")
+  end
+
+  # An image template starts with the sample backdrop and two cells, so it is
+  # valid immediately and shows both kinds of cell: a card and a text label.
+  # The cells are definitions (fields + defaults), not canvas values.
+  defp empty_layout_map(:image) do
+    %{
+      "layout_mode" => "image",
+      "backdrop" => %{"url" => Canvas.image_backdrop_url(), "fit" => "contain"},
+      "notes" => [],
+      "notes_mode" => NotesMode.default()
+    }
+    |> put_definition_cell(
+      "card1",
+      %{"x" => 8, "y" => 12, "w" => 26, "h" => 18},
+      "Card 1",
+      "card"
+    )
+    |> put_definition_cell(
+      "text1",
+      %{"x" => 38, "y" => 76, "w" => 24, "h" => 8},
+      "Text 1",
+      "text"
+    )
+  end
+
+  # A cell as a template stores it: what the fields are and what they start
+  # with, not the values a canvas holds.
+  defp put_definition_cell(lm, key, placement, label, kind) do
+    Map.put(lm, key, %{
+      "label" => label,
+      "fields" => ["content"],
+      "defaults" => %{"content" => ""},
+      "placement" => placement,
+      "kind" => kind
+    })
   end
 
   # The template's notes, each with a title and a body. A template saved
@@ -612,11 +676,23 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   defp notes_count_hint(1), do: "1 note"
   defp notes_count_hint(count), do: "#{count} notes"
 
+  defp grid_title(:bento), do: "Board"
+  defp grid_title(:image), do: "Picture"
+  defp grid_title(_mode), do: "Grid"
+
   defp grid_hint(%{"layout_mode" => "bento"} = lm) do
     case length(Structure.cards(lm)) do
       0 -> "No cards yet"
       1 -> "1 card on #{Structure.columns(lm)} columns"
       count -> "#{count} cards on #{Structure.columns(lm)} columns"
+    end
+  end
+
+  defp grid_hint(%{"layout_mode" => "image"} = lm) do
+    case length(Structure.cards(lm)) do
+      0 -> "No cells yet"
+      1 -> "1 cell on a picture"
+      count -> "#{count} cells on a picture"
     end
   end
 
@@ -634,9 +710,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   # preserving existing cell keys where present and generating
   # "#{row_id}_#{column_id}" keys elsewhere.
   defp normalize_layout_map(lm) do
-    if Structure.bento?(lm),
-      do: normalize_bento_layout_map(lm),
-      else: normalize_table_layout_map(lm)
+    cond do
+      Structure.image?(lm) -> normalize_image_layout_map(lm)
+      Structure.bento?(lm) -> normalize_bento_layout_map(lm)
+      true -> normalize_table_layout_map(lm)
+    end
   end
 
   # A bento layout map is already flat; normalizing only fills the shared
@@ -649,6 +727,18 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     |> Map.put("notes_mode", NotesMode.normalize(lm["notes_mode"]))
     |> apply_notes_mode()
     |> Structure.set_columns(Structure.columns(lm))
+  end
+
+  # An image map is flat too. Its cells are clamped into the picture so the
+  # designer shows them where the canvas will render them, and a template with
+  # no backdrop starts from the sample one rather than an unusable blank frame.
+  defp normalize_image_layout_map(lm) do
+    lm
+    |> Map.put_new("backdrop", %{"url" => Canvas.image_backdrop_url(), "fit" => "contain"})
+    |> Map.put("notes", normalize_template_notes(lm["notes"]))
+    |> Map.put("notes_mode", NotesMode.normalize(lm["notes_mode"]))
+    |> apply_notes_mode()
+    |> Structure.normalize_image()
   end
 
   defp normalize_table_layout_map(lm) do
@@ -689,19 +779,30 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     lm |> Map.put("layout", matrix) |> Map.put("cells", cells)
   end
 
-  defp add_bento_card(lm) do
+  defp add_freeform_cell(lm, prefix, kind, label_prefix) do
     taken =
       for key <- Structure.cell_keys(lm),
-          parts = Regex.run(~r/^card(\d+)$/, key),
+          parts = Regex.run(~r/^#{prefix}(\d+)$/, key),
           n <- tl(parts) do
         String.to_integer(n)
       end
 
     index = Enum.max([0 | taken]) + 1
-    key = "card#{index}"
+    key = "#{prefix}#{index}"
+    label = "#{label_prefix} #{length(Structure.cards(lm)) + 1}"
 
-    Structure.add_card(lm, key, nil, "Card #{length(Structure.cards(lm)) + 1}")
+    if Structure.image?(lm) do
+      # An image template's cells are definitions, like the ones it starts
+      # with, so the new cell immediately has a field to edit.
+      lm
+      |> put_definition_cell(key, placement_map(Structure.next_slot(lm)), label, kind)
+    else
+      Structure.add_card(lm, key, nil, label)
+    end
   end
+
+  defp placement_map(%{x: x, y: y, w: w, h: h}),
+    do: %{"x" => x, "y" => y, "w" => w, "h" => h}
 
   defp nudge_bento_card(lm, key, dx, dy, resize?) do
     case Structure.card(lm, key) do
@@ -709,11 +810,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
         lm
 
       card ->
+        step = if Structure.image?(lm), do: Structure.image_step(), else: Structure.min_size()
+
         if resize? do
-          step = Structure.min_size()
           Structure.resize(lm, key, card.w + dx * step, card.h + dy * step)
         else
-          step = Structure.min_size()
           Structure.move(lm, key, card.x + dx * step, card.y + dy * step)
         end
     end
@@ -1030,63 +1131,164 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
           <.section
             id="template-grid"
-            title={if @mode == :bento, do: "Board", else: "Grid"}
+            title={grid_title(@mode)}
             hint={grid_hint(@layout_map)}
             open
           >
-            <%= if @mode == :bento do %>
-              <BentoEditor.editor
-                layout_map={@layout_map}
-                can_edit?={@can_edit?}
-                accent_picker={@accent_picker}
-              />
-            <% else %>
-              <%= if @can_edit? do %>
-                <div class="mb-3 flex flex-wrap justify-end gap-2">
-                  <UIButton.button variant="outline" size="sm" phx-click="add_column">
-                    Add Column
-                  </UIButton.button>
+            <%= cond do %>
+              <% @mode == :image -> %>
+                <ImageEditor.editor
+                  layout_map={@layout_map}
+                  can_edit?={@can_edit?}
+                  accent_picker={@accent_picker}
+                />
+              <% @mode == :bento -> %>
+                <BentoEditor.editor
+                  layout_map={@layout_map}
+                  can_edit?={@can_edit?}
+                  accent_picker={@accent_picker}
+                />
+              <% true -> %>
+                <%= if @can_edit? do %>
+                  <div class="mb-3 flex flex-wrap justify-end gap-2">
+                    <UIButton.button variant="outline" size="sm" phx-click="add_column">
+                      Add Column
+                    </UIButton.button>
 
-                  <UIButton.button variant="outline" size="sm" phx-click="add_row">
-                    Add Row
-                  </UIButton.button>
-                </div>
-              <% end %>
+                    <UIButton.button variant="outline" size="sm" phx-click="add_row">
+                      Add Row
+                    </UIButton.button>
+                  </div>
+                <% end %>
 
-              <%= if Enum.empty?(@layout_map["rows"]) or Enum.empty?(@layout_map["columns"]) do %>
-                <p class="px-2 pb-2 text-sm text-base-content/50 sm:px-0 sm:pb-0">
-                  Add at least one row and one column to start building your template.
-                </p>
-              <% else %>
-                <div class="overflow-auto">
-                  <table
-                    class="w-full border-collapse table-fixed text-sm"
-                    style={"min-width: #{length(@layout_map["columns"] || []) * 14 + 10}rem"}
-                  >
-                    <thead>
-                      <tr>
-                        <th class="w-40 p-2 border border-base-content/10"></th>
+                <%= if Enum.empty?(@layout_map["rows"]) or Enum.empty?(@layout_map["columns"]) do %>
+                  <p class="px-2 pb-2 text-sm text-base-content/50 sm:px-0 sm:pb-0">
+                    Add at least one row and one column to start building your template.
+                  </p>
+                <% else %>
+                  <div class="overflow-auto">
+                    <table
+                      class="w-full border-collapse table-fixed text-sm"
+                      style={"min-width: #{length(@layout_map["columns"] || []) * 14 + 10}rem"}
+                    >
+                      <thead>
+                        <tr>
+                          <th class="w-40 p-2 border border-base-content/10"></th>
 
-                        <%= for {col, ci} <- Enum.with_index(@layout_map["columns"]) do %>
-                          <th class="border border-base-content/10 bg-base-content/5 p-0 text-base-content/70 align-bottom">
-                            <div class="flex flex-col">
+                          <%= for {col, ci} <- Enum.with_index(@layout_map["columns"]) do %>
+                            <th class="border border-base-content/10 bg-base-content/5 p-0 text-base-content/70 align-bottom">
+                              <div class="flex flex-col">
+                                <.accent_bar
+                                  id={"accent-bar-column-#{col["id"]}"}
+                                  token={col["accent"]}
+                                />
+                                <div class="p-2">
+                                  <div class="flex items-center gap-1">
+                                    <form
+                                      id={"column-#{col["id"]}-label-form"}
+                                      phx-change="update_column_label"
+                                      class="min-w-0 flex-1"
+                                    >
+                                      <input type="hidden" name="index" value={ci} />
+                                      <input
+                                        type="text"
+                                        id={"column-#{col["id"]}-label"}
+                                        name="label"
+                                        value={col["label"]}
+                                        phx-debounce="300"
+                                        disabled={!@can_edit?}
+                                        class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                      />
+                                    </form>
+
+                                    <%= if @can_edit? do %>
+                                      <button
+                                        type="button"
+                                        id={"accent-swatch-column-#{col["id"]}"}
+                                        phx-click="toggle_accent_picker"
+                                        phx-value-group="column"
+                                        phx-value-index={ci}
+                                        class={[
+                                          "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
+                                          swatch_class(col["accent"])
+                                        ]}
+                                        title="Accent color"
+                                        aria-label={"Accent color for column #{col["label"]}"}
+                                      ></button>
+                                      <button
+                                        type="button"
+                                        id={"remove-column-#{col["id"]}"}
+                                        phx-click="remove_column"
+                                        phx-value-index={ci}
+                                        class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
+                                        title="Remove column"
+                                        aria-label={"Remove column #{col["label"]}"}
+                                      >
+                                        <.icon name="hero-x-mark" class="size-3" />
+                                      </button>
+                                    <% end %>
+                                  </div>
+
+                                  <div
+                                    :if={@can_edit? and @accent_picker == {:column, ci}}
+                                    id={"accent-picker-column-#{col["id"]}"}
+                                    class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
+                                  >
+                                    <button
+                                      :for={token <- Accent.tokens()}
+                                      type="button"
+                                      id={"accent-option-column-#{col["id"]}-#{token}"}
+                                      phx-click="set_column_accent"
+                                      phx-value-index={ci}
+                                      phx-value-accent={token}
+                                      class={[
+                                        "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
+                                        swatch_class(token),
+                                        col["accent"] == token &&
+                                          "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
+                                      ]}
+                                      title={token}
+                                      aria-label={"Set column accent #{token}"}
+                                    ></button>
+                                    <button
+                                      type="button"
+                                      phx-click="set_column_accent"
+                                      phx-value-index={ci}
+                                      phx-value-accent=""
+                                      class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
+                                    >
+                                      None
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </th>
+                          <% end %>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        <%= for {row_meta, ri} <- Enum.with_index(@layout_map["rows"]) do %>
+                          <tr>
+                            <td class="relative border border-base-content/10 bg-base-content/5 p-0 align-top">
                               <.accent_bar
-                                id={"accent-bar-column-#{col["id"]}"}
-                                token={col["accent"]}
+                                id={"accent-bar-row-#{row_meta["id"]}"}
+                                token={row_meta["accent"]}
+                                orientation={:left}
                               />
                               <div class="p-2">
                                 <div class="flex items-center gap-1">
                                   <form
-                                    id={"column-#{col["id"]}-label-form"}
-                                    phx-change="update_column_label"
+                                    id={"row-#{row_meta["id"]}-label-form"}
+                                    phx-change="update_row_label"
                                     class="min-w-0 flex-1"
                                   >
-                                    <input type="hidden" name="index" value={ci} />
+                                    <input type="hidden" name="index" value={ri} />
                                     <input
                                       type="text"
-                                      id={"column-#{col["id"]}-label"}
+                                      id={"row-#{row_meta["id"]}-label"}
                                       name="label"
-                                      value={col["label"]}
+                                      value={row_meta["label"]}
                                       phx-debounce="300"
                                       disabled={!@can_edit?}
                                       class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
@@ -1096,25 +1298,25 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                   <%= if @can_edit? do %>
                                     <button
                                       type="button"
-                                      id={"accent-swatch-column-#{col["id"]}"}
+                                      id={"accent-swatch-row-#{row_meta["id"]}"}
                                       phx-click="toggle_accent_picker"
-                                      phx-value-group="column"
-                                      phx-value-index={ci}
+                                      phx-value-group="row"
+                                      phx-value-index={ri}
                                       class={[
                                         "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
-                                        swatch_class(col["accent"])
+                                        swatch_class(row_meta["accent"])
                                       ]}
                                       title="Accent color"
-                                      aria-label={"Accent color for column #{col["label"]}"}
+                                      aria-label={"Accent color for row #{row_meta["label"]}"}
                                     ></button>
                                     <button
                                       type="button"
-                                      id={"remove-column-#{col["id"]}"}
-                                      phx-click="remove_column"
-                                      phx-value-index={ci}
+                                      id={"remove-row-#{row_meta["id"]}"}
+                                      phx-click="remove_row"
+                                      phx-value-index={ri}
                                       class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
-                                      title="Remove column"
-                                      aria-label={"Remove column #{col["label"]}"}
+                                      title="Remove row"
+                                      aria-label={"Remove row #{row_meta["label"]}"}
                                     >
                                       <.icon name="hero-x-mark" class="size-3" />
                                     </button>
@@ -1122,30 +1324,30 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                 </div>
 
                                 <div
-                                  :if={@can_edit? and @accent_picker == {:column, ci}}
-                                  id={"accent-picker-column-#{col["id"]}"}
+                                  :if={@can_edit? and @accent_picker == {:row, ri}}
+                                  id={"accent-picker-row-#{row_meta["id"]}"}
                                   class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
                                 >
                                   <button
                                     :for={token <- Accent.tokens()}
                                     type="button"
-                                    id={"accent-option-column-#{col["id"]}-#{token}"}
-                                    phx-click="set_column_accent"
-                                    phx-value-index={ci}
+                                    id={"accent-option-row-#{row_meta["id"]}-#{token}"}
+                                    phx-click="set_row_accent"
+                                    phx-value-index={ri}
                                     phx-value-accent={token}
                                     class={[
                                       "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
                                       swatch_class(token),
-                                      col["accent"] == token &&
+                                      row_meta["accent"] == token &&
                                         "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
                                     ]}
                                     title={token}
-                                    aria-label={"Set column accent #{token}"}
+                                    aria-label={"Set row accent #{token}"}
                                   ></button>
                                   <button
                                     type="button"
-                                    phx-click="set_column_accent"
-                                    phx-value-index={ci}
+                                    phx-click="set_row_accent"
+                                    phx-value-index={ri}
                                     phx-value-accent=""
                                     class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
                                   >
@@ -1153,223 +1355,129 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                   </button>
                                 </div>
                               </div>
-                            </div>
-                          </th>
-                        <% end %>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      <%= for {row_meta, ri} <- Enum.with_index(@layout_map["rows"]) do %>
-                        <tr>
-                          <td class="relative border border-base-content/10 bg-base-content/5 p-0 align-top">
-                            <.accent_bar
-                              id={"accent-bar-row-#{row_meta["id"]}"}
-                              token={row_meta["accent"]}
-                              orientation={:left}
-                            />
-                            <div class="p-2">
-                              <div class="flex items-center gap-1">
-                                <form
-                                  id={"row-#{row_meta["id"]}-label-form"}
-                                  phx-change="update_row_label"
-                                  class="min-w-0 flex-1"
-                                >
-                                  <input type="hidden" name="index" value={ri} />
-                                  <input
-                                    type="text"
-                                    id={"row-#{row_meta["id"]}-label"}
-                                    name="label"
-                                    value={row_meta["label"]}
-                                    phx-debounce="300"
-                                    disabled={!@can_edit?}
-                                    class="w-full rounded border border-transparent bg-transparent px-2 py-1 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none"
-                                  />
-                                </form>
-
-                                <%= if @can_edit? do %>
-                                  <button
-                                    type="button"
-                                    id={"accent-swatch-row-#{row_meta["id"]}"}
-                                    phx-click="toggle_accent_picker"
-                                    phx-value-group="row"
-                                    phx-value-index={ri}
-                                    class={[
-                                      "size-3.5 shrink-0 rounded-full ring-2 ring-base-content/25 hover:ring-primary transition",
-                                      swatch_class(row_meta["accent"])
-                                    ]}
-                                    title="Accent color"
-                                    aria-label={"Accent color for row #{row_meta["label"]}"}
-                                  ></button>
-                                  <button
-                                    type="button"
-                                    id={"remove-row-#{row_meta["id"]}"}
-                                    phx-click="remove_row"
-                                    phx-value-index={ri}
-                                    class="inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-error/40 text-error transition-colors hover:border-error hover:bg-error/10"
-                                    title="Remove row"
-                                    aria-label={"Remove row #{row_meta["label"]}"}
-                                  >
-                                    <.icon name="hero-x-mark" class="size-3" />
-                                  </button>
-                                <% end %>
-                              </div>
-
-                              <div
-                                :if={@can_edit? and @accent_picker == {:row, ri}}
-                                id={"accent-picker-row-#{row_meta["id"]}"}
-                                class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
-                              >
-                                <button
-                                  :for={token <- Accent.tokens()}
-                                  type="button"
-                                  id={"accent-option-row-#{row_meta["id"]}-#{token}"}
-                                  phx-click="set_row_accent"
-                                  phx-value-index={ri}
-                                  phx-value-accent={token}
-                                  class={[
-                                    "size-3 rounded-full ring-1 ring-base-content/25 hover:scale-110 transition",
-                                    swatch_class(token),
-                                    row_meta["accent"] == token &&
-                                      "ring-2 ring-primary ring-offset-1 ring-offset-base-100"
-                                  ]}
-                                  title={token}
-                                  aria-label={"Set row accent #{token}"}
-                                ></button>
-                                <button
-                                  type="button"
-                                  phx-click="set_row_accent"
-                                  phx-value-index={ri}
-                                  phx-value-accent=""
-                                  class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
-                                >
-                                  None
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-
-                          <%= for cell_key <- Enum.at(@layout_map["layout"], ri, []) do %>
-                            <td class="p-2 border border-base-content/10 align-top">
-                              <div id={"cell-#{cell_key}"} class="rounded-lg bg-base-300/50 p-2">
-                                <form
-                                  id={"cell-#{cell_key}-label-form"}
-                                  phx-change="update_cell_meta"
-                                >
-                                  <input type="hidden" name="cell_key" value={cell_key} />
-                                  <input type="hidden" name="field" value="label" />
-                                  <input
-                                    type="text"
-                                    id={"cell-#{cell_key}-label"}
-                                    value={get_in(@layout_map, ["cells", cell_key, "label"])}
-                                    phx-debounce="300"
-                                    name="value"
-                                    placeholder={cell_key}
-                                    disabled={!@can_edit?}
-                                    class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
-                                  />
-                                </form>
-
-                                <ul class="mt-2 space-y-1">
-                                  <%= for field <- get_in(@layout_map, ["cells", cell_key, "fields"]) || [] do %>
-                                    <li class="flex items-center gap-1">
-                                      <form
-                                        id={"cell-#{cell_key}-field-#{field}-title-form"}
-                                        phx-change="update_cell_field_title"
-                                        class="w-28 shrink-0"
-                                      >
-                                        <input type="hidden" name="cell_key" value={cell_key} />
-                                        <input type="hidden" name="field" value={field} />
-                                        <input
-                                          type="text"
-                                          id={"cell-#{cell_key}-field-#{field}-title"}
-                                          value={
-                                            Psc.Canvas.field_title(
-                                              get_in(@layout_map, ["cells", cell_key]) || %{},
-                                              field
-                                            )
-                                          }
-                                          phx-debounce="300"
-                                          name="value"
-                                          placeholder={field}
-                                          title={"Section title for #{field} (empty hides it)"}
-                                          disabled={!@can_edit?}
-                                          class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                        />
-                                      </form>
-
-                                      <form
-                                        id={"cell-#{cell_key}-field-#{field}-form"}
-                                        phx-change="update_cell_field_default"
-                                        class="min-w-0 flex-1"
-                                      >
-                                        <input type="hidden" name="cell_key" value={cell_key} />
-                                        <input type="hidden" name="field" value={field} />
-                                        <input
-                                          type="text"
-                                          id={"cell-#{cell_key}-field-#{field}"}
-                                          value={
-                                            get_in(@layout_map, [
-                                              "cells",
-                                              cell_key,
-                                              "defaults",
-                                              field
-                                            ])
-                                          }
-                                          phx-debounce="300"
-                                          name="value"
-                                          placeholder="Default"
-                                          disabled={!@can_edit?}
-                                          class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                        />
-                                      </form>
-
-                                      <button
-                                        :if={@can_edit?}
-                                        type="button"
-                                        phx-click="remove_cell_field"
-                                        phx-value-cell_key={cell_key}
-                                        phx-value-field={field}
-                                        class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
-                                        title={"Remove field #{field}"}
-                                        aria-label={"Remove field #{field}"}
-                                      >
-                                        <.icon name="hero-x-mark" class="size-2.5" />
-                                      </button>
-                                    </li>
-                                  <% end %>
-                                </ul>
-
-                                <form
-                                  :if={@can_edit?}
-                                  id={"cell-#{cell_key}-add-field-form"}
-                                  phx-submit="add_cell_field"
-                                  class="mt-2 flex gap-1"
-                                >
-                                  <input type="hidden" name="cell_key" value={cell_key} />
-                                  <input
-                                    type="text"
-                                    id={"cell-#{cell_key}-new-field"}
-                                    name="field"
-                                    placeholder="New field"
-                                    class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                                  />
-                                  <button
-                                    type="submit"
-                                    class="shrink-0 rounded border border-base-content/10 px-1.5 py-0.5 text-xs text-base-content/70 hover:bg-base-content/5 hover:text-base-content transition-colors"
-                                  >
-                                    Add
-                                  </button>
-                                </form>
-                              </div>
                             </td>
-                          <% end %>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
-                </div>
-              <% end %>
+
+                            <%= for cell_key <- Enum.at(@layout_map["layout"], ri, []) do %>
+                              <td class="p-2 border border-base-content/10 align-top">
+                                <div id={"cell-#{cell_key}"} class="rounded-lg bg-base-300/50 p-2">
+                                  <form
+                                    id={"cell-#{cell_key}-label-form"}
+                                    phx-change="update_cell_meta"
+                                  >
+                                    <input type="hidden" name="cell_key" value={cell_key} />
+                                    <input type="hidden" name="field" value="label" />
+                                    <input
+                                      type="text"
+                                      id={"cell-#{cell_key}-label"}
+                                      value={get_in(@layout_map, ["cells", cell_key, "label"])}
+                                      phx-debounce="300"
+                                      name="value"
+                                      placeholder={cell_key}
+                                      disabled={!@can_edit?}
+                                      class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
+                                    />
+                                  </form>
+
+                                  <ul class="mt-2 space-y-1">
+                                    <%= for field <- get_in(@layout_map, ["cells", cell_key, "fields"]) || [] do %>
+                                      <li class="flex items-center gap-1">
+                                        <form
+                                          id={"cell-#{cell_key}-field-#{field}-title-form"}
+                                          phx-change="update_cell_field_title"
+                                          class="w-28 shrink-0"
+                                        >
+                                          <input type="hidden" name="cell_key" value={cell_key} />
+                                          <input type="hidden" name="field" value={field} />
+                                          <input
+                                            type="text"
+                                            id={"cell-#{cell_key}-field-#{field}-title"}
+                                            value={
+                                              Psc.Canvas.field_title(
+                                                get_in(@layout_map, ["cells", cell_key]) || %{},
+                                                field
+                                              )
+                                            }
+                                            phx-debounce="300"
+                                            name="value"
+                                            placeholder={field}
+                                            title={"Section title for #{field} (empty hides it)"}
+                                            disabled={!@can_edit?}
+                                            class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
+                                          />
+                                        </form>
+
+                                        <form
+                                          id={"cell-#{cell_key}-field-#{field}-form"}
+                                          phx-change="update_cell_field_default"
+                                          class="min-w-0 flex-1"
+                                        >
+                                          <input type="hidden" name="cell_key" value={cell_key} />
+                                          <input type="hidden" name="field" value={field} />
+                                          <input
+                                            type="text"
+                                            id={"cell-#{cell_key}-field-#{field}"}
+                                            value={
+                                              get_in(@layout_map, [
+                                                "cells",
+                                                cell_key,
+                                                "defaults",
+                                                field
+                                              ])
+                                            }
+                                            phx-debounce="300"
+                                            name="value"
+                                            placeholder="Default"
+                                            disabled={!@can_edit?}
+                                            class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
+                                          />
+                                        </form>
+
+                                        <button
+                                          :if={@can_edit?}
+                                          type="button"
+                                          phx-click="remove_cell_field"
+                                          phx-value-cell_key={cell_key}
+                                          phx-value-field={field}
+                                          class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
+                                          title={"Remove field #{field}"}
+                                          aria-label={"Remove field #{field}"}
+                                        >
+                                          <.icon name="hero-x-mark" class="size-2.5" />
+                                        </button>
+                                      </li>
+                                    <% end %>
+                                  </ul>
+
+                                  <form
+                                    :if={@can_edit?}
+                                    id={"cell-#{cell_key}-add-field-form"}
+                                    phx-submit="add_cell_field"
+                                    class="mt-2 flex gap-1"
+                                  >
+                                    <input type="hidden" name="cell_key" value={cell_key} />
+                                    <input
+                                      type="text"
+                                      id={"cell-#{cell_key}-new-field"}
+                                      name="field"
+                                      placeholder="New field"
+                                      class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
+                                    />
+                                    <button
+                                      type="submit"
+                                      class="shrink-0 rounded border border-base-content/10 px-1.5 py-0.5 text-xs text-base-content/70 hover:bg-base-content/5 hover:text-base-content transition-colors"
+                                    >
+                                      Add
+                                    </button>
+                                  </form>
+                                </div>
+                              </td>
+                            <% end %>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                <% end %>
             <% end %>
           </.section>
 

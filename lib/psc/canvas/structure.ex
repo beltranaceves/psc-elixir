@@ -1,8 +1,8 @@
 defmodule Psc.Canvas.Structure do
   @moduledoc """
-  How a canvas (or a bento template) arranges its cells.
+  How a canvas (or a template) arranges its cells.
 
-  There are two modes:
+  There are three modes:
 
     * `:table` — the classic rows × columns matrix (`"rows"`, `"columns"` and
       the `"layout"` cell-key matrix). A canvas keeps its cells flat
@@ -12,6 +12,11 @@ defmodule Psc.Canvas.Structure do
       map itself carries `"layout_mode" => "bento"` and `"bento_columns"`.
       Canvas and template share the same flat shape, so one set of helpers
       serves the runtime, the designer and the previews.
+    * `:image` — floating cells over a backdrop image or SVG. A cell's
+      `"placement"` is a percentage of the backdrop (`0`–`100`), and the map
+      carries `"layout_mode" => "image"` plus a `"backdrop"` map (`url`,
+      `fit`, `alt`, optional `aspect`). Percentages keep every cell registered
+      with the picture at any size, which is the whole point of the mode.
 
   Every mutation here is pure and deterministic: the same cells and the same
   operation always produce the same result. The CRDT reducer calls these
@@ -45,9 +50,25 @@ defmodule Psc.Canvas.Structure do
   @default_card_height 2
   @max_card_height 40
 
+  # An image board's coordinates are percentages of the backdrop, so the board
+  # has the same extent at every viewport size. A cell moves in the same half
+  # unit a bento card does (0.5%), and must be at least 2% wide and tall to stay
+  # usable.
+  @image_extent 100
+  @image_min_size 2
+  @default_image_cell_width 24
+  @default_image_cell_height 12
+
+  @default_backdrop_fit "contain"
+  @backdrop_fits ["contain", "cover", "stretch"]
+  @default_backdrop_aspect 16 / 9
+  @min_backdrop_aspect 0.1
+  @max_backdrop_aspect 10.0
+  @max_backdrop_url_length 4000
+
   # Table metadata is present on both a canvas and a template. `notes_mode`
-  # and `notes` only exist on a template's layout map, and a bento template is
-  # flat, so they sit beside the cards there.
+  # and `notes` only exist on a template's layout map, and a bento or image
+  # template is flat, so they sit beside the cells there.
   # `$name` and `$description` are the canvas header, stored in the cells map
   # by the CRDT. They are not cells, and a table template never writes them.
   @table_metadata ["rows", "columns", "layout", "$name", "$description"]
@@ -55,10 +76,14 @@ defmodule Psc.Canvas.Structure do
   @bento_metadata @table_metadata ++
                     ["layout_mode", "bento_columns", "bento_rows", "cells", "notes_mode", "notes"]
 
-  @metadata_keys @bento_metadata
+  @image_metadata @table_metadata ++
+                    ["layout_mode", "backdrop", "cells", "notes_mode", "notes"]
 
-  # Cell keys that are metadata, not content, in both modes. `placement` and
-  # `accent` are how a bento card is drawn; they are never editable fields.
+  @metadata_keys Enum.uniq(@bento_metadata ++ @image_metadata)
+
+  # Cell keys that are metadata, not content, in every mode. `placement` and
+  # `accent` are how a free-form cell is drawn, and `kind` is whether an image
+  # cell is a card or a bare text box; they are never editable fields.
   @reserved_cell_keys [
     "row",
     "column",
@@ -67,7 +92,8 @@ defmodule Psc.Canvas.Structure do
     "semantics",
     "titles",
     "placement",
-    "accent"
+    "accent",
+    "kind"
   ]
 
   @doc "The metadata keys of a structure map: never cells."
@@ -78,10 +104,259 @@ defmodule Psc.Canvas.Structure do
 
   @doc "The layout mode of a cells map (or a template layout map)."
   def mode(map) when is_map(map) do
-    if map["layout_mode"] == "bento", do: :bento, else: :table
+    case map["layout_mode"] do
+      "bento" -> :bento
+      "image" -> :image
+      _other -> :table
+    end
   end
 
   def bento?(map), do: mode(map) == :bento
+
+  @doc "Whether the map is an image board."
+  def image?(map), do: mode(map) == :image
+
+  @doc """
+  Whether cells are placed freely (a bento or an image board) rather than in a
+  matrix. Free-form cells carry a `"placement"` and can be added, moved and
+  resized independently.
+  """
+  def freeform?(map), do: mode(map) in [:bento, :image]
+
+  ## Backdrop (image boards)
+
+  @doc """
+  The backdrop of an image board, normalized.
+
+  `aspect` is `nil` when the picture supplies its own shape; when it is set the
+  board is that shape and the picture is fitted inside it.
+  """
+  def backdrop(map) when is_map(map) do
+    stored =
+      case Map.get(map, "backdrop") do
+        %{} = backdrop -> backdrop
+        _other -> %{}
+      end
+
+    %{
+      url: normalize_backdrop_url(stored["url"]),
+      fit: normalize_fit(stored["fit"]),
+      alt: normalize_alt(stored["alt"]),
+      aspect: normalize_aspect(stored["aspect"])
+    }
+  end
+
+  @doc "Whether the map has a backdrop picture."
+  def backdrop?(map), do: backdrop(map).url != nil
+
+  @doc """
+  The backdrop as it is stored (string keys, unset values omitted).
+
+  Used when a template's backdrop is copied into a canvas.
+  """
+  def backdrop_map(map) do
+    case backdrop(map) do
+      %{url: nil} ->
+        %{}
+
+      backdrop ->
+        %{"url" => backdrop.url, "fit" => backdrop.fit}
+        |> maybe_put("alt", backdrop.alt)
+        |> maybe_put("aspect", backdrop.aspect)
+    end
+  end
+
+  @doc "The fits a pinned backdrop may use."
+  def backdrop_fits, do: @backdrop_fits
+
+  @doc "The default shape of a board without a pinned aspect."
+  def default_backdrop_aspect, do: @default_backdrop_aspect
+
+  @doc """
+  A URL that can act as a backdrop: `http(s)`, a root-relative path, or an
+  `image/*` data URI.
+
+  Quotes and whitespace are refused: the value is written into an `src`
+  attribute, and only image sources make sense there.
+  """
+  def valid_backdrop_url?(url) when is_binary(url) do
+    url = String.trim(url)
+
+    url != "" and String.length(url) <= @max_backdrop_url_length and
+      not String.match?(url, ~r/[\s"'`\x00-\x1F\x7F]/) and
+      (String.starts_with?(url, "https://") or String.starts_with?(url, "http://") or
+         String.starts_with?(url, "/") or String.starts_with?(url, "data:image/"))
+  end
+
+  def valid_backdrop_url?(_url), do: false
+
+  @doc """
+  Update an image board's backdrop. Missing fields keep their current value.
+
+  An invalid URL, fit or aspect is ignored rather than stored, and an empty URL
+  removes the backdrop. The rules run here, not in a LiveView, so every client
+  applying the same operation reaches the same backdrop.
+  """
+  def set_backdrop(map, attrs) when is_map(map) and is_map(attrs) do
+    if image?(map) do
+      current = backdrop(map)
+
+      url =
+        case Map.fetch(attrs, "url") do
+          {:ok, url} when is_binary(url) ->
+            if String.trim(url) == "", do: nil, else: normalize_backdrop_url(url) || current.url
+
+          _other ->
+            current.url
+        end
+
+      fit =
+        case Map.fetch(attrs, "fit") do
+          {:ok, fit} when is_binary(fit) and fit in @backdrop_fits -> fit
+          _other -> current.fit
+        end
+
+      alt =
+        case Map.fetch(attrs, "alt") do
+          {:ok, alt} when is_binary(alt) -> normalize_alt(alt)
+          _other -> current.alt
+        end
+
+      aspect =
+        case Map.fetch(attrs, "aspect") do
+          {:ok, nil} -> nil
+          {:ok, aspect} when is_number(aspect) or is_binary(aspect) -> normalize_aspect(aspect)
+          _other -> current.aspect
+        end
+
+      backdrop = %{url: url, fit: fit, alt: alt, aspect: aspect}
+
+      if url do
+        Map.put(map, "backdrop", store_backdrop(backdrop))
+      else
+        Map.delete(map, "backdrop")
+      end
+    else
+      map
+    end
+  end
+
+  defp store_backdrop(backdrop) do
+    %{"url" => backdrop.url, "fit" => backdrop.fit}
+    |> maybe_put("alt", backdrop.alt)
+    |> maybe_put("aspect", backdrop.aspect)
+  end
+
+  defp normalize_backdrop_url(url) when is_binary(url) do
+    url = String.trim(url)
+    if valid_backdrop_url?(url), do: url, else: nil
+  end
+
+  defp normalize_backdrop_url(_url), do: nil
+
+  defp normalize_fit(fit) when is_binary(fit) do
+    if fit in @backdrop_fits, do: fit, else: @default_backdrop_fit
+  end
+
+  defp normalize_fit(_fit), do: @default_backdrop_fit
+
+  defp normalize_alt(alt) when is_binary(alt) do
+    case String.trim(alt) do
+      "" -> nil
+      alt -> String.slice(alt, 0, 200)
+    end
+  end
+
+  defp normalize_alt(_alt), do: nil
+
+  defp normalize_aspect(aspect) when is_number(aspect) do
+    if aspect >= @min_backdrop_aspect and aspect <= @max_backdrop_aspect do
+      Float.round(aspect / 1, 4)
+    end
+  end
+
+  defp normalize_aspect(aspect) when is_binary(aspect) do
+    case Float.parse(String.trim(aspect)) do
+      {number, _rest} -> normalize_aspect(number)
+      :error -> nil
+    end
+  end
+
+  defp normalize_aspect(_aspect), do: nil
+
+  @doc """
+  The CSS of an image board's frame.
+
+  A pinned aspect ratio gives the board a stable shape before the picture
+  loads; without one the picture's own height establishes the board, so the
+  stored percentages refer to exactly the space the picture occupies. An empty
+  frame falls back to the default shape so it still has an area to drop cells
+  onto.
+  """
+  def image_board_style(map) do
+    case backdrop(map) do
+      %{url: nil} ->
+        "aspect-ratio: #{Float.round(@default_backdrop_aspect, 4)};"
+
+      %{aspect: nil} ->
+        ""
+
+      %{aspect: aspect} ->
+        "aspect-ratio: #{Float.round(aspect, 4)};"
+    end
+  end
+
+  @doc "A cell's size on an image board, in percent."
+  def image_size_label(w, h), do: "#{dimension(w)} × #{dimension(h)}%"
+
+  @doc """
+  The kind of an image cell: a `card` (a titled box with Markdown fields) or a
+  bare `text` input. Everything else is a card.
+  """
+  def kind(cell) when is_map(cell) do
+    if cell["kind"] == "text", do: "text", else: "card"
+  end
+
+  def kind(_cell), do: "card"
+
+  @doc "The kinds an image cell may be."
+  def kinds, do: ["card", "text"]
+
+  @doc """
+  Set an image cell's kind. Missing cells and unknown kinds are a no-op.
+  """
+  def set_kind(map, key, kind) do
+    if image?(map) and kind in kinds() do
+      update_card(map, key, fn cell -> Map.put(cell, "kind", kind) end)
+    else
+      map
+    end
+  end
+
+  @doc """
+  Clamp every image cell's placement into the backdrop.
+
+  Used when a stored template is loaded: hand-edited or older data may carry a
+  rectangle that leaves the picture, and the designer should show it where the
+  editor will actually render it.
+  """
+  def normalize_image(map) do
+    if image?(map) do
+      map
+      |> cells()
+      |> Enum.reduce(map, fn
+        {key, cell}, acc when is_map(cell) ->
+          update_card(acc, key, fn cell ->
+            put_placement(cell, clamp_image_placement(cell["placement"] || %{}))
+          end)
+
+        _other, acc ->
+          acc
+      end)
+    else
+      map
+    end
+  end
 
   @doc "The number of grid columns of a bento map."
   def columns(map) do
@@ -177,6 +452,23 @@ defmodule Psc.Canvas.Structure do
   def track(value), do: round(value * @tracks_per_unit)
 
   @doc """
+  The CSS of one floating cell on an image board.
+
+  Coordinates are percentages of the backdrop, so the cell keeps its place in
+  the picture at any viewport size.
+  """
+  def image_placement_style(card) do
+    "left: #{dimension(card.x)}%; top: #{dimension(card.y)}%; " <>
+      "width: #{dimension(card.w)}%; height: #{dimension(card.h)}%;"
+  end
+
+  @doc "The smallest size of an image cell, in percent."
+  def image_min_size, do: @image_min_size
+
+  @doc "The step an image cell moves and resizes by, in percent."
+  def image_step, do: 1 / @tracks_per_unit
+
+  @doc """
   A compact `columns × rows` label.
 
   Whole numbers print without a decimal tail, so a card is `8 × 3` and a
@@ -196,13 +488,16 @@ defmodule Psc.Canvas.Structure do
   @doc """
   The cells of a map.
 
-  A bento map is flat, exactly like a canvas. A table template nests its cells
-  under `"cells"`; a table canvas is flat.
+  A bento or image map is flat, exactly like a canvas. A table template nests
+  its cells under `"cells"`; a table canvas is flat.
   """
   def cells(map) when is_map(map) do
     case mode(map) do
       :bento ->
         Map.drop(map, @bento_metadata)
+
+      :image ->
+        Map.drop(map, @image_metadata)
 
       :table ->
         case map["cells"] do
@@ -222,8 +517,10 @@ defmodule Psc.Canvas.Structure do
   Every card, in reading order.
 
   A table derives one card per matrix position (`w` and `h` are 1, `x` and `y`
-  are the matrix indices). A bento reads each cell's placement. Either way the
-  list is `%{key, label, x, y, w, h, accent}`, sorted by `{y, x, key}`.
+  are the matrix indices). A bento reads each cell's placement in grid units;
+  an image board reads it in percent of the backdrop. Either way the list is
+  `%{key, label, x, y, w, h, accent, kind}`, sorted by `{y, x, key}`. `kind` is
+  `"card"` unless the cell is an image board's `text` cell.
   """
   def cards(map) when is_map(map) do
     map
@@ -247,7 +544,24 @@ defmodule Psc.Canvas.Structure do
             y: placement.y,
             w: placement.w,
             h: placement.h,
-            accent: cell["accent"]
+            accent: cell["accent"],
+            kind: "card"
+          }
+        end
+
+      :image ->
+        for {key, cell} <- cells(map), is_map(cell) do
+          placement = normalize_placement(cell, :image)
+
+          %{
+            key: key,
+            label: label(cell, key),
+            x: placement.x,
+            y: placement.y,
+            w: placement.w,
+            h: placement.h,
+            accent: cell["accent"],
+            kind: kind(cell)
           }
         end
 
@@ -268,7 +582,8 @@ defmodule Psc.Canvas.Structure do
             y: y,
             w: 1,
             h: 1,
-            accent: accent_at(columns, x)
+            accent: accent_at(columns, x),
+            kind: "card"
           }
         end
     end
@@ -297,6 +612,7 @@ defmodule Psc.Canvas.Structure do
   def empty?(map) do
     case mode(map) do
       :bento -> cells(map) == %{}
+      :image -> cells(map) == %{}
       :table -> map["rows"] in [nil, []] or map["columns"] in [nil, []]
     end
   end
@@ -305,20 +621,42 @@ defmodule Psc.Canvas.Structure do
   The extent of the board: columns and rows.
 
   A table reports its matrix size; a bento reports its column count and its
-  height (the stored container floor, or the deepest card when that is lower).
+  height (the stored container floor, or the deepest card when that is lower);
+  an image board reports `100 × 100` because its unit is a percentage of the
+  backdrop.
   """
   def bounds(map) do
     case mode(map) do
       :bento ->
         %{columns: columns(map), rows: rows(map)}
 
+      :image ->
+        %{columns: @image_extent, rows: @image_extent}
+
       :table ->
         %{columns: length(map["columns"] || []), rows: length(map["layout"] || [])}
     end
   end
 
-  @doc "A cell's normalized placement. Table cells are one unit at their index."
+  @doc """
+  The extent of an image board, in percent.
+  """
+  def image_extent, do: @image_extent
+
+  @doc """
+  A cell's normalized placement, in bento grid units.
+
+  Table cells are one unit at their index; an image board uses
+  `normalize_placement/2` with its own percent rules.
+  """
   def placement(cell) when is_map(cell) do
+    normalize_placement(cell, :bento)
+  end
+
+  # Defensive: a value that is not a cell map has no placement.
+  def placement(_cell), do: %{x: 0, y: 0, w: 1, h: 1}
+
+  defp normalize_placement(cell, :bento) when is_map(cell) do
     case cell["placement"] do
       %{} = placement ->
         %{
@@ -333,16 +671,30 @@ defmodule Psc.Canvas.Structure do
     end
   end
 
-  # Defensive: a value that is not a cell map has no placement.
-  def placement(_cell), do: %{x: 0, y: 0, w: 1, h: 1}
+  defp normalize_placement(cell, :image) when is_map(cell) do
+    case cell["placement"] do
+      %{} = placement -> clamp_image_placement(placement)
+      _other -> clamp_image_placement(%{})
+    end
+  end
+
+  defp normalize_placement(_cell, _mode), do: %{x: 0, y: 0, w: 1, h: 1}
 
   @doc """
   Clamp a placement to the board.
 
-  The single place geometry is bounded: `w`/`h` are at least one unit, a card
-  never extends past the right edge, and `y` never goes negative.
+  The single place geometry is bounded. A bento card is at least one unit and
+  never extends past the right edge; an image cell is at least `2%` wide and
+  tall and stays inside the picture. `y` never goes negative.
   """
   def clamp_placement(map, placement) do
+    case mode(map) do
+      :image -> clamp_image_placement(placement)
+      _other -> clamp_grid_placement(map, placement)
+    end
+  end
+
+  defp clamp_grid_placement(map, placement) do
     board_columns = columns(map)
 
     w =
@@ -369,6 +721,38 @@ defmodule Psc.Canvas.Structure do
       |> min(board_columns - w)
 
     y = placement |> get_number("y", 0) |> snap() |> max(0)
+
+    %{x: x, y: y, w: w, h: h}
+  end
+
+  defp clamp_image_placement(placement) do
+    w =
+      placement
+      |> get_number("w", @default_image_cell_width)
+      |> snap()
+      |> min(@image_extent)
+      |> max(@image_min_size)
+
+    h =
+      placement
+      |> get_number("h", @default_image_cell_height)
+      |> snap()
+      |> min(@image_extent)
+      |> max(@image_min_size)
+
+    x =
+      placement
+      |> get_number("x", 0)
+      |> snap()
+      |> max(0)
+      |> min(@image_extent - w)
+
+    y =
+      placement
+      |> get_number("y", 0)
+      |> snap()
+      |> max(0)
+      |> min(@image_extent - h)
 
     %{x: x, y: y, w: w, h: h}
   end
@@ -417,13 +801,20 @@ defmodule Psc.Canvas.Structure do
   defp normalize_int(_value, default), do: default
 
   @doc """
-  The first free rectangle for a new card.
+  The first free rectangle for a new free-form cell.
 
-  Scans row by row from the top, left to right, for a `w` × `h` area that no
-  existing card covers. The scan order is deterministic, so two clients that
-  add a card concurrently still compute the same slot for the same board.
+  A bento scans row by row for a `w` × `h` area that no card covers; an image
+  board scans in 2% steps. The scan order is deterministic, so two clients that
+  add a cell concurrently still compute the same slot for the same board.
   """
   def next_slot(map) do
+    case mode(map) do
+      :image -> next_image_slot(map)
+      _other -> next_grid_slot(map)
+    end
+  end
+
+  defp next_grid_slot(map) do
     board_columns = columns(map)
     w = min(@default_card_width, board_columns)
     h = @default_card_height
@@ -435,6 +826,31 @@ defmodule Psc.Canvas.Structure do
         if free?(rect, occupied), do: rect, else: nil
       end)
     end)
+  end
+
+  defp next_image_slot(map) do
+    w = @default_image_cell_width
+    h = @default_image_cell_height
+    occupied = occupied_rects(map)
+
+    Enum.find_value(
+      0..(div(@image_extent, 2) - div(h, 2)),
+      %{
+        x: div(@image_extent - w, 4),
+        y: div(@image_extent - h, 2),
+        w: w,
+        h: h
+      },
+      fn step ->
+        y = step * 2
+
+        Enum.find_value(0..div(@image_extent - w, 2), fn x_step ->
+          x = x_step * 2
+          rect = %{x: x, y: y, w: w, h: h}
+          if free?(rect, occupied), do: rect, else: nil
+        end)
+      end
+    )
   end
 
   @doc "Whether a rectangle is covered by any other card."
@@ -459,11 +875,19 @@ defmodule Psc.Canvas.Structure do
     a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
   end
 
-  ## Mutations (bento only)
+  ## Mutations (free-form cells)
 
-  @doc "Add a card. Idempotent: an existing key is left untouched."
-  def add_card(map, key, placement \\ nil, label \\ nil, accent \\ nil) when is_map(map) do
-    if not bento?(map) or Map.has_key?(cells(map), key) do
+  @doc """
+  Add a cell to a free-form board. Idempotent: an existing key is left
+  untouched.
+
+  `placement` is in bento grid units or image percentages, depending on the
+  map's mode; without one the board's first free slot is used. `kind` is only
+  meaningful for an image board's cells and defaults to `"card"`.
+  """
+  def add_card(map, key, placement \\ nil, label \\ nil, accent \\ nil, kind \\ nil)
+      when is_map(map) do
+    if not freeform?(map) or Map.has_key?(cells(map), key) do
       map
     else
       placement = clamp_placement(map, placement || next_slot(map))
@@ -474,58 +898,88 @@ defmodule Psc.Canvas.Structure do
           "content" => "",
           "placement" => stringify(placement)
         }
+        |> maybe_put("kind", cell_kind(map, kind))
         |> maybe_put("accent", nilify(accent))
 
       Map.put(map, key, cell)
     end
   end
 
-  @doc "Remove a card, with its placement and content."
+  defp cell_kind(map, kind) do
+    cond do
+      not image?(map) -> nil
+      kind in kinds() -> kind
+      true -> "card"
+    end
+  end
+
+  @doc "Remove a free-form cell, with its placement and content."
   def remove_card(map, key) when is_map(map) do
-    if bento?(map), do: Map.delete(map, key), else: map
+    if freeform?(map), do: Map.delete(map, key), else: map
   end
 
   @doc """
-  Move a card. Missing cards are a no-op.
+  Move a free-form cell. Missing cells are a no-op.
 
-  Dragging past the right edge grows the board, the horizontal counterpart of
-  a card that drags the board taller: the columns follow the card instead of
-  clamping it. An explicit narrower grid (`set_columns/2`) still wins, because
-  that is the user asking for a smaller board.
+  A bento card dragged past the right edge grows the board: the columns follow
+  the card instead of clamping it. An explicit narrower grid (`set_columns/2`)
+  still wins, because that is the user asking for a smaller board. An image
+  cell is a percentage of the backdrop and cannot leave it.
   """
   def move(map, key, x, y) do
-    update_bento_card(map, key, fn map, cell ->
-      current = placement(cell)
-      x = x |> normalize_number(current.x) |> snap()
-      y = y |> normalize_number(current.y) |> snap()
-      map = grow_columns(map, x + current.w)
+    if image?(map) do
+      update_freeform_card(map, key, fn map, cell ->
+        current = normalize_placement(cell, :image)
+        x = x |> normalize_number(current.x) |> snap()
+        y = y |> normalize_number(current.y) |> snap()
 
-      {map, put_placement(cell, clamp_placement(map, %{current | x: x, y: y}))}
-    end)
+        {map, put_placement(cell, clamp_image_placement(%{current | x: x, y: y}))}
+      end)
+    else
+      update_freeform_card(map, key, fn map, cell ->
+        current = placement(cell)
+        x = x |> normalize_number(current.x) |> snap()
+        y = y |> normalize_number(current.y) |> snap()
+        map = grow_columns(map, x + current.w)
+
+        {map, put_placement(cell, clamp_placement(map, %{current | x: x, y: y}))}
+      end)
+    end
   end
 
   @doc """
-  Resize a card. Missing cards are a no-op.
+  Resize a free-form cell. Missing cells are a no-op.
 
-  The left edge stays put, and a card dragged wider than the board grows the
-  board with it (up to the maximum column count).
+  The left edge stays put, and a bento card dragged wider than the board grows
+  the board with it (up to the maximum column count). An image cell stays
+  inside the backdrop.
   """
   def resize(map, key, w, h) do
-    update_bento_card(map, key, fn map, cell ->
-      current = placement(cell)
+    if image?(map) do
+      update_freeform_card(map, key, fn map, cell ->
+        current = normalize_placement(cell, :image)
+        width = w |> normalize_number(current.w) |> snap()
+        height = h |> normalize_number(current.h) |> snap()
 
-      width = w |> normalize_number(current.w) |> snap() |> max(min_size())
-      map = grow_columns(map, current.x + width)
+        {map, put_placement(cell, clamp_image_placement(%{current | w: width, h: height}))}
+      end)
+    else
+      update_freeform_card(map, key, fn map, cell ->
+        current = placement(cell)
 
-      # At the maximum width the card shrinks into the space left of it; its
-      # left edge never jumps to a different column.
-      width = width |> min(columns(map) - current.x) |> max(min_size())
+        width = w |> normalize_number(current.w) |> snap() |> max(min_size())
+        map = grow_columns(map, current.x + width)
 
-      {map, put_placement(cell, clamp_placement(map, %{current | w: width, h: h}))}
-    end)
+        # At the maximum width the card shrinks into the space left of it; its
+        # left edge never jumps to a different column.
+        width = width |> min(columns(map) - current.x) |> max(min_size())
+
+        {map, put_placement(cell, clamp_placement(map, %{current | w: width, h: h}))}
+      end)
+    end
   end
 
-  @doc "Set a card's accent (`nil` or `\"\"` clears it)."
+  @doc "Set a cell's accent (`nil` or `\"\"` clears it)."
   def set_accent(map, key, accent) do
     if Accent.valid?(accent) do
       update_card(map, key, &maybe_put(&1, "accent", nilify(accent)))
@@ -577,7 +1031,7 @@ defmodule Psc.Canvas.Structure do
   end
 
   defp update_card(map, key, fun) do
-    if bento?(map) do
+    if freeform?(map) do
       case Map.fetch(cells(map), key) do
         {:ok, cell} -> Map.put(map, key, fun.(cell))
         :error -> map
@@ -587,10 +1041,10 @@ defmodule Psc.Canvas.Structure do
     end
   end
 
-  # A card's geometry can change the board itself (the columns grow when a
-  # card is dragged past the edge), so the updater gets the map back too.
-  defp update_bento_card(map, key, fun) do
-    if bento?(map) do
+  # A cell's geometry can change the board itself (the columns grow when a
+  # bento card is dragged past the edge), so the updater gets the map back too.
+  defp update_freeform_card(map, key, fun) do
+    if freeform?(map) do
       case Map.fetch(cells(map), key) do
         {:ok, cell} ->
           {map, new_cell} = fun.(map, cell)
@@ -644,7 +1098,7 @@ defmodule Psc.Canvas.Structure do
   def neighbours(map, key) do
     case mode(map) do
       :table -> table_neighbours(map, key)
-      :bento -> bento_neighbours(map, key)
+      _freeform -> freeform_neighbours(map, key)
     end
   end
 
@@ -670,10 +1124,11 @@ defmodule Psc.Canvas.Structure do
     end
   end
 
-  # A ragged bento can have no card directly beside another. Horizontal swipes
-  # fall back to reading order so they never get stuck; vertical swipes stay
-  # geometric, because wrapping a swipe down at the bottom would be confusing.
-  defp bento_neighbours(map, key) do
+  # A ragged free-form board can have no card directly beside another.
+  # Horizontal swipes fall back to reading order so they never get stuck;
+  # vertical swipes stay geometric, because wrapping a swipe down at the bottom
+  # would be confusing.
+  defp freeform_neighbours(map, key) do
     list = cards(map)
     index = Enum.find_index(list, &(&1.key == key))
 
@@ -747,6 +1202,7 @@ defmodule Psc.Canvas.Structure do
   def validate(map) do
     case mode(map) do
       :bento -> validate_bento(map)
+      :image -> validate_image(map)
       :table -> validate_table(map)
     end
   end
@@ -755,14 +1211,26 @@ defmodule Psc.Canvas.Structure do
   Validate a template layout map.
 
   Table templates must be a complete matrix; bento templates must have valid
-  placements and at least one card. Both require unique fields per card and
-  reject unknown accents.
+  placements and at least one card; image templates must have a backdrop and at
+  least one placement. All three require unique fields per cell and reject
+  unknown accents.
   """
   def validate_template(map) do
     with :ok <- validate_not_empty(map),
+         :ok <- validate_backdrop(map),
          :ok <- validate(map),
          :ok <- validate_fields(map),
          :ok <- validate_accents(map) do
+      :ok
+    end
+  end
+
+  # A template is a starting point, so it must carry the picture its cell
+  # coordinates refer to. A canvas may be blank and get one later.
+  defp validate_backdrop(map) do
+    if image?(map) and not backdrop?(map) do
+      {:error, :layout_map, "template must have a backdrop"}
+    else
       :ok
     end
   end
@@ -772,6 +1240,11 @@ defmodule Psc.Canvas.Structure do
       :bento ->
         if cells(map) == %{},
           do: {:error, :layout_map, "template must have at least one card"},
+          else: :ok
+
+      :image ->
+        if cells(map) == %{},
+          do: {:error, :layout_map, "template must have at least one cell"},
           else: :ok
 
       :table ->
@@ -871,6 +1344,88 @@ defmodule Psc.Canvas.Structure do
         value = placement[field] * @tracks_per_unit
         abs(value - round(value)) < 1.0e-9
       end)
+  end
+
+  defp validate_image(map) do
+    with :ok <- validate_image_backdrop(map) do
+      map
+      |> cells()
+      |> Enum.reduce_while(:ok, fn {key, cell}, _acc ->
+        case validate_image_cell(key, cell) do
+          :ok -> {:cont, :ok}
+          error -> {:halt, error}
+        end
+      end)
+    end
+  end
+
+  defp validate_image_backdrop(map) do
+    case map["backdrop"] do
+      nil ->
+        :ok
+
+      %{} = backdrop ->
+        cond do
+          not valid_backdrop_url?(backdrop["url"]) ->
+            {:error, :layout_map, "backdrop must be an image URL"}
+
+          not valid_fit?(backdrop["fit"]) ->
+            {:error, :layout_map, "backdrop fit must be #{Enum.join(@backdrop_fits, ", ")}"}
+
+          not valid_aspect?(backdrop["aspect"]) ->
+            {:error, :layout_map,
+             "backdrop shape must be between #{@min_backdrop_aspect} and #{@max_backdrop_aspect}"}
+
+          true ->
+            :ok
+        end
+
+      _other ->
+        {:error, :layout_map, "backdrop must be an image"}
+    end
+  end
+
+  defp valid_fit?(nil), do: true
+  defp valid_fit?(fit), do: fit in @backdrop_fits
+
+  defp valid_aspect?(nil), do: true
+
+  defp valid_aspect?(aspect) do
+    is_number(aspect) and aspect >= @min_backdrop_aspect and aspect <= @max_backdrop_aspect
+  end
+
+  defp validate_image_cell(key, cell) do
+    placement = if is_map(cell), do: cell["placement"]
+
+    cond do
+      not is_map(cell) ->
+        {:error, :layout_map, "cell #{key} is not a cell"}
+
+      not is_map(placement) ->
+        {:error, :layout_map, "cell #{key} has no placement"}
+
+      not valid_placement_units?(placement) ->
+        {:error, :layout_map, "cell #{key} must be placed and sized in half units"}
+
+      placement["w"] < @image_min_size or placement["h"] < @image_min_size ->
+        {:error, :layout_map, "cell #{key} must be at least #{@image_min_size}% wide and tall"}
+
+      placement["x"] < 0 or placement["y"] < 0 ->
+        {:error, :layout_map, "cell #{key} is placed outside the backdrop"}
+
+      placement["x"] + placement["w"] > @image_extent or
+          placement["y"] + placement["h"] > @image_extent ->
+        {:error, :layout_map, "cell #{key} extends past the backdrop"}
+
+      not valid_label?(cell["label"]) ->
+        {:error, :layout_map, "cell #{key} has an invalid label"}
+
+      cell["kind"] not in [nil | kinds()] ->
+        {:error, :layout_map, "cell #{key} has an unknown kind"}
+
+      true ->
+        :ok
+    end
   end
 
   defp valid_label?(nil), do: true

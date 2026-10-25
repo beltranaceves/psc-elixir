@@ -1638,3 +1638,54 @@ edited with two number inputs in the editor toolbar, shown only while Edit layou
 
 **Consequences.** The two modes scroll differently on purpose; the board is a document,
 the table is a dashboard.
+
+## ADR-039 — An image board pins cells to percentages of a picture
+
+**Context.** Tables and bentos both impose a grid. Some canvases are *about a picture*:
+a floor plan, a diagram, a screenshot, a map. The user wants to bring that picture and
+put notes or labels exactly where the thing they describe is.
+
+**Decision.**
+
+- A third `layout_mode`, `"image"`. Its cells carry a `placement` in **percent of the
+  backdrop** (`x`, `y`, `w`, `h`, each 0–100, half-percent steps, minimum 2%, always
+  inside the picture), plus an optional `"kind"`: `"card"` (the ordinary cell body) or
+  `"text"` (one line placed directly on the picture). The map carries a `"backdrop"`
+  (`url`, `fit`, optional `alt` and `aspect`). It is flat like a bento template, so
+  `Psc.Canvas.Structure` remains the only module that knows the shape.
+- **Percentages, not pixels.** A picture has no intrinsic screen size. Percent geometry
+  keeps every cell registered with the place it annotates when the window resizes, and
+  it survives a picture being swapped for one of a different resolution. The bento
+  comparison is instructive: a bento could not use pixels because a card must reflow; an
+  image board cannot use grid tracks because the picture's proportions are the layout.
+- **The backdrop is a URL, not an upload.** The deployment has no object store (free
+  tier). A URL permits a static asset (`/images/…`), a remote picture or a self-contained
+  `data:image` URI, and keeps the template row small. Only image schemes are accepted,
+  and quotes/whitespace are refused, so the value is safe in an `src`. SVG is rendered
+  through `<img>`, which does not run scripts.
+- **The picture's own shape is the default.** Without a stored `aspect`, the `<img>` is
+  in the flow and sets the board's height. A template may pin an aspect (`contain`,
+  `cover` or `stretch`) when it needs a stable frame across pictures; a canvas may have
+  no backdrop and get one later, but a template may not, because its coordinates would
+  have nothing to refer to.
+- **Two cell kinds, one event vocabulary.** A text cell is an ordinary cell whose fields
+  are hidden and whose `content` is edited by a single-line input. It uses the existing
+  `update_cell` operation, so collaboration, autosave and pruning need no new path;
+  switching kind is one `set_cell_kind` operation.
+- Backdrop edits are operations (`set_backdrop`), validated in `Structure` so a replay
+  reaches the same picture, exactly like geometry.
+
+**Consequences.** A fourth shape exists, but the mode switch is confined to
+`Structure.cells/1`, `cards/1`, `clamp_placement/2` and the validators; the editor,
+designer, previews and agent tools all ask `Structure`. Overlap is allowed and follows
+sequence order, as in a bento. A cell is not rotated and has no z-index; an image board
+annotates a picture rather than replacing a drawing tool.
+
+**Alternatives considered.** Absolute pixels (rejected: the same canvas would misplace
+its cells on a different screen or after a picture is replaced). A free-form absolute
+board without the picture (rejected: the bento already covers that, and a backdrop is the
+reason for this mode). Storing the background as an uploaded file (rejected: no object
+store on the free tier; a URL keeps the copy semantics of a template intact). Rendering
+SVG inline so it can use CSS variables (rejected: inline SVG is executable markup; `<img>`
+is the safe boundary).
+

@@ -6,21 +6,28 @@ defmodule Psc.Agent.Tools.GetCanvas do
   use Jido.Action,
     name: "get_canvas",
     description:
-      "Read one canvas by id: its name, description and the cell grid or bento board the editor shows.\n" <>
+      "Read one canvas by id: its name, description and the cell grid, bento board or image board the editor shows.\n" <>
         "\n" <>
         "Result shape:\n" <>
-        "- `layout_mode` is `\"table\"` (a rows x columns matrix) or `\"bento\"` (free-form cards on " <>
-        "a fixed column grid, up to 16 columns).\n" <>
+        "- `layout_mode` is `\"table\"` (a rows x columns matrix), `\"bento\"` (free-form cards on " <>
+        "a fixed column grid, up to 16 columns) or `\"image\"` (floating cells over a backdrop " <>
+        "picture).\n" <>
         "- `grid` is the board's size: `columns` and `rows` (a bento's rows include any empty " <>
-        "rows the template reserved; a table's are its matrix size).\n" <>
-        "- `cards` lists the reading order for both modes: `key`, `label`, and the rectangle it " <>
-        "occupies (`x`, `y`, `w`, `h`, in grid units, 0-based).\n" <>
+        "rows the template reserved; a table's are its matrix size; an image board is " <>
+        "`100 x 100`, because its unit is a percentage of the picture).\n" <>
+        "- `cards` lists the reading order for every mode: `key`, `label`, and the rectangle it " <>
+        "occupies (`x`, `y`, `w`, `h`, in grid units or image percentages, 0-based / " <>
+        "0-100).\n" <>
         "- For a table, `cells` holds `rows` and `columns` (each with `id`, `label`, optional " <>
         "`accent`), `layout` and one entry per cell. `layout` is a matrix of cell KEYS, mostly " <>
         "`r<row>_c<col>` (e.g. [[\"r1_c1\", \"r1_c2\"], [\"r2_c1\", \"r2_c2\"]]). Follow a key into " <>
         "`cells` to read that cell.\n" <>
-        "- For a bento, `cells` is flat: one entry per card key, with a `placement` " <>
-        "(`x`, `y`, `w`, `h`) and an optional `accent`. There are no row or column headers.\n" <>
+        "- For a bento or an image board, `cells` is flat: one entry per cell key, with a " <>
+        "`placement` (`x`, `y`, `w`, `h`) and an optional `accent`. There are no row or column " <>
+        "headers.\n" <>
+        "- An image board also has `backdrop` (`url`, `fit`, optional `alt` and `aspect`), and " <>
+        "each of its cells has a `kind`: `\"card\"` (a titled Markdown box) or `\"text\"` (a " <>
+        "one-line label placed on the picture).\n" <>
         "- Each cell entry has `label` and `content` — `content` is the Markdown the user wrote in " <>
         "it.\n" <>
         "- `cell_count` is how many cells exist; `filled_cell_count` is how many have text.\n" <>
@@ -64,7 +71,12 @@ defmodule Psc.Agent.Tools.GetCanvas do
          id: canvas.id,
          name: canvas.name,
          description: canvas.description,
-         layout_mode: if(Structure.bento?(cells), do: "bento", else: "table"),
+         layout_mode:
+           case Structure.mode(cells) do
+             :bento -> "bento"
+             :image -> "image"
+             :table -> "table"
+           end,
          grid: Structure.bounds(cells),
          cells: cells,
          cards:

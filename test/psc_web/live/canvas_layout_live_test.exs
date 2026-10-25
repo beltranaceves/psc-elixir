@@ -26,16 +26,46 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       refute html =~ ~s(id="new-template-form")
     end
 
-    test "the New Template action opens the designer", %{conn: conn} do
+    test "the New Template card opens the type picker, whose table option opens the designer", %{
+      conn: conn
+    } do
       {:ok, lv, _html} = live(conn, ~p"/templates")
+
+      refute has_element?(lv, "#new-template-dialog")
+
+      lv |> element("#new-template-card") |> render_click()
+
+      assert has_element?(lv, "#new-template-dialog")
+      assert has_element?(lv, "#new-template-mode-table[href='/templates/new']")
+      assert has_element?(lv, "#new-template-mode-bento[href='/templates/new?mode=bento']")
+      assert has_element?(lv, "#new-template-mode-image[href='/templates/new?mode=image']")
+
+      # The options preview the structures they create; the image preview uses
+      # the same sample backdrop the built-in template starts with.
+      html = render(lv)
+      assert html =~ "Table grid"
+      assert html =~ "Bento board"
+      assert html =~ "Image board"
+      assert html =~ "/images/image-board-blueprint.svg"
 
       {:ok, editor, _html} =
         lv
-        |> element("a[href='/templates/new']")
+        |> element("#new-template-mode-table")
         |> render_click()
         |> follow_redirect(conn, ~p"/templates/new")
 
       assert has_element?(editor, "#template-form")
+    end
+
+    test "the type picker can be cancelled", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/templates")
+
+      lv |> element("#new-template-card") |> render_click()
+      assert has_element?(lv, "#new-template-dialog")
+
+      lv |> element("#cancel-new-template") |> render_click()
+      refute has_element?(lv, "#new-template-dialog")
+      assert has_element?(lv, "#new-template-card")
     end
 
     test "own templates show the Owner badge", %{conn: conn, user: user} do

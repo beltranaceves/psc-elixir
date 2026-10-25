@@ -30,6 +30,22 @@ test.describe('authenticated app', () => {
     await expect(page.locator('#catalog-card')).toHaveAttribute('href', '/catalog');
   });
 
+  test('the New Template card opens the type picker', async ({ page }) => {
+    await page.goto('/templates');
+    await page.locator('.phx-connected').first().waitFor();
+
+    await page.locator('#new-template-card').click();
+
+    // One option per structure, each with its own preview.
+    await expect(page.locator('#new-template-mode-table')).toBeVisible();
+    await expect(page.locator('#new-template-mode-bento')).toBeVisible();
+    await expect(page.locator('#new-template-mode-image')).toBeVisible();
+
+    await page.locator('#new-template-mode-image').click();
+    await page.waitForURL(/\/templates\/new\?mode=image/);
+    await expect(page.locator('#designer-image')).toBeVisible();
+  });
+
   test('the New Template card leads the library at the same size as a template', async ({
     page,
   }) => {

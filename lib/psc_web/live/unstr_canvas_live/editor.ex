@@ -6,6 +6,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # names — unqualified imports would conflict.
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Dialog, as: UIDialog
+  alias PscWeb.Components.ImageBoard, as: ImageFrame
 
   alias Psc.Canvas
   alias Psc.Canvas.NotesMode
@@ -17,6 +18,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias PscWeb.UnstrCanvasLive.Bento
   alias PscWeb.UnstrCanvasLive.Grid
   alias PscWeb.UnstrCanvasLive.Header
+  alias PscWeb.UnstrCanvasLive.ImageCanvas
   alias PscWeb.UnstrCanvasLive.NotesPanel
   alias PscWeb.UnstrCanvasLive.Save
   alias PscWeb.UnstrCanvasLive.Tabs
@@ -779,22 +781,75 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply, assign(socket, :structure_remove_confirm, nil)}
   end
 
-  ## Bento cards
+  ## Free-form cells (bento cards and image-board cells)
 
   def handle_event("add_card", _params, socket) do
-    if Structure.bento?(socket.assigns.cells) do
-      key = next_card_key(socket.assigns.cells)
+    cells = socket.assigns.cells
+
+    cond do
+      Structure.image?(cells) ->
+        key = next_cell_key(cells, "cell")
+        count = length(Structure.cards(cells)) + 1
+
+        {:noreply,
+         process_operation(socket, %{
+           "type" => "add_card",
+           "cell_key" => key,
+           "label" => "Card #{count}"
+         })}
+
+      Structure.bento?(cells) ->
+        key = next_cell_key(cells, "card")
+        count = length(Structure.cards(cells)) + 1
+
+        {:noreply,
+         process_operation(socket, %{
+           "type" => "add_card",
+           "cell_key" => key,
+           "label" => "Card #{count}"
+         })}
+
+      true ->
+        {:noreply, socket}
+    end
+  end
+
+  # A bare text label on an image board. It is an ordinary cell from the start:
+  # one `add_card` carries the kind, so adding it is a single event.
+  def handle_event("add_text", _params, socket) do
+    if Structure.image?(socket.assigns.cells) do
+      key = next_cell_key(socket.assigns.cells, "text")
       count = length(Structure.cards(socket.assigns.cells)) + 1
 
       {:noreply,
        process_operation(socket, %{
          "type" => "add_card",
          "cell_key" => key,
-         "label" => "Card #{count}"
+         "label" => "Text #{count}",
+         "kind" => "text"
        })}
     else
       {:noreply, socket}
     end
+  end
+
+  # The backdrop is part of the canvas, so changing it is an operation like any
+  # other and every open client sees the new picture.
+  def handle_event("set_backdrop", params, socket) when is_map(params) do
+    if Structure.image?(socket.assigns.cells) do
+      {:noreply,
+       process_operation(socket, %{
+         "type" => "set_backdrop",
+         "backdrop" => ImageFrame.backdrop_attrs(params)
+       })}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("set_cell_kind", %{"cell_key" => key, "kind" => kind}, socket) do
+    {:noreply,
+     process_operation(socket, %{"type" => "set_cell_kind", "cell_key" => key, "kind" => kind})}
   end
 
   def handle_event("request_remove_card", %{"cell_key" => key}, socket) do
@@ -806,7 +861,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         if cell_has_content?(cell) do
           {:noreply,
            assign(socket, :structure_remove_confirm, %{
-             "type" => "card",
+             "type" => if(Structure.image?(socket.assigns.cells), do: "cell", else: "card"),
              "cell_key" => key,
              "label" => cell["label"] || key
            })}
@@ -999,17 +1054,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
-  # The next free "cardN" key, scanning the keys that are already there so a
-  # removal never makes the next card collide with a survivor.
-  defp next_card_key(cells) do
+  # The next free "<prefix>N" key, scanning the keys that are already there so
+  # a removal never makes the next cell collide with a survivor.
+  defp next_cell_key(cells, prefix) do
     taken =
       for key <- Structure.cell_keys(cells),
-          parts = Regex.run(~r/^card(\d+)$/, key),
+          parts = Regex.run(~r/^#{prefix}(\d+)$/, key),
           n <- tl(parts) do
         String.to_integer(n)
       end
 
-    "card#{Enum.max([0 | taken]) + 1}"
+    "#{prefix}#{Enum.max([0 | taken]) + 1}"
   end
 
   defp nudge_delta("ArrowLeft"), do: {-1, 0}
@@ -1024,11 +1079,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         socket
 
       card ->
+        # Position and size share one step: half a grid unit on a bento, half a
+        # percent of the picture on an image board.
+        step =
+          if Structure.image?(socket.assigns.cells),
+            do: Structure.image_step(),
+            else: Structure.min_size()
+
         operation =
           if resize? do
-            # Position and size share the same half-unit step.
-            step = Structure.min_size()
-
             %{
               "type" => "resize_card",
               "cell_key" => key,
@@ -1036,8 +1095,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               "h" => card.h + dy * step
             }
           else
-            step = Structure.min_size()
-
             %{
               "type" => "move_card",
               "cell_key" => key,
@@ -1792,30 +1849,39 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             class={
               [
                 "flex min-h-0 w-full flex-1 flex-col",
-                # A bento grows with its content on a desktop (the page scrolls);
-                # the table keeps filling the viewport. A phone keeps the inner
-                # scroll for both.
-                Structure.bento?(@cells) && "lg:flex-none",
+                # A bento or image board grows with its content on a desktop
+                # (the page scrolls); the table keeps filling the viewport. A
+                # phone keeps the inner scroll for all three.
+                Structure.freeform?(@cells) && "lg:flex-none",
                 @active_tab != "editor" && "hidden"
               ]
             }
           >
-            <%= if Structure.bento?(@cells) do %>
-              <Bento.board
-                cells={@cells}
-                edit_structure?={@edit_structure?}
-                structure_accent_picker={@structure_accent_picker}
-                focus_cell={@focus_cell}
-                user_id={@user_id}
-              />
-            <% else %>
-              <Grid.grid
-                cells={@cells}
-                edit_structure?={@edit_structure?}
-                structure_accent_picker={@structure_accent_picker}
-                focus_cell={@focus_cell}
-                user_id={@user_id}
-              />
+            <%= cond do %>
+              <% Structure.image?(@cells) -> %>
+                <ImageCanvas.board
+                  cells={@cells}
+                  edit_structure?={@edit_structure?}
+                  structure_accent_picker={@structure_accent_picker}
+                  focus_cell={@focus_cell}
+                  user_id={@user_id}
+                />
+              <% Structure.bento?(@cells) -> %>
+                <Bento.board
+                  cells={@cells}
+                  edit_structure?={@edit_structure?}
+                  structure_accent_picker={@structure_accent_picker}
+                  focus_cell={@focus_cell}
+                  user_id={@user_id}
+                />
+              <% true -> %>
+                <Grid.grid
+                  cells={@cells}
+                  edit_structure?={@edit_structure?}
+                  structure_accent_picker={@structure_accent_picker}
+                  focus_cell={@focus_cell}
+                  user_id={@user_id}
+                />
             <% end %>
           </div>
 

@@ -136,10 +136,11 @@ opened by clicking a card and closed by Escape, an outside click, the × or Done
 It shows: name, description, author, grid dimensions, cell count, the two counts, the
 last-updated date, and — when the template is a fork — "Forked from *source*".
 
-It also shows a **read-only preview of the grid**: rows × columns with the cell labels,
-built straight from `layout_map`. The designer's table is an editor; this is a picture of
-what a canvas from this template will look like, and it is the detail a user needs before
-choosing between two templates.
+It also shows a **read-only preview of the structure**, built straight from `layout_map`:
+a table's rows × columns with the cell labels, a bento board's cards, or an image
+board's picture with its floating cells (see [image-canvas.md](image-canvas.md)). The
+designer's view is an editor; this is a picture of what a canvas from this template will
+look like, and it is the detail a user needs before choosing between two templates.
 
 Two actions in the footer:
 

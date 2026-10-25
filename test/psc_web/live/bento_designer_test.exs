@@ -8,11 +8,15 @@ defmodule PscWeb.BentoDesignerTest do
 
   setup :register_and_log_in_user
 
-  test "the library offers a bento board next to the table template", %{conn: conn} do
+  test "the library offers the bento board in the New Template picker", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/templates")
 
     assert has_element?(view, "#new-template-card")
-    assert has_element?(view, "#new-bento-template-card[href='/templates/new?mode=bento']")
+
+    view |> element("#new-template-card") |> render_click()
+
+    assert has_element?(view, "#new-template-mode-bento[href='/templates/new?mode=bento']")
+    refute has_element?(view, "#new-bento-template-card")
   end
 
   test "a new bento template starts with one card on a 12-column board", %{

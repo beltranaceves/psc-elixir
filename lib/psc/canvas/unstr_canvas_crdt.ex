@@ -20,6 +20,11 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     * `%{"type" => "add_cell_field", "cell_key" => key, "field" => field}`
     * `%{"type" => "remove_cell_field", "cell_key" => key, "field" => field}`
     * `%{"type" => "update_cell_field_title", "cell_key" => key, "field" => field, "title" => title}`
+    * `%{"type" => "add_card" | "remove_card" | "move_card" | "resize_card", ...}` — free-form cells
+    * `%{"type" => "set_card_accent", "cell_key" => key, "accent" => token}`
+    * `%{"type" => "set_bento_columns" | "set_bento_rows", ...}` — bento boards
+    * `%{"type" => "set_backdrop", "backdrop" => %{"url" => ..., "fit" => ..., "alt" => ..., "aspect" => ...}}` — image boards
+    * `%{"type" => "set_cell_kind", "cell_key" => key, "kind" => "card" | "text"}` — image cells
 
   State shape notes (kept consistent across editor, templates and replay):
 
@@ -249,21 +254,22 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     end)
   end
 
-  ## Bento operations
+  ## Bento and image operations
   #
   # Geometry is clamped inside `Psc.Canvas.Structure` so every client - and a
   # replay of the log - reaches exactly the same placement. A drag sends one
-  # operation on release, never one per pointer move.
+  # operation on release, never one per pointer move. A bento placement is in
+  # grid units; an image placement is in percent of the backdrop.
 
   def apply_operation(
         %{"type" => "add_card", "cell_key" => key, "placement" => placement} = op,
         cells
       ) do
-    Structure.add_card(cells, key, placement, op["label"], op["accent"])
+    Structure.add_card(cells, key, placement, op["label"], op["accent"], op["kind"])
   end
 
   def apply_operation(%{"type" => "add_card", "cell_key" => key} = op, cells) do
-    Structure.add_card(cells, key, nil, op["label"], op["accent"])
+    Structure.add_card(cells, key, nil, op["label"], op["accent"], op["kind"])
   end
 
   def apply_operation(%{"type" => "remove_card", "cell_key" => key}, cells) do
@@ -297,6 +303,24 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
 
   def apply_operation(%{"type" => "set_bento_rows", "rows" => count}, cells) do
     Structure.set_rows(cells, count)
+  end
+
+  ## Image board operations
+  #
+  # A cell's placement is a percentage of the backdrop and is clamped by
+  # `Psc.Canvas.Structure`, so a replay on another client lands on the same
+  # rectangle. The backdrop's URL, fit, alt and shape are validated there too.
+
+  def apply_operation(%{"type" => "set_backdrop", "backdrop" => backdrop}, cells)
+      when is_map(backdrop) do
+    Structure.set_backdrop(cells, backdrop)
+  end
+
+  def apply_operation(
+        %{"type" => "set_cell_kind", "cell_key" => key, "kind" => kind},
+        cells
+      ) do
+    Structure.set_kind(cells, key, kind)
   end
 
   def apply_operation(_op, cells), do: cells

@@ -122,6 +122,13 @@ The `layout_map` field stores the full template definition as a nested map:
 }
 ```
 
+### Layout modes
+
+`layout_map` carries a `"layout_mode"`: absent or `"table"` for the matrix above,
+`"bento"` for free-form cards on a column grid, `"image"` for cells pinned to a backdrop
+picture. A bento or image map is **flat** — one entry per cell, beside `"layout_mode"` —
+and follows [bento.md](bento.md) or [image-canvas.md](image-canvas.md).
+
 ### Section titles
 
 Each field renders as a section in the canvas cell. The section title comes from the
@@ -232,8 +239,11 @@ does not repeat that heading in the main body; its content begins with the
 available-template section.
 
 The **New Template** action is the first tile of the library grid, the same size
-as a template card. Its dashed border marks it as the create action, and the
-whole tile is a link to the designer. The header carries the page title only.
+as a template card. Its dashed border marks it as the create action, and clicking it
+opens a **type picker modal**: one option each for a **table grid**, a **bento board**
+and an **image board**, previewed with the same thumbnails the canvas picker and the
+catalog use. Choosing one opens the designer with that mode. The header carries the
+page title only.
 
 **Index page** shows two sections:
 - **My templates** — templates where `author_id == current_user.id`

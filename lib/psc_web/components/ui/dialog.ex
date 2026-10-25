@@ -121,6 +121,8 @@ defmodule PscWeb.Components.UI.Dialog do
   end
 
   attr :class, :string, default: nil
+  attr :close_class, :string, default: "right-4 top-4 rounded-xs"
+  attr :close_icon_class, :string, default: "h-4 w-4"
   slot :inner_block, required: true
 
   def dialog_content(assigns) do
@@ -146,7 +148,12 @@ defmodule PscWeb.Components.UI.Dialog do
           type="button"
           data-part="close-trigger"
           data-action="close"
-          class="absolute right-4 top-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-ring/50 focus:ring-[3px] disabled:pointer-events-none data-[state=open]/dialog:bg-accent data-[state=open]/dialog:text-muted-foreground"
+          class={
+            classes([
+              "absolute opacity-70 transition-opacity hover:opacity-100 focus:outline-hidden focus:ring-ring/50 focus:ring-[3px] disabled:pointer-events-none data-[state=open]/dialog:bg-accent data-[state=open]/dialog:text-muted-foreground",
+              @close_class
+            ])
+          }
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -158,7 +165,7 @@ defmodule PscWeb.Components.UI.Dialog do
             stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
-            class="lucide lucide-x h-4 w-4"
+            class={classes(["lucide lucide-x", @close_icon_class])}
           >
             <path d="M18 6 6 18"></path>
             <path d="m6 6 12 12"></path>

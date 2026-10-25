@@ -11,6 +11,7 @@ defmodule PscWeb.CatalogLive.Index do
 
   alias Psc.Canvas
   alias Psc.Canvas.NotesMode
+  alias Psc.Canvas.Structure
   alias PscWeb.Markdown
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Dialog, as: UIDialog
@@ -220,7 +221,9 @@ defmodule PscWeb.CatalogLive.Index do
             </div>
 
             <div>
-              <dt class="text-xs uppercase tracking-wide text-base-content/45">Grid</dt>
+              <dt class="text-xs uppercase tracking-wide text-base-content/45">
+                {PscWeb.Components.TemplatePreview.structure_label(@open_template.layout_map)}
+              </dt>
 
               <dd class="text-base-content">
                 {PscWeb.Components.TemplatePreview.structure_size(@open_template.layout_map)}
@@ -254,7 +257,9 @@ defmodule PscWeb.CatalogLive.Index do
           designer's sections, in the designer's order, so the modal and the
           designer tell the same story about the same template. --%>
           <div class="flex min-w-0 flex-col gap-5">
-            <.preview_section title="Grid">
+            <.preview_section title={
+              PscWeb.Components.TemplatePreview.structure_label(@open_template.layout_map)
+            }>
               <.grid_preview layout_map={@open_template.layout_map} />
             </.preview_section>
 
@@ -346,7 +351,13 @@ defmodule PscWeb.CatalogLive.Index do
   defp date(_datetime), do: "—"
 
   defp cell_count(template) do
-    template.layout_map |> Map.get("cells", %{}) |> map_size()
+    lm = template.layout_map || %{}
+
+    if Structure.freeform?(lm) do
+      length(Structure.cards(lm))
+    else
+      lm |> Map.get("cells", %{}) |> map_size()
+    end
   end
 
   defp forked_from_name(%{forked_from_id: forked_from_id})

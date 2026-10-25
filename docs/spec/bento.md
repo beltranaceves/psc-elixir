@@ -122,10 +122,11 @@ the tap-to-fullscreen behaviour, and edit-mode controls grow to 32px touch targe
 
 ## Designer
 
-`/templates/new?mode=bento` starts a board with one card. The designer edits the
-definition (label, fields, default values, section titles, colour, geometry) and keeps its
-usual name/description/public/notes/save/share chrome. A shared template is editable by
-anyone with access; a built-in one stays read-only.
+`/templates/new?mode=bento` starts a board with one card. The library's **New Template**
+card reaches it through its type picker; the URL is the direct route. The designer edits
+the definition (label, fields, default values, section titles, colour, geometry) and keeps
+its usual name/description/public/notes/save/share chrome. A shared template is editable
+by anyone with access; a built-in one stays read-only.
 
 ## What a bento does not do
 

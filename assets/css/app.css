@@ -690,6 +690,49 @@
     overflow-y: auto;
   }
 
+  /* An image cell is a fixed percentage of the picture, so it must not escape
+     that rectangle when a field is focused (the table's focus-within rule
+     would make it absolute and full width). Its body scrolls instead: a small
+     note on a picture may still hold more Markdown than fits. */
+  .image-board {
+    /* A broken or very slow picture must still leave a frame to work in. */
+    min-height: 12rem;
+  }
+
+  .image-cell {
+    min-width: 2%;
+    min-height: 2%;
+  }
+
+  .image-cell .canvas-cell,
+  .image-cell .canvas-cell:focus-within {
+    position: relative;
+    top: auto;
+    left: auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  .image-cell .canvas-cell .cell-body,
+  .image-cell .canvas-cell:focus-within .cell-body {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    overflow: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .image-cell .canvas-cell.is-expanded {
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   /* Markdown headings stay proportionate in a space-constrained cell, so
      words wrap normally instead of breaking mid-word. */
   .canvas-cell .md-render :is(h1, h2) {

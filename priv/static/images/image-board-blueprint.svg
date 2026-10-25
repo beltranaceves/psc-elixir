@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-label="Blueprint grid with three marked zones">
+  <rect width="1600" height="1000" fill="#f8fafc"/>
+  <g stroke="#cbd5e1" stroke-width="2">
+    <path d="M0 100H1600M0 200H1600M0 300H1600M0 400H1600M0 500H1600M0 600H1600M0 700H1600M0 800H1600M0 900H1600"/>
+    <path d="M100 0V1000M200 0V1000M300 0V1000M400 0V1000M500 0V1000M600 0V1000M700 0V1000M800 0V1000M900 0V1000M1000 0V1000M1100 0V1000M1200 0V1000M1300 0V1000M1400 0V1000M1500 0V1000"/>
+  </g>
+  <g stroke-width="4" stroke-dasharray="12 10">
+    <rect x="250" y="250" width="500" height="350" rx="24" fill="#38bdf8" fill-opacity="0.18" stroke="#0ea5e9"/>
+    <rect x="900" y="180" width="380" height="240" rx="24" fill="#34d399" fill-opacity="0.18" stroke="#10b981"/>
+    <circle cx="1100" cy="680" r="150" fill="#a78bfa" fill-opacity="0.18" stroke="#8b5cf6"/>
+  </g>
+</svg>

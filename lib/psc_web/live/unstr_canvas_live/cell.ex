@@ -218,4 +218,40 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
     </div>
     """
   end
+
+  # A bare text cell on an image board: one line, no title, no fields. It edits
+  # the cell's `content` field with the same `update_cell` event a card's field
+  # uses, so autosave, collaboration and the event log need no special case.
+  attr :cell_key, :string, required: true
+  attr :cell_data, :map, required: true
+  attr :edit_structure?, :boolean, default: false
+  attr :class, :any, default: nil
+  attr :placeholder, :string, default: "Type a label…"
+
+  def text(assigns) do
+    ~H"""
+    <.form
+      for={%{}}
+      id={"text-cell-form-" <> @cell_key}
+      phx-change="update_cell"
+      class={["h-full w-full", @class]}
+    >
+      <input type="hidden" name="cell_key" value={@cell_key} />
+      <input
+        type="text"
+        id={"text-cell-" <> @cell_key}
+        name="values[content]"
+        value={Map.get(@cell_data, "content", "")}
+        phx-debounce="200"
+        placeholder={@placeholder}
+        aria-label={Map.get(@cell_data, "label") || @cell_key}
+        class={[
+          "h-full w-full rounded-md border bg-base-100/90 px-2 text-center text-sm font-semibold text-base-content shadow-sm outline-none transition placeholder:font-normal placeholder:text-base-content/40 focus:border-primary focus:bg-base-100",
+          @edit_structure? && "border-primary/40",
+          not @edit_structure? && "border-base-content/10 hover:border-base-content/25"
+        ]}
+      />
+    </.form>
+    """
+  end
 end

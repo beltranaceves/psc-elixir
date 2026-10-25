@@ -6,7 +6,10 @@ defmodule PscWeb.CanvasLayoutLive.Index do
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Input, as: UIInput
   alias PscWeb.Components.UI.Badge, as: UIBadge
+  alias PscWeb.Components.UI.Dialog, as: UIDialog
   alias PscWeb.Components.UI.Helpers, as: UIHelpers
+
+  import PscWeb.Components.TemplatePreview
 
   alias Psc.Canvas
 
@@ -19,7 +22,17 @@ defmodule PscWeb.CanvasLayoutLive.Index do
      socket
      |> assign(:templates, templates)
      |> assign(:delete_confirm_id, nil)
-     |> assign(:share_form_for, nil)}
+     |> assign(:share_form_for, nil)
+     |> assign(:new_template_open, false)}
+  end
+
+  @impl true
+  def handle_event("open_new_template", _params, socket) do
+    {:noreply, assign(socket, :new_template_open, true)}
+  end
+
+  def handle_event("new_template_closed", _params, socket) do
+    {:noreply, assign(socket, :new_template_open, false)}
   end
 
   @impl true
@@ -157,49 +170,132 @@ defmodule PscWeb.CanvasLayoutLive.Index do
               >
                 <p class="text-base-content/60">No templates yet.</p>
                 <p class="mt-1 text-sm text-base-content/45">
-                  A template defines the grid and cells a canvas starts from.
+                  A template defines the structure and cells a canvas starts from.
                 </p>
               </div>
             <% end %>
           </div>
         </div>
+
+        <.new_template_dialog new_template_open={@new_template_open} />
       </div>
     </Layouts.app>
     """
   end
 
-  # The first tile of the library: a dashed card that opens the designer.
+  # The first tile of the library: a dashed card that opens the type picker.
+  # The picker is a modal rather than three tiles, so creating a template is
+  # one decision (what kind of structure?) instead of three competing buttons.
   defp new_template_card(assigns) do
     ~H"""
-    <.link
+    <button
+      type="button"
       id="new-template-card"
-      navigate={~p"/templates/new"}
-      class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-4 text-center transition-colors hover:border-base-content/45 hover:bg-base-content/5"
+      phx-click="open_new_template"
+      class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-4 text-center transition-colors hover:border-base-content/45 hover:bg-base-content/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <span class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
         <.icon name="hero-plus" class="size-5" />
       </span>
       <span class="flex flex-col gap-1">
         <span class="font-medium text-base-content">New Template</span>
-        <span class="text-sm text-base-content/50">Design a grid and its cells</span>
+        <span class="text-sm text-base-content/50">Choose a grid, a board or a picture</span>
       </span>
-    </.link>
+    </button>
+    """
+  end
 
-    <.link
-      id="new-bento-template-card"
-      navigate={~p"/templates/new?mode=bento"}
-      class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/25 bg-base-200 p-4 text-center transition-colors hover:border-base-content/45 hover:bg-base-content/5"
+  # The picker itself. Each option previews the structure it creates, using the
+  # same thumbnails the library and the canvas picker use, so the choice is
+  # made against a picture rather than a description alone.
+  attr :new_template_open, :boolean, required: true
+
+  defp new_template_dialog(assigns) do
+    ~H"""
+    <UIDialog.dialog
+      :if={@new_template_open}
+      id="new-template-dialog"
+      open
+      on-close="new_template_closed"
     >
-      <span class="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <.icon name="hero-squares-2x2" class="size-5" />
-      </span>
-      <span class="flex flex-col gap-1">
-        <span class="font-medium text-base-content">New Bento Board</span>
-        <span class="text-sm text-base-content/50">Cards of any size on a 12-column board</span>
+      <UIDialog.dialog_content
+        class="sm:max-w-2xl"
+        close_class="right-2 top-2 rounded-md p-2"
+        close_icon_class="size-5"
+      >
+        <UIDialog.dialog_header>
+          <UIDialog.dialog_title>New template</UIDialog.dialog_title>
+
+          <UIDialog.dialog_description>
+            Pick the structure a canvas from this template will use. You name it and
+            fill in its cells next.
+          </UIDialog.dialog_description>
+        </UIDialog.dialog_header>
+
+        <div class="grid gap-3 sm:grid-cols-3">
+          <.new_template_option mode={:table} />
+          <.new_template_option mode={:bento} />
+          <.new_template_option mode={:image} />
+        </div>
+
+        <UIDialog.dialog_footer class="flex justify-end">
+          <UIButton.button
+            type="button"
+            variant="outline"
+            id="cancel-new-template"
+            phx-click="new_template_closed"
+          >
+            Cancel
+          </UIButton.button>
+        </UIDialog.dialog_footer>
+      </UIDialog.dialog_content>
+    </UIDialog.dialog>
+    """
+  end
+
+  attr :mode, :atom, required: true
+
+  defp new_template_option(assigns) do
+    assigns =
+      assigns
+      |> assign(:id, "new-template-mode-#{assigns.mode}")
+      |> assign(:preview, new_template_preview(assigns.mode))
+      |> assign(:path, new_template_path(assigns.mode))
+      |> assign(:title, new_template_title(assigns.mode))
+      |> assign(:blurb, new_template_blurb(assigns.mode))
+
+    ~H"""
+    <.link
+      id={@id}
+      navigate={@path}
+      class="group flex min-w-0 flex-col gap-2 rounded-xl border border-base-content/10 bg-base-100 p-3 text-left transition-colors hover:border-primary/50 hover:bg-base-content/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <div class="pointer-events-none rounded-lg border border-base-content/10 bg-base-200 p-2">
+        <.mini_preview layout_map={@preview} size={:lg} />
+      </div>
+      <span class="flex flex-col gap-0.5">
+        <span class="text-sm font-medium text-base-content">{@title}</span>
+        <span class="text-xs leading-4 text-base-content/55">{@blurb}</span>
       </span>
     </.link>
     """
   end
+
+  defp new_template_preview(:table), do: Canvas.psc_layout_map()
+  defp new_template_preview(:bento), do: Canvas.bento_layout_map()
+  defp new_template_preview(:image), do: Canvas.image_layout_map()
+
+  defp new_template_path(:table), do: ~p"/templates/new"
+  defp new_template_path(:bento), do: ~p"/templates/new?mode=bento"
+  defp new_template_path(:image), do: ~p"/templates/new?mode=image"
+
+  defp new_template_title(:table), do: "Table grid"
+  defp new_template_title(:bento), do: "Bento board"
+  defp new_template_title(:image), do: "Image board"
+
+  defp new_template_blurb(:table), do: "Rows and columns, with a cell in every position."
+  defp new_template_blurb(:bento), do: "Free-form cards on a 12-column board."
+  defp new_template_blurb(:image), do: "Notes and labels pinned to a picture."
 
   # The second tile of the library: the same dashed card, pointing at the
   # catalog, where the templates other people published are ranked.

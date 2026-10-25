@@ -22,6 +22,10 @@ defmodule PscWeb.Components.TemplatePreviewTest do
     )
   end
 
+  defp image(cards, backdrop \\ %{"url" => "/images/plan.svg", "alt" => "Plan"}) do
+    Map.merge(%{"layout_mode" => "image", "backdrop" => backdrop}, cards)
+  end
+
   defp table do
     %{
       "rows" => [%{"id" => "r1"}, %{"id" => "r2"}, %{"id" => "r3"}],
@@ -45,6 +49,14 @@ defmodule PscWeb.Components.TemplatePreviewTest do
 
     test "a table keeps its matrix: rows × columns" do
       assert TemplatePreview.dimensions(table()) == "3 × 4"
+    end
+
+    test "an image board reports its cells" do
+      assert TemplatePreview.dimensions(image(%{"a" => card("A", 10, 10, 20, 10)})) == "1 cell"
+
+      assert TemplatePreview.dimensions(
+               image(%{"a" => card("A", 10, 10, 20, 10), "b" => card("B", 40, 10, 20, 10)})
+             ) == "2 cells"
     end
 
     test "a missing map is an empty grid" do
@@ -95,6 +107,47 @@ defmodule PscWeb.Components.TemplatePreviewTest do
       assert html |> String.split("rounded-[3px] bg-base-content/10") |> length() == 13
       refute html =~ "Empty board"
     end
+
+    test "an image board draws its picture and every cell" do
+      map =
+        image(%{
+          "a" => card("A", 10, 10, 20, 10, "sky"),
+          "b" => card("B", 40, 30, 20, 10)
+        })
+
+      html = render_component(&TemplatePreview.mini_preview/1, layout_map: map)
+
+      assert html =~ ~s|src="/images/plan.svg"|
+      assert html =~ ~s|data-card-key="a"|
+      assert html =~ ~s|data-card-key="b"|
+      assert html =~ "left: 10%; top: 10%; width: 20%; height: 10%;"
+      assert html =~ "bg-sky-400"
+    end
+
+    test "an image board without a backdrop says so" do
+      map = image(%{}, nil)
+
+      html = render_component(&TemplatePreview.mini_preview/1, layout_map: map)
+      assert html =~ "Empty picture"
+    end
+
+    test "the large size gives every mode a taller slot for the type picker" do
+      maps = [
+        table(),
+        bento(%{"a" => card("A", 0, 0, 6, 2)}),
+        image(%{"a" => card("A", 10, 10, 20, 10)})
+      ]
+
+      for map <- maps do
+        small = render_component(&TemplatePreview.mini_preview/1, layout_map: map)
+        large = render_component(&TemplatePreview.mini_preview/1, layout_map: map, size: :lg)
+
+        assert small =~ "h-16"
+        refute small =~ "h-32"
+        assert large =~ "h-32"
+        refute large =~ "h-16"
+      end
+    end
   end
 
   describe "grid_preview/1" do
@@ -109,6 +162,38 @@ defmodule PscWeb.Components.TemplatePreviewTest do
 
       assert html =~ "Deep"
       assert html =~ "grid-row: 41 / span 4"
+    end
+
+    test "an image board is drawn over its picture" do
+      map =
+        image(%{
+          "a" => card("Lobby", 10, 10, 20, 10),
+          "b" => card("Exit", 60, 70, 20, 10)
+        })
+
+      html = render_component(&TemplatePreview.grid_preview/1, layout_map: map)
+
+      assert html =~ ~s|src="/images/plan.svg"|
+      assert html =~ ~s|alt="Plan"|
+      assert html =~ "Lobby"
+      assert html =~ "Exit"
+      assert html =~ "left: 60%; top: 70%; width: 20%; height: 10%;"
+    end
+  end
+
+  describe "structure_size/1 and structure_label/1" do
+    test "each mode describes its own structure" do
+      assert TemplatePreview.structure_size(table()) == "3 rows × 4 columns"
+
+      assert TemplatePreview.structure_size(bento(%{"a" => card("A", 0, 0, 6, 2)})) ==
+               "1 card on 12 columns"
+
+      assert TemplatePreview.structure_size(image(%{"a" => card("A", 0, 0, 6, 2)})) ==
+               "1 cell on a picture"
+
+      assert TemplatePreview.structure_label(table()) == "Grid"
+      assert TemplatePreview.structure_label(bento(%{})) == "Board"
+      assert TemplatePreview.structure_label(image(%{})) == "Picture"
     end
   end
 end

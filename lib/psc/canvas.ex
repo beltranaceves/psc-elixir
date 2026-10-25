@@ -259,6 +259,13 @@ defmodule Psc.Canvas do
       description:
         "Free-form cards on a 12-column board: a big picture, supporting " <>
           "evidence, a decision and the open questions."
+    },
+    %{
+      slug: "image",
+      name: "Image Board",
+      description:
+        "Float notes and labels over a backdrop picture: pin the brief, the " <>
+          "risks and the next step to the places they belong."
     }
   ]
 
@@ -311,6 +318,7 @@ defmodule Psc.Canvas do
   defp builtin_layout_map("psc"), do: psc_layout_map()
   defp builtin_layout_map("scratchpad"), do: scratchpad_layout_map()
   defp builtin_layout_map("bento"), do: bento_layout_map()
+  defp builtin_layout_map("image"), do: image_layout_map()
 
   @doc """
   The Problem–Solution Canvas as a template definition.
@@ -391,6 +399,74 @@ defmodule Psc.Canvas do
       "evidence" => card.("Evidence", ["content"], 8, 0, 4, 3, "emerald"),
       "decision" => card.("Decision", ["content"], 0, 3, 6, 2, "violet"),
       "open_questions" => card.("Open questions", ["content"], 6, 3, 6, 2, "amber"),
+      "notes_mode" => "multi"
+    }
+  end
+
+  @doc """
+  The backdrop a new image board starts with.
+
+  A light blueprint grid with three marked zones, so a template can be
+  designed (and a canvas used) before the user brings their own picture. It is
+  a static asset, which keeps the template row small and the URL readable in
+  the stored `layout_map`.
+  """
+  def image_backdrop_url, do: "/images/image-board-blueprint.svg"
+
+  @doc """
+  The built-in image board: a backdrop picture with floating cards and a text
+  label.
+
+  An image template is flat like a bento one - one entry per cell, with a
+  `placement` in percent of the backdrop - so validation, instantiation and
+  both editors share one representation.
+  """
+  def image_layout_map do
+    cell = fn label, fields, defaults, placement, kind, accent ->
+      %{
+        "label" => label,
+        "fields" => fields,
+        "defaults" => Map.new(fields, &{&1, Map.get(defaults, &1, "")}),
+        "placement" => placement,
+        "kind" => kind
+      }
+      |> Map.put("accent", accent)
+    end
+
+    %{
+      "layout_mode" => "image",
+      "backdrop" => %{
+        "url" => image_backdrop_url(),
+        "fit" => "contain",
+        "alt" => "Blueprint grid with three marked zones"
+      },
+      "brief" =>
+        cell.(
+          "Brief",
+          ["content"],
+          %{"content" => ""},
+          %{"x" => 4, "y" => 8, "w" => 28, "h" => 18},
+          "card",
+          "sky"
+        ),
+      "risk" =>
+        cell.(
+          "Risk",
+          ["content"],
+          %{"content" => ""},
+          %{"x" => 68, "y" => 8, "w" => 28, "h" => 16},
+          "card",
+          "amber"
+        ),
+      "next_step" =>
+        cell.(
+          "Next step",
+          ["content"],
+          %{"content" => "Next step"},
+          %{"x" => 34, "y" => 78, "w" => 32, "h" => 8},
+          "text",
+          nil
+        ),
       "notes_mode" => "multi"
     }
   end
@@ -615,6 +691,9 @@ defmodule Psc.Canvas do
         :bento ->
           instantiate_bento_cells(lm)
 
+        :image ->
+          instantiate_image_cells(lm)
+
         :table ->
           rows = lm["rows"] || []
           columns = lm["columns"] || []
@@ -707,6 +786,37 @@ defmodule Psc.Canvas do
 
   defp maybe_put_accent(data, accent) when accent in [nil, ""], do: data
   defp maybe_put_accent(data, accent), do: Map.put(data, "accent", accent)
+
+  # An image template is flat like a bento one. The canvas copies the
+  # backdrop and every cell's percentage placement, kind and accent, and turns
+  # each field's default into the cell's starting value.
+  defp instantiate_image_cells(lm) do
+    cells =
+      lm
+      |> Structure.cells()
+      |> Enum.filter(fn {_key, meta} -> is_map(meta) end)
+      |> Map.new(fn {key, meta} ->
+        data =
+          (meta["fields"] || ["content"])
+          |> Map.new(fn field -> {field, Map.get(meta["defaults"] || %{}, field, "")} end)
+          |> Map.merge(%{
+            "label" => meta["label"] || key,
+            "placement" => meta["placement"],
+            "kind" => Structure.kind(meta)
+          })
+          |> maybe_put_titles(meta["titles"])
+          |> maybe_put_accent(meta["accent"])
+
+        {key, data}
+      end)
+
+    cells
+    |> Map.put("layout_mode", "image")
+    |> maybe_put_backdrop(Structure.backdrop_map(lm))
+  end
+
+  defp maybe_put_backdrop(cells, backdrop) when backdrop == %{}, do: cells
+  defp maybe_put_backdrop(cells, backdrop), do: Map.put(cells, "backdrop", backdrop)
 
   @doc """
   List all unstructured canvases authored by a user.
