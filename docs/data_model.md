@@ -136,6 +136,29 @@ Notes on the two canvas representations:
   above it, because folds delete what they covered and `Psc.EventsSweeper`
   reclaims any stale rows left behind.
 
+## Agent connections
+
+The canvas agent never reads provider credentials from `users` any more. Each
+user saves up to ten **connections** in `agent_connections`:
+
+| Column | Meaning |
+|---|---|
+| `name` | Display label, unique per user (`My OpenAI connection`) |
+| `provider` | Allowlisted adapter id (`openai`, `anthropic`, `google`, …) |
+| `model_id` | Model id without the provider prefix |
+| `api_key` / `key_hint` | Write-only credential, plus `…ab12` for display |
+| `base_url` | Optional endpoint for self-hosted servers and gateways |
+| `models` / `models_fetched_at` | Last model list fetched from the provider, for autocomplete |
+| `last_used_at` | Orders the picker and the fallback |
+
+`users.default_agent_connection_id` names the default. A chat remembers the
+connection it ran on (`agent_sessions.connection_id`), and each assistant
+message records the `provider:model` that produced it (`agent_messages.model`).
+Deleting a connection nilifies both references; the next most recently used
+connection becomes the default. The interface only ever receives
+`Psc.Agent.Connection.summary/2`, which has no `api_key` key, and the key field
+is rendered with an empty `value` in the settings form.
+
 ## Related diagrams
 
 - [architecture.md](architecture.md) — system-wide layering

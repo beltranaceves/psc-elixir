@@ -1,100 +1,183 @@
 defmodule PscWeb.UserLive.SettingsAgentTest do
-  # Mutates the deployment-wide model aliases, so it must not run in parallel.
+  # Mutates application env for the model-fetch seam, so it must not run in
+  # parallel.
   use PscWeb.ConnCase, async: false
 
   import Phoenix.LiveViewTest
   import Psc.AccountsFixtures
 
-  alias Psc.Accounts
+  alias Psc.Agent.Connections
 
-  describe "agent key" do
-    test "saving the key stores it and never renders it back", %{conn: conn} do
-      user = user_fixture()
-      {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+  defp create_connection(user, attrs \\ %{}) do
+    attrs =
+      Map.merge(
+        %{
+          "name" => "Work OpenAI",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1-mini",
+          "api_key" => "sk-secret-123"
+        },
+        attrs
+      )
 
-      html =
-        lv
-        |> form("#agent-key-form",
-          user: %{
-            provider: "anthropic",
-            model_id: "claude-haiku-4-5",
-            agent_api_key: "sk-ant-secret"
-          }
+    {:ok, connection} = Connections.create(user, attrs)
+    connection
+  end
+
+  defp fill_form(params) do
+    %{
+      connection:
+        Map.merge(
+          %{
+            "name" => "Work OpenAI",
+            "provider" => "openai",
+            "model_id" => "gpt-4.1-mini",
+            "api_key" => "sk-secret-123",
+            "base_url" => ""
+          },
+          params
         )
-        |> render_submit()
+    }
+  end
 
-      stored = Accounts.get_user(user.id)
-      assert stored.agent_api_key == "sk-ant-secret"
-      assert stored.agent_model == "anthropic:claude-haiku-4-5"
+  test "creating a connection stores it and never renders the key back", %{conn: conn} do
+    user = user_fixture()
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
 
-      assert html =~ "A key is saved for anthropic:claude-haiku-4-5"
-      refute html =~ "sk-ant-secret"
-    end
+    lv |> element("button", "Add your first connection") |> render_click()
+    assert has_element?(lv, "#connection-form")
 
-    test "a key saved before this session is reported as saved on another device", %{conn: conn} do
-      user = user_fixture()
-
-      {:ok, user} =
-        Accounts.update_agent_key(user, %{
-          "agent_api_key" => "sk-secret",
-          "agent_model" => "openai:gpt-4o-mini"
-        })
-
-      # The second device signs in with the account as it looked before the key
-      # was saved: the row itself, not that stale struct, carries the key.
-      stale = %{user | agent_api_key: nil, agent_model: nil}
-
-      {:ok, _lv, html} =
-        conn
-        |> log_in_user(stale)
-        |> live(~p"/users/settings")
-
-      assert html =~ "A key is saved for openai:gpt-4o-mini"
-      refute html =~ "sk-secret"
-    end
-
-    test "removing a key and saving the same one again persists it", %{conn: conn} do
-      user = user_fixture()
-
-      {:ok, user} =
-        Accounts.update_agent_key(user, %{
-          "agent_api_key" => "sk-same",
-          "agent_model" => "openai:gpt-4o-mini"
-        })
-
-      {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
-
-      lv |> element("button", "Remove saved key") |> render_click()
-      assert Accounts.get_user(user.id).agent_api_key == nil
-
-      # The socket's user still carries the removed key; comparing against it
-      # would make this save a no-op and leave the account without a key.
+    html =
       lv
-      |> form("#agent-key-form",
-        user: %{
-          provider: "openai",
-          model_id: "gpt-4o-mini",
-          agent_api_key: "sk-same"
-        }
+      |> form(
+        "#connection-form",
+        fill_form(%{
+          "provider" => "anthropic",
+          "model_id" => "claude-haiku-4-5",
+          "api_key" => "sk-ant-secret-123"
+        })
       )
       |> render_submit()
 
-      assert Accounts.get_user(user.id).agent_api_key == "sk-same"
-      assert render(lv) =~ "A key is saved for openai:gpt-4o-mini"
-    end
+    assert [connection] = Connections.list(user.id)
+    assert connection.name == "Work OpenAI"
+    assert connection.provider == "anthropic"
+    assert connection.model_id == "claude-haiku-4-5"
+    assert connection.api_key == "sk-ant-secret-123"
 
-    test "without an instance default the form says a model is required", %{conn: conn} do
-      aliases = Application.get_env(:jido_ai, :model_aliases)
-      on_exit(fn -> Application.put_env(:jido_ai, :model_aliases, aliases) end)
-      Application.put_env(:jido_ai, :model_aliases, %{})
+    assert html =~ "Work OpenAI"
+    assert html =~ "Anthropic · claude-haiku-4-5"
+    assert html =~ "…-123"
+    refute html =~ "sk-ant-secret-123"
+  end
 
-      user = user_fixture()
-      {:ok, user} = Accounts.update_agent_key(user, %{"agent_api_key" => "sk-test"})
+  test "editing without a key keeps the saved one", %{conn: conn} do
+    user = user_fixture()
+    connection = create_connection(user)
 
-      {:ok, _lv, html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
 
-      assert html =~ "this instance has no default model"
-      assert html =~ "The agent stays off until you choose a model"
-    end
+    lv |> element("#edit-connection-#{connection.id}") |> render_click()
+    assert has_element?(lv, "#connection-form")
+
+    lv
+    |> form(
+      "#connection-form",
+      fill_form(%{"name" => "Renamed", "model_id" => "gpt-4.1", "api_key" => ""})
+    )
+    |> render_submit()
+
+    updated = Connections.get(connection.id, user.id)
+    assert updated.name == "Renamed"
+    assert updated.model_id == "gpt-4.1"
+    assert updated.api_key == "sk-secret-123"
+    refute render(lv) =~ "sk-secret-123"
+  end
+
+  test "deleting the default promotes another connection", %{conn: conn} do
+    user = user_fixture()
+    first = create_connection(user, %{"name" => "First"})
+    second = create_connection(user, %{"name" => "Second"})
+
+    Connections.set_default(user, first)
+
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+
+    lv |> element("#delete-connection-#{first.id}") |> render_click()
+
+    assert Connections.default(user).id == second.id
+    refute has_element?(lv, "#connection-#{first.id}")
+  end
+
+  test "a connection can be made the default", %{conn: conn} do
+    user = user_fixture()
+    first = create_connection(user, %{"name" => "First"})
+    second = create_connection(user, %{"name" => "Second"})
+
+    assert Connections.default(user).id == first.id
+
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+
+    lv |> element("#default-connection-#{second.id}") |> render_click()
+
+    assert Connections.default(user).id == second.id
+  end
+
+  test "the test button fetches models and the save caches them", %{conn: conn} do
+    user = user_fixture()
+    previous = Application.get_env(:psc, :model_catalog_fetcher)
+    on_exit(fn -> Application.put_env(:psc, :model_catalog_fetcher, previous) end)
+
+    Application.put_env(:psc, :model_catalog_fetcher, fn _provider, _key, _base_url ->
+      {:ok, ["gpt-4.1", "gpt-4.1-mini"]}
+    end)
+
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+
+    lv |> element("button", "Add your first connection") |> render_click()
+
+    html =
+      lv
+      |> form("#connection-form", fill_form(%{}))
+      |> render_submit(%{"action" => "test"})
+
+    assert html =~ "Connected — 2 models available."
+    assert has_element?(lv, ~s|#connection-models option[value="gpt-4.1-mini"]|)
+
+    # Testing does not save anything.
+    assert Connections.list(user.id) == []
+
+    # The key input re-renders empty after the test round trip; the server keeps
+    # the typed key so saving does not require retyping it.
+    lv
+    |> form("#connection-form", fill_form(%{"api_key" => ""}))
+    |> render_submit(%{"action" => "save"})
+
+    assert [connection] = Connections.list(user.id)
+    assert connection.api_key == "sk-secret-123"
+    assert connection.models == ["gpt-4.1", "gpt-4.1-mini"]
+    assert connection.models_fetched_at
+  end
+
+  test "a failed test explains why and does not save", %{conn: conn} do
+    user = user_fixture()
+    previous = Application.get_env(:psc, :model_catalog_fetcher)
+    on_exit(fn -> Application.put_env(:psc, :model_catalog_fetcher, previous) end)
+
+    Application.put_env(:psc, :model_catalog_fetcher, fn _provider, _key, _base_url ->
+      {:error, "The provider rejected this key."}
+    end)
+
+    {:ok, lv, _html} = conn |> log_in_user(user) |> live(~p"/users/settings")
+
+    lv |> element("button", "Add your first connection") |> render_click()
+
+    html =
+      lv
+      |> form("#connection-form", fill_form(%{}))
+      |> render_submit(%{"action" => "test"})
+
+    assert html =~ "The provider rejected this key."
+    assert Connections.list(user.id) == []
   end
 end

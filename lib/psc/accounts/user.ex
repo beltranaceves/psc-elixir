@@ -14,6 +14,7 @@ defmodule Psc.Accounts.User do
     field :role, Ecto.Enum, values: [:member, :admin], default: :member
     field :agent_api_key, :string, redact: true
     field :agent_model, :string
+    field :default_agent_connection_id, :binary_id
 
     timestamps(type: :utc_datetime)
   end

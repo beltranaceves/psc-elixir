@@ -19,6 +19,7 @@ defmodule Psc.Agent.Session do
 
     belongs_to :user, Psc.Accounts.User
     belongs_to :canvas, Psc.Canvas.UnstrCanvas, type: :binary_id
+    belongs_to :connection, Psc.Agent.Connection, type: :binary_id
     has_many :messages, Psc.Agent.Message, foreign_key: :session_id
 
     timestamps(type: :utc_datetime_usec)

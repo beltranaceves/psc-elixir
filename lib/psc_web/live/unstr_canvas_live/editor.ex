@@ -82,6 +82,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           :agent_missing,
           Psc.Agent.missing_configuration(socket.assigns.current_scope.user)
         )
+        |> assign(:agent_connections, [])
+        |> assign(:agent_connection, nil)
+        |> assign(:agent_connection_list_open, false)
         |> assign(:notes, [])
         |> assign(:note, nil)
         |> assign(:note_content, "")
@@ -204,7 +207,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
            Psc.Agent.list_sessions_for_canvas(session.canvas_id, session.user_id)
          )
          |> assign(:agent_messages, [])
-         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
+         |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))
+         |> assign(:agent_list_open, false)
+         |> assign(:agent_connection_list_open, false)
+         |> assign_agent_connections()}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Could not start a chat.")}
@@ -229,11 +235,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       is_nil(session) ->
         {:noreply, put_flash(socket, :error, "Start a chat first.")}
 
-      socket.assigns.agent_missing == :key ->
-        {:noreply, put_flash(socket, :error, "Add your API key in settings first.")}
-
-      socket.assigns.agent_missing == :model ->
-        {:noreply, put_flash(socket, :error, "Choose a model in settings first.")}
+      socket.assigns.agent_missing == :connection ->
+        {:noreply, put_flash(socket, :error, "Add a connection in settings first.")}
 
       socket.assigns.agent_turn_pid ->
         {:noreply, put_flash(socket, :error, "Wait for the current answer to finish.")}
@@ -242,10 +245,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         # Subscribe before the turn starts: the first deltas can arrive within
         # milliseconds, and a late subscription loses them.
         socket = subscribe_agent(socket, session)
+        connection = Psc.Agent.Connections.for_session(session, scope.user)
+        config = Psc.Agent.Connections.turn_config(session, scope.user)
 
         with {:ok, user_message} <- Psc.Agent.append_user_message(session, content),
-             {:ok, assistant} <- Psc.Agent.start_assistant_message(session) do
-          case Psc.Agent.Turn.start(session, assistant, scope) do
+             {:ok, session} <- pin_connection(session, connection),
+             {:ok, assistant} <-
+               Psc.Agent.start_assistant_message(session, model: config.model) do
+          case Psc.Agent.Turn.start(session, assistant, scope, config) do
             {:ok, pid} ->
               {:noreply,
                socket
@@ -255,7 +262,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                  socket.assigns.agent_messages ++ [user_message, assistant]
                )
                |> assign(:agent_turn_pid, pid)
-               |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))}
+               |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))
+               |> assign_agent_connections()}
 
             {:error, reason} ->
               Psc.Agent.fail_message(assistant, reason)
@@ -268,6 +276,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             {:noreply, put_flash(socket, :error, "Could not start the answer. Please try again.")}
         end
     end
+  end
+
+  # A suggested prompt fills the composer rather than sending itself, so the
+  # user can edit it before spending a model call.
+  def handle_event("agent_suggest", %{"prompt" => prompt}, socket) when is_binary(prompt) do
+    {:noreply, assign(socket, :agent_composer, to_form(%{"content" => prompt}, as: :message))}
   end
 
   def handle_event("agent_refresh", _params, socket) do
@@ -394,11 +408,57 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_event("agent_close_lists", _params, socket) do
-    {:noreply, assign(socket, agent_list_open: false, agent_menu_session: nil)}
+    {:noreply,
+     assign(socket,
+       agent_list_open: false,
+       agent_menu_session: nil,
+       agent_connection_list_open: false
+     )}
   end
 
   def handle_event("agent_toggle_list", _params, socket) do
-    {:noreply, assign(socket, :agent_list_open, not socket.assigns.agent_list_open)}
+    {:noreply,
+     assign(socket,
+       agent_list_open: not socket.assigns.agent_list_open,
+       agent_connection_list_open: false
+     )}
+  end
+
+  def handle_event("agent_toggle_connections", _params, socket) do
+    {:noreply,
+     assign(socket,
+       agent_connection_list_open: not socket.assigns.agent_connection_list_open,
+       agent_list_open: false,
+       agent_menu_session: nil
+     )}
+  end
+
+  def handle_event("agent_select_connection", %{"connection" => id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    cond do
+      socket.assigns.agent_turn_pid ->
+        {:noreply, put_flash(socket, :error, "Wait for the current answer to finish.")}
+
+      is_nil(socket.assigns.agent_session) ->
+        {:noreply, assign(socket, :agent_connection_list_open, false)}
+
+      true ->
+        case Psc.Agent.Connections.get(id, user.id) do
+          nil ->
+            {:noreply, put_flash(socket, :error, "That connection is no longer available.")}
+
+          connection ->
+            {:ok, session} =
+              Psc.Agent.set_session_connection(socket.assigns.agent_session, connection)
+
+            {:noreply,
+             socket
+             |> assign(:agent_session, session)
+             |> assign(:agent_connection_list_open, false)
+             |> assign_agent_connections()}
+        end
+    end
   end
 
   def handle_event("agent_select", %{"session" => session_id}, socket) do
@@ -426,7 +486,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
          |> subscribe_agent(session)
          |> assign(:agent_session, session)
          |> assign(:agent_messages, messages)
-         |> assign(:agent_list_open, false)}
+         |> assign(:agent_list_open, false)
+         |> assign(:agent_connection_list_open, false)
+         |> assign_agent_connections()}
     end
   end
 
@@ -1156,7 +1218,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   # Re-read the signed-in account and everything the agent tab derives from it.
-  # The scope is a snapshot from mount time, so a key or model saved in settings
+  # The scope is a snapshot from mount time, so a connection saved in settings
   # since then is invisible until this runs.
   defp refresh_agent_scope(socket) do
     scope = fresh_scope(socket.assigns.current_scope)
@@ -1165,6 +1227,37 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     |> assign(:current_scope, scope)
     |> assign(:agent_enabled?, Psc.Agent.enabled?(scope.user))
     |> assign(:agent_missing, Psc.Agent.missing_configuration(scope.user))
+    |> assign_agent_connections()
+  end
+
+  # The picker's data: every connection of the user, and the one this chat uses
+  # next (its own, else the user's default).
+  defp assign_agent_connections(socket) do
+    user = socket.assigns.current_scope.user
+    connections = Psc.Agent.Connections.summaries(user.id)
+
+    active =
+      case Psc.Agent.Connections.for_session(socket.assigns.agent_session, user) do
+        nil ->
+          nil
+
+        connection ->
+          Enum.find(connections, &(&1.id == connection.id)) ||
+            Psc.Agent.Connection.summary(connection)
+      end
+
+    socket
+    |> assign(:agent_connections, connections)
+    |> assign(:agent_connection, active)
+  end
+
+  # A chat keeps the connection its first turn ran on; opening an old chat with
+  # the same model must not rewrite the row on every send.
+  defp pin_connection(session, nil), do: {:ok, session}
+
+  defp pin_connection(session, connection) do
+    Psc.Agent.Connections.mark_used(connection)
+    Psc.Agent.set_session_connection(session, connection)
   end
 
   defp load_agent(socket) do
@@ -1173,36 +1266,38 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     missing = Psc.Agent.missing_configuration(user)
     sessions = Psc.Agent.list_sessions_for_canvas(socket.assigns.canvas_id, user.id)
 
-    case Psc.Agent.latest_session(socket.assigns.canvas_id, user.id) do
-      nil ->
-        socket
-        |> assign(:agent_session, nil)
-        |> assign(:agent_sessions, sessions)
-        |> assign(:agent_messages, [])
-        |> assign(:agent_enabled?, enabled?)
-        |> assign(:agent_missing, missing)
+    socket =
+      case Psc.Agent.latest_session(socket.assigns.canvas_id, user.id) do
+        nil ->
+          socket
+          |> assign(:agent_session, nil)
+          |> assign(:agent_sessions, sessions)
+          |> assign(:agent_messages, [])
 
-      session ->
-        Psc.Agent.cancel_stale_streaming(session)
+        session ->
+          Psc.Agent.cancel_stale_streaming(session)
 
-        # Deltas are broadcast, not persisted, until the turn completes. Keep
-        # the transcript already on screen when the same session is reopened by
-        # a tab switch; reloading from the database would drop them.
-        messages =
-          if socket.assigns.agent_session && socket.assigns.agent_session.id == session.id do
-            socket.assigns.agent_messages
-          else
-            Psc.Agent.list_messages(session)
-          end
+          # Deltas are broadcast, not persisted, until the turn completes. Keep
+          # the transcript already on screen when the same session is reopened by
+          # a tab switch; reloading from the database would drop them.
+          messages =
+            if socket.assigns.agent_session && socket.assigns.agent_session.id == session.id do
+              socket.assigns.agent_messages
+            else
+              Psc.Agent.list_messages(session)
+            end
 
-        socket
-        |> subscribe_agent(session)
-        |> assign(:agent_session, session)
-        |> assign(:agent_sessions, sessions)
-        |> assign(:agent_messages, messages)
-        |> assign(:agent_enabled?, enabled?)
-        |> assign(:agent_missing, missing)
-    end
+          socket
+          |> subscribe_agent(session)
+          |> assign(:agent_session, session)
+          |> assign(:agent_sessions, sessions)
+          |> assign(:agent_messages, messages)
+      end
+
+    socket
+    |> assign(:agent_enabled?, enabled?)
+    |> assign(:agent_missing, missing)
+    |> assign_agent_connections()
   end
 
   # A turn's stream only reaches the socket if it subscribed to the session's
@@ -1929,6 +2024,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               agent_enabled?={@agent_enabled?}
               agent_missing={@agent_missing}
               agent_composer={@agent_composer}
+              agent_connections={@agent_connections}
+              agent_connection={@agent_connection}
+              agent_connection_list_open={@agent_connection_list_open}
             />
           </div>
 

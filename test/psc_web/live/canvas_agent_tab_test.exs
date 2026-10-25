@@ -4,21 +4,40 @@ defmodule PscWeb.CanvasAgentTabTest do
   import Ecto.Query
   import Phoenix.LiveViewTest
 
-  alias Psc.Accounts
   alias Psc.Agent
+  alias Psc.Agent.Connections
   alias Psc.Agent.Turn
   alias Psc.CanvasFixtures
 
   setup :register_and_log_in_user
 
-  setup %{user: user} do
-    # The tab needs a key of the user's own; the model falls back to the
-    # deployment alias from config/test.exs.
-    {:ok, user} = Accounts.update_agent_key(user, %{"agent_api_key" => "sk-test"})
-    %{user: user}
+  # Sends from the tab start a turn in a supervised task, which cannot be given
+  # the `:script` option. The env seam keeps those turns offline.
+  setup do
+    previous = Application.get_env(:psc, :agent_turn_script)
+    Application.put_env(:psc, :agent_turn_script, answer: "scripted answer")
+    on_exit(fn -> Application.put_env(:psc, :agent_turn_script, previous) end)
+    :ok
+  end
+
+  defp create_connection(user, attrs \\ %{}) do
+    attrs =
+      Map.merge(
+        %{
+          "name" => "Test",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1-mini",
+          "api_key" => "sk-test-123"
+        },
+        attrs
+      )
+
+    {:ok, connection} = Connections.create(user, attrs)
+    connection
   end
 
   test "a chat started from the tab receives the turn's events", %{conn: conn, user: user} do
+    create_connection(user)
     layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
 
     {:ok, canvas} =
@@ -59,29 +78,28 @@ defmodule PscWeb.CanvasAgentTabTest do
     assert render(view) =~ "hello from pubsub"
   end
 
-  test "a key saved after the canvas mounted is used without a reload", %{
+  test "a connection saved after the canvas mounted is used without a reload", %{
     conn: conn,
     user: user
   } do
-    # A user opens the canvas before saving a key, then saves one in settings -
-    # another tab or another device. The canvas socket still holds the user from
-    # mount time, so gating on that struct would reject a key that now exists.
-    {:ok, user} = Accounts.update_agent_key(user, %{"agent_api_key" => ""})
-
+    # A user opens the canvas before adding a connection, then adds one in
+    # settings - another tab or another device. The canvas socket still holds
+    # the user from mount time, so gating on that struct alone would keep the
+    # composer disabled.
     layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
 
     {:ok, canvas} =
       Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
 
     {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
-    assert render(view) =~ "Add your API key in settings"
+    assert render(view) =~ "Add a connection in settings"
 
-    {:ok, _} = Accounts.update_agent_key(user, %{"agent_api_key" => "sk-test"})
+    create_connection(user)
 
     # Coming back to the window after saving in the settings tab refreshes the
     # cached account; without it the composer stays disabled until a reload.
     render_click(view, "agent_refresh", %{})
-    refute render(view) =~ "Add your API key in settings"
+    refute render(view) =~ "Add a connection in settings"
 
     view |> element("button", "Start a chat") |> render_click()
 
@@ -93,17 +111,10 @@ defmodule PscWeb.CanvasAgentTabTest do
       Task.Supervisor.terminate_child(Psc.Agent.TurnSupervisor, pid)
     end
 
-    refute render(view) =~ "Add your API key in settings"
+    refute render(view) =~ "Add a connection in settings"
   end
 
-  test "a saved key without a model says so instead of asking for the key again", %{
-    conn: conn,
-    user: user
-  } do
-    aliases = Application.get_env(:jido_ai, :model_aliases)
-    on_exit(fn -> Application.put_env(:jido_ai, :model_aliases, aliases) end)
-    Application.put_env(:jido_ai, :model_aliases, %{})
-
+  test "without a connection the tab says how to add one", %{conn: conn, user: user} do
     layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
 
     {:ok, canvas} =
@@ -112,8 +123,35 @@ defmodule PscWeb.CanvasAgentTabTest do
     {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
 
     html = render(view)
-    assert html =~ "Your key is saved; the agent still needs a model"
-    refute html =~ "Add your API key in settings"
+    assert html =~ "Add a connection in settings"
+    assert has_element?(view, ~s|button[phx-click="agent_new"][disabled]|)
+  end
+
+  test "the connection picker pins the chat to another connection", %{conn: conn, user: user} do
+    first = create_connection(user, %{"name" => "First"})
+    second = create_connection(user, %{"name" => "Second", "model_id" => "gpt-4.1"})
+
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    # The default is shown until the chat is pinned to another connection.
+    assert has_element?(view, "#canvas-agent-connection", first.name)
+
+    view |> element("#canvas-agent-connection") |> render_click()
+    assert has_element?(view, "#canvas-agent-connection-list")
+
+    view
+    |> element(~s|#canvas-agent-connection-list button[phx-value-connection="#{second.id}"]|)
+    |> render_click()
+
+    assert Agent.get_session(session.id, user.id).connection_id == second.id
+    assert has_element?(view, "#canvas-agent-connection", second.name)
   end
 
   test "clicking away closes the chat list", %{conn: conn, user: user} do
@@ -172,6 +210,28 @@ defmodule PscWeb.CanvasAgentTabTest do
     |> render_submit()
 
     assert has_element?(view, "#canvas-agent-title", "renamed")
+  end
+
+  test "a suggested prompt fills the composer without sending it", %{
+    conn: conn,
+    user: user
+  } do
+    create_connection(user)
+    layout = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{"name" => "Agent", "layout_id" => layout.id})
+
+    {:ok, session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+
+    {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=agent")
+
+    view
+    |> element(~s|button[phx-click="agent_suggest"][phx-value-prompt="Summarize this canvas"]|)
+    |> render_click()
+
+    assert has_element?(view, "#canvas-agent-composer textarea", "Summarize this canvas")
+    assert Psc.Agent.list_messages(session) == []
   end
 
   test "stopping clears the status phase even without a running turn", %{

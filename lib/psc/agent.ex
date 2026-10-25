@@ -12,6 +12,7 @@ defmodule Psc.Agent do
 
   import Ecto.Query
 
+  alias Psc.Agent.Connections
   alias Psc.Agent.Message
   alias Psc.Agent.Session
   alias Psc.Repo
@@ -25,25 +26,16 @@ defmodule Psc.Agent do
   @doc """
   Whether the agent tab is available to this user.
 
-  It needs a provider key and a model to call: their own, or the deployment's
-  `AGENT_MODEL`.
+  It needs a connection of their own (or the legacy key pair) to call a model.
   """
-  def enabled?(%Psc.Accounts.User{} = user) do
-    is_nil(missing_configuration(user))
-  end
+  def enabled?(%Psc.Accounts.User{} = user), do: Connections.enabled?(user)
 
   @doc """
-  What keeps a user from using the agent: `:key`, `:model`, or `nil` when the
-  user is ready. The interface reports the actual gap, so someone with a saved
-  key is not told to save it again.
+  What keeps a user from using the agent: `:connection` when they have no saved
+  connection, `nil` when they are ready. The interface reports the actual gap.
   """
-  def missing_configuration(%Psc.Accounts.User{} = user) do
-    cond do
-      not Psc.Accounts.User.agent_key?(user) -> :key
-      is_nil(model_for(user)) -> :model
-      true -> nil
-    end
-  end
+  def missing_configuration(%Psc.Accounts.User{} = user),
+    do: Connections.missing_configuration(user)
 
   @doc """
   Whether the agent is configured at deployment level (`AGENT_MODEL` plus a key).
@@ -51,26 +43,23 @@ defmodule Psc.Agent do
   def enabled?, do: Application.get_env(:psc, :agent_enabled, false)
 
   @doc """
-  The model spec a turn should use: the user's own, else the deployment default.
+  The model spec a turn should use: the session's connection, else the user's
+  default, else the legacy pair, else the deployment default.
   """
-  def model_for(%Psc.Accounts.User{} = user) do
-    Psc.Accounts.User.agent_model(user) || deployment_model()
-  end
+  def model_for(%Psc.Accounts.User{} = user), do: Connections.turn_config(nil, user).model
 
-  defp deployment_model do
-    case Application.get_env(:jido_ai, :model_aliases, %{}) do
-      %{default: model} when is_binary(model) -> model
-      _other -> nil
-    end
-  end
+  def model_for(%Psc.Agent.Session{} = session, %Psc.Accounts.User{} = user),
+    do: Connections.turn_config(session, user).model
 
   @doc "The provider key a turn should use, or nil."
-  def api_key(%Psc.Accounts.User{} = user) do
-    case user.agent_api_key do
-      key when is_binary(key) and key != "" -> key
-      _other -> nil
-    end
-  end
+  def api_key(%Psc.Accounts.User{} = user), do: Connections.turn_config(nil, user).api_key
+
+  def api_key(%Psc.Agent.Session{} = session, %Psc.Accounts.User{} = user),
+    do: Connections.turn_config(session, user).api_key
+
+  @doc "Pins a session to a connection."
+  def set_session_connection(session, connection),
+    do: Connections.attach_to_session(session, connection)
 
   @doc "Every session of a user, most recently used first."
   def list_sessions(user_id) do
@@ -161,7 +150,8 @@ defmodule Psc.Agent do
             content: message.content,
             status: message.status,
             tool_calls: message.tool_calls,
-            usage: message.usage
+            usage: message.usage,
+            model: message.model
           })
       end
 
@@ -215,10 +205,19 @@ defmodule Psc.Agent do
   @doc """
   Creates the assistant message a turn fills in, so the UI has something to
   stream into before the first token arrives.
+
+  Options: `:model` - the `provider:model` spec the turn will run, stored on the
+  row so the transcript records what answered.
   """
-  def start_assistant_message(session) do
+  def start_assistant_message(session, opts \\ []) do
     Repo.transaction(fn ->
-      {:ok, message} = insert_message(session, %{role: :assistant, status: :streaming})
+      {:ok, message} =
+        insert_message(session, %{
+          role: :assistant,
+          status: :streaming,
+          model: Keyword.get(opts, :model)
+        })
+
       session |> touch() |> prune()
       message
     end)

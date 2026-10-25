@@ -19,6 +19,10 @@ defmodule Psc.Agent.Turn do
   calling a model. It exercises the parts this module owns (broadcasting,
   accumulating tool calls, persisting, failing) without a network round trip.
   The real Jido path stays the default.
+
+  Turns started elsewhere (a LiveView's "send" handler, for instance) cannot
+  pass options, so tests may also set `config :psc, :agent_turn_script`; it is
+  read when no `:script` option was given.
   """
 
   require Logger
@@ -34,8 +38,12 @@ defmodule Psc.Agent.Turn do
   def topic(session_id), do: @topic_prefix <> session_id
 
   @doc "Runs a turn in a supervised task."
-  def start(session, message, scope) do
-    Task.Supervisor.start_child(Psc.Agent.TurnSupervisor, fn -> run(session, message, scope) end)
+  def start(session, message, scope, config \\ nil) do
+    config = config || Psc.Agent.Connections.turn_config(session, user_from(scope))
+
+    Task.Supervisor.start_child(Psc.Agent.TurnSupervisor, fn ->
+      run(session, message, scope, config: config)
+    end)
   end
 
   @doc """
@@ -44,13 +52,18 @@ defmodule Psc.Agent.Turn do
   Options:
 
     * `:script` - a list of steps to replay instead of calling a model. Test-only.
+    * `:config` - `%{model, api_key, base_url}`, resolved once before the turn
+      starts so editing a connection mid-turn cannot change the request. The
+      turn resolves it from the session when the option is absent.
   """
   def run(session, message, scope, opts \\ []) do
     topic = topic(session.id)
+    config = Keyword.get_lazy(opts, :config, fn -> resolve_config(session, scope) end)
+    script = Keyword.get(opts, :script) || Application.get_env(:psc, :agent_turn_script)
 
     try do
-      case Keyword.get(opts, :script) do
-        nil -> run_agent(session, message, scope, topic)
+      case script do
+        nil -> run_agent(session, message, scope, topic, config)
         script -> replay(script, message, topic)
       end
     rescue
@@ -66,7 +79,7 @@ defmodule Psc.Agent.Turn do
 
   ## The real path
 
-  defp run_agent(session, message, scope, topic) do
+  defp run_agent(session, message, scope, topic, config) do
     prompt = render_prompt(session)
 
     # The agent server is linked to this process, so a crash inside the ReAct
@@ -79,7 +92,7 @@ defmodule Psc.Agent.Turn do
       case start_agent() do
         {:ok, pid} ->
           try do
-            execute(pid, prompt, message, topic, scope)
+            execute(pid, prompt, message, topic, scope, config)
           after
             stop_agent(pid)
           end
@@ -92,15 +105,16 @@ defmodule Psc.Agent.Turn do
     end
   end
 
-  defp execute(pid, prompt, message, topic, scope) do
+  defp execute(pid, prompt, message, topic, scope, config) do
     request =
       [
-        tool_context: %{scope: scope, model: Agent.model_for(scope.user)},
+        tool_context: %{scope: scope, model: config.model},
         request_transformer: Psc.Agent.UserModel,
         # A provider that accepts the request and then goes quiet would hold the
         # turn (and the "streaming" bubble) far too long. Bound it.
-        stream_timeout_ms: @stream_timeout_ms
-      ] ++ api_key_opts(scope)
+        stream_timeout_ms: @stream_timeout_ms,
+        llm_opts: llm_opts(config)
+      ]
 
     case CanvasAgent.ask_stream(pid, prompt, request) do
       {:ok, %{request: request, events: events}} ->
@@ -196,10 +210,8 @@ defmodule Psc.Agent.Turn do
     )
   end
 
-  # Users bring their own provider key (settings). Without one the tab is gated
-  # off, so this list is normally the key; the deployment key remains the
-  # fallback for MCP clients acting through a configured account.
-  # The key travels as `api_key` in the per-request generation options.
+  # The key and endpoint come from the resolved connection (or the legacy user
+  # pair) and travel as per-request generation options.
   #
   # Known limitation, found by a live run: Jido's ReAct runtime injects a
   # `provider_options[:previous_response_id]` into every streaming request, and
@@ -208,14 +220,17 @@ defmodule Psc.Agent.Turn do
   # models that ReqLLM resolves through a strict schema fail to build a request.
   # OpenAI accepts the option. The workaround is a provider whose schema allows
   # it, or an upstream fix.
-  defp api_key_opts(scope) do
-    with %{user: %Psc.Accounts.User{} = user} <- scope,
-         key when is_binary(key) <- Agent.api_key(user) do
-      [llm_opts: [api_key: key]]
-    else
-      _other -> []
-    end
+  defp llm_opts(config) do
+    [api_key: config[:api_key], base_url: config[:base_url]]
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
   end
+
+  defp resolve_config(session, scope) do
+    Psc.Agent.Connections.turn_config(session, user_from(scope))
+  end
+
+  defp user_from(%{user: %Psc.Accounts.User{} = user}), do: user
+  defp user_from(_scope), do: nil
 
   defp stop_agent(pid) do
     if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5_000)

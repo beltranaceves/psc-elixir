@@ -24,6 +24,7 @@ defmodule Psc.Agent.Message do
     field :error, :string
     field :tool_calls, {:array, :map}, default: []
     field :usage, :map
+    field :model, :string
 
     belongs_to :session, Psc.Agent.Session, type: :binary_id
 
@@ -35,7 +36,7 @@ defmodule Psc.Agent.Message do
 
   def changeset(message, attrs) do
     message
-    |> cast(attrs, [:role, :content, :status, :error, :tool_calls, :usage, :session_id])
+    |> cast(attrs, [:role, :content, :status, :error, :tool_calls, :usage, :model, :session_id])
     |> validate_required([:role, :session_id])
     |> validate_inclusion(:role, @roles)
     |> validate_inclusion(:status, @statuses)

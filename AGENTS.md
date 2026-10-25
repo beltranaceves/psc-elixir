@@ -165,12 +165,22 @@ results, not a summary of intentions.
   (`PscWeb.MCP.Plug`, JSON-RPC, bearer token) for external agents.
 - `Psc.Agent.Turn.run/4` takes `script: [...]` so tests replay a turn without a
   model. No test may hit a network.
-- The tab is gated per user: it needs a provider key saved in settings
-  (`users.agent_api_key`) and a model (`users.agent_model`, e.g.
-  `"anthropic:claude-haiku-4-5"`). Without a personal model the deployment
-  `AGENT_MODEL` alias is used; without either, the tab links to settings instead
-  of calling anything. `/mcp` 404s unless `PSC_MCP_TOKEN` and `PSC_MCP_USER` are
-  set.
+- The tab is gated per user: it needs a **connection** saved in settings
+  (`agent_connections`: a provider, a write-only API key and a `model_id`,
+  optionally a `base_url`). Connections are personal; `users.default_agent_connection_id`
+  picks one for new chats and `agent_sessions.connection_id` pins the chat.
+  Legacy `users.agent_api_key` / `users.agent_model` pairs still resolve when the
+  user has no connection, but the settings page no longer writes them.
+- `Psc.Agent.ModelCatalog` supplies model suggestions: offline from the packaged
+  `LLMDB` catalog, and live from each provider's model-listing endpoint, which is
+  also what the "Test connection" button runs (no token cost). Providers do not
+  share one endpoint: most are OpenAI-shaped (`GET {base_url}/models` with a
+  bearer token), Anthropic uses `x-api-key` + `anthropic-version`, Google uses
+  `/v1beta/models` with the key as a query parameter.
+- Tests must not go online: turns started from a LiveView cannot receive
+  `Turn.run/4`'s `:script` option, so `config :psc, :agent_turn_script` is read
+  when no option is given.
+- `/mcp` 404s unless `PSC_MCP_TOKEN` and `PSC_MCP_USER` are set.
 - Prompt caching depends on a byte-stable prefix: the system prompt is constant,
   tools are listed in a fixed order, and history is replayed append-only (never
   re-serialise `jsonb` into the prompt).
