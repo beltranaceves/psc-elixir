@@ -1587,6 +1587,11 @@ client, and the free tier allows ~10k rows per table.
   later `seq` on top. Overlap is not rejected: rejecting server-side would desync the
   optimistic drag from the log, and a server-side "nudge into a free slot" would not
   replay the same way twice.
+- **The board grows with its cards on both axes.** Dragging or resizing past the right
+  edge raises `bento_columns` (to a maximum of 16) instead of clamping the card; dragging
+  down already extended the rows because the height is derived. Growing is intrinsic to
+  the content; shrinking stays explicit, through the toolbar's column input or by
+  deleting cards.
 - A drag that ends where it started writes nothing: the generic no-op guard in
   `process_operation/2` compares the resulting cells.
 

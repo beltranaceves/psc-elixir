@@ -71,6 +71,11 @@ Cell content keeps the existing operations (`update_cell`, `update_cell_label`,
 A drag or resize sends one operation when the gesture ends. A gesture that ends where it
 started sends nothing.
 
+The board grows with its cards on both axes: a card dragged or resized past the right
+edge widens `bento_columns` (up to 16), exactly like a card dragged down extends the rows.
+An explicit narrower width from the toolbar still wins — that is the user asking for a
+smaller board, so it clamps the cards instead.
+
 ## Editor
 
 - `Edit layout` shows the drag grip, the resize corner, the accent swatch, the remove
@@ -81,7 +86,8 @@ started sends nothing.
 - Removing a card with content opens the same confirmation as a row or column.
 - The toolbar reports the board's real grid (`12 × 5`: columns × rows) and, while Edit
   layout is on, it is the control itself: two number inputs set the columns and the
-  container height. Values outside the allowed ranges are ignored rather than clamped, so
+  container height. The drag hook reads the grid from the DOM at the start of every
+  gesture, so a board widened there is immediately usable for placing cards. Values outside the allowed ranges are ignored rather than clamped, so
   typing `1` on the way to `12` does not resize anything. Outside edit mode it is a
   read-only badge, because restructuring a canvas while reading it should not be one
   stray keystroke away.

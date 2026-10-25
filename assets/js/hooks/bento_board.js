@@ -17,7 +17,7 @@ const MIN_SIZE = 1 / TRACKS_PER_UNIT
 
 export default {
   mounted() {
-    this.columns = Number(this.el.dataset.columns) || 12
+    this.columns = this.boardColumns()
     this.card = null
     this.mode = null
     this.start = null
@@ -34,6 +34,14 @@ export default {
     window.addEventListener("pointermove", this.onPointerMove)
     window.addEventListener("pointerup", this.onPointerUp)
     window.addEventListener("pointercancel", this.onPointerUp)
+  },
+
+  // The server is the only writer of the grid; after a patch (a new column
+  // count from the toolbar, or the render that follows a drag) the cached
+  // count and the locally grown template must both follow it.
+  updated() {
+    this.columns = this.boardColumns()
+    this.grewTo = null
   },
 
   destroyed() {
@@ -59,7 +67,12 @@ export default {
     this.start = { x: event.clientX, y: event.clientY }
     this.origin = this.readPlacement(card)
     this.preview = null
+    // Read the grid at the start of every gesture: the toolbar's NxM inputs
+    // can change it while the board is on screen.
+    this.columns = this.boardColumns()
     this.units = this.measureUnits()
+    this.baseTemplate = this.el.style.gridTemplateColumns
+    this.grewTo = null
     this.markPreview()
   },
 
@@ -70,10 +83,15 @@ export default {
     const dx = (event.clientX - this.start.x) / this.units.x
     const dy = (event.clientY - this.start.y) / this.units.y
 
+    // A card can be dragged past the current right edge: the board grows with
+    // it, the way a card dragged down grows the board's rows. The cap is the
+    // widest grid the model allows.
+    const maxColumns = this.maxColumns()
+
     const next =
       this.mode === "move"
         ? {
-            x: clamp(this.origin.x + Math.round(dx), 0, this.columns - this.origin.w),
+            x: clamp(this.origin.x + Math.round(dx), 0, maxColumns - this.origin.w),
             y: Math.max(0, this.origin.y + Math.round(dy)),
             w: this.origin.w,
             h: this.origin.h,
@@ -83,7 +101,7 @@ export default {
             y: this.origin.y,
             // Half-column steps: the pointer has to travel half a column
             // before the card grows.
-            w: clamp(snap(this.origin.w + dx), MIN_SIZE, this.columns - this.origin.x),
+            w: clamp(snap(this.origin.w + dx), MIN_SIZE, maxColumns - this.origin.x),
             h: Math.max(MIN_SIZE, snap(this.origin.h + dy)),
           }
 
@@ -99,18 +117,20 @@ export default {
     const origin = this.origin
     const placement = this.preview
 
+    const moved = placement && (placement.x !== origin.x || placement.y !== origin.y)
+    const resized = placement && (placement.w !== origin.w || placement.h !== origin.h)
+    const pushes = Boolean(placement) && (mode === "move" ? moved : resized)
+
+    // Drop the local grid growth: the server renders the board it stored. A
+    // gesture that sends nothing restores the grid the server already had.
+    if (!pushes) this.restoreGrid()
     this.clearPreview()
     this.card = null
     this.mode = null
     this.start = null
     this.preview = null
 
-    if (!placement) return
-
-    const moved = placement.x !== origin.x || placement.y !== origin.y
-    const resized = placement.w !== origin.w || placement.h !== origin.h
-    if (mode === "move" && !moved) return
-    if (mode === "resize" && !resized) return
+    if (!pushes) return
 
     const cellKey = card.id.replace("bento-card-", "")
 
@@ -138,14 +158,14 @@ export default {
     if (!delta) return
 
     const placement = this.readPlacement(card)
-    const columns = Number(this.el.dataset.columns) || this.columns
+    const maxColumns = this.maxColumns()
 
     event.preventDefault()
     event.stopPropagation()
 
     this.pushEvent("resize_card", {
       cell_key: card.id.replace("bento-card-", ""),
-      w: clamp(placement.w + delta.x * MIN_SIZE, MIN_SIZE, columns - placement.x),
+      w: clamp(placement.w + delta.x * MIN_SIZE, MIN_SIZE, maxColumns - placement.x),
       h: Math.max(MIN_SIZE, placement.h + delta.y * MIN_SIZE),
     })
   },
@@ -156,8 +176,9 @@ export default {
     const styles = window.getComputedStyle(this.el)
     const gap = parseFloat(styles.columnGap) || 0
     const rowGap = parseFloat(styles.rowGap) || 0
-    const width = this.el.clientWidth - gap * (this.columns - 1)
-    const column = width / this.columns
+    const columns = Math.max(this.columns, 1)
+    const width = this.el.clientWidth - gap * (columns - 1)
+    const column = width / columns
     // One row unit is two tracks of half height.
     const row = (parseFloat(styles.gridAutoRows) || 36) * TRACKS_PER_UNIT
 
@@ -186,8 +207,35 @@ export default {
 
   applyPreview(placement) {
     if (!this.card) return
+
+    // Growing the grid live keeps the card inside real tracks instead of
+    // implicit ones; the cap is the model's maximum.
+    const needed = Math.max(this.columns, ceil(placement.x + placement.w))
+
+    if (needed !== this.columns && needed <= this.maxColumns()) {
+      this.grewTo = this.grewTo || this.columns
+      this.columns = needed
+      this.el.style.gridTemplateColumns = `repeat(${needed * TRACKS_PER_UNIT}, minmax(0, 1fr))`
+    }
+
     this.card.style.gridColumn = `${round(placement.x * TRACKS_PER_UNIT) + 1} / span ${round(placement.w * TRACKS_PER_UNIT)}`
     this.card.style.gridRow = `${round(placement.y * TRACKS_PER_UNIT) + 1} / span ${round(placement.h * TRACKS_PER_UNIT)}`
+  },
+
+  boardColumns() {
+    return Number(this.el.dataset.columns) || 12
+  },
+
+  maxColumns() {
+    return Number(this.el.dataset.maxColumns) || Math.max(this.boardColumns(), 16)
+  },
+
+  // Give the grid back to the server's render when a gesture sends nothing.
+  restoreGrid() {
+    if (!this.grewTo) return
+    this.el.style.gridTemplateColumns = this.baseTemplate || ""
+    this.columns = this.boardColumns()
+    this.grewTo = null
   },
 
   clearPreview() {
@@ -210,6 +258,10 @@ function clamp(value, min, max) {
 
 function round(value) {
   return Math.round(value)
+}
+
+function ceil(value) {
+  return Math.ceil(value)
 }
 
 // Half-column steps, with no floating-point drift.

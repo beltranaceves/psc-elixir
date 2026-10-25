@@ -177,6 +177,64 @@ test.describe('bento board', () => {
     await expect(page.locator('#bento-board')).toHaveCSS('min-height', '712px');
   });
 
+  test('widening the board opens room to drag a card into it', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Widen'));
+
+    await page.locator('#edit-layout-toggle').click();
+    await page.locator('#bento-columns-input').fill('16');
+    await expect(page.locator('#bento-board')).toHaveAttribute(
+      'style',
+      /--bento-columns: 16;/,
+      { timeout: 10_000 },
+    );
+
+    const card = page.locator('#bento-card-decision');
+    const grip = page.locator('#bento-move-decision');
+    const board = page.locator('#bento-board');
+
+    // The grid is read from the DOM at the start of a drag, so the new width
+    // is usable without a reload.
+    const unit = (await board.boundingBox())!.width / 16;
+    const gripBox = (await grip.boundingBox())!;
+
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      gripBox.x + gripBox.width / 2 + unit * 8,
+      gripBox.y + gripBox.height / 2,
+      { steps: 10 },
+    );
+    await page.mouse.up();
+
+    // x = 8 → the ninth column → track 17.
+    await expect(card).toHaveAttribute('style', /grid-column: 17 \//);
+    await expect(page.locator('#bento-columns-input')).toHaveValue('16');
+  });
+
+  test('dragging a card past the right edge widens the board', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Grow'));
+
+    await page.locator('#edit-layout-toggle').click();
+
+    const board = page.locator('#bento-board');
+    const unit = (await board.boundingBox())!.width / 12;
+    const gripBox = (await page.locator('#bento-move-evidence').boundingBox())!;
+
+    // evidence sits at x=8, 4 wide, on a 12-column board: one column right
+    // needs 13 and grows the board with it.
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      gripBox.x + gripBox.width / 2 + unit,
+      gripBox.y + gripBox.height / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+
+    await expect(board).toHaveAttribute('style', /--bento-columns: 13;/, { timeout: 10_000 });
+    await expect(page.locator('#bento-columns-input')).toHaveValue('13');
+  });
+
   test('removes an empty card straight away and confirms one with content', async ({ page }) => {
     await createBentoAndOpen(page, uniqueName('Bento Remove'));
 

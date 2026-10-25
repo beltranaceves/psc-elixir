@@ -61,7 +61,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
         >
           <.icon name="hero-pencil-square" class="size-4" /> Edit layout
         </button>
-
+        
         <div class="flex items-center gap-2">
           <%!-- The board's real grid. In Edit layout it is the control itself:
           columns on the left of the ×, rows on the right. Outside it the same
@@ -89,7 +89,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                   class="h-8 w-12 rounded-md border border-base-content/15 bg-base-100 px-1 text-center text-xs tabular-nums text-base-content focus:border-primary focus:outline-none"
                 />
               </form>
-              <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
+               <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
               <form id="bento-rows-form" phx-change="set_bento_rows">
                 <input
                   type="number"
@@ -117,7 +117,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
               <.icon name="hero-table-cells" class="size-4" /> {@columns} × {@rows}
             </span>
           <% end %>
-
+          
           <UIButton.button
             :if={@edit_structure?}
             type="button"
@@ -130,7 +130,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           </UIButton.button>
         </div>
       </div>
-
+      
       <div class="canvas-bento-scroll min-h-0 flex-1 overflow-auto p-3">
         <%= if @cards == [] do %>
           <div
@@ -139,7 +139,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           >
             <.icon name="hero-squares-plus" class="size-8 text-base-content/30" />
             <p class="text-sm text-base-content/60">This board has no cards yet.</p>
-
+            
             <UIButton.button
               type="button"
               id="empty-add-card"
@@ -155,6 +155,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
             id="bento-board"
             phx-hook="BentoBoard"
             data-columns={Structure.columns(@cells)}
+            data-max-columns={Structure.column_range().last}
             data-unit-x={bento_unit_x(Structure.columns(@cells))}
             data-unit-y={Structure.unit_px()}
             class="bento-board grid gap-2"
@@ -193,7 +194,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                   >
                     {Structure.size_label(card.w, card.h)}
                   </span>
-
+                  
                   <button
                     type="button"
                     data-bento-drag
@@ -206,7 +207,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                   >
                     <.icon name="hero-arrows-pointing-out" class="size-3.5" />
                   </button>
-
+                  
                   <button
                     type="button"
                     id={"card-accent-" <> card.key}
@@ -232,7 +233,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     <.icon name="hero-x-mark" class="size-3" />
                   </button>
                 </div>
-
+                
                 <div
                   :if={@structure_accent_picker == {:card, card.key}}
                   class="absolute left-1 top-11 z-30 flex flex-wrap items-center gap-1 rounded-md border border-base-content/10 bg-base-100 p-1 shadow-lg sm:left-auto sm:right-1 sm:top-9"
@@ -252,7 +253,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                       aria-label={"Set card accent #{token}"}
                     ></button>
                   <% end %>
-
+                  
                   <button
                     type="button"
                     phx-click="set_card_accent"
@@ -263,7 +264,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     None
                   </button>
                 </div>
-
+                
                 <button
                   type="button"
                   data-bento-resize

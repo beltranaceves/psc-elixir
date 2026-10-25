@@ -77,8 +77,10 @@ defmodule Psc.CanvasBentoTest do
           cells
         )
 
-      assert cells["one"]["placement"]["w"] == 6
+      # The card is at x=6, so widening it to 8 grows the board to 14.
+      assert cells["one"]["placement"]["w"] == 8
       assert cells["one"]["placement"]["h"] == 4
+      assert cells["bento_columns"] == 14
 
       cells =
         UnstrCanvasCRDT.apply_operation(
@@ -106,7 +108,9 @@ defmodule Psc.CanvasBentoTest do
       cells =
         UnstrCanvasCRDT.apply_operation(%{"type" => "remove_card", "cell_key" => "one"}, cells)
 
-      assert cells == %{"layout_mode" => "bento", "bento_columns" => 12}
+      # Removing the card leaves the widened grid behind: the board is a
+      # container, and a drag never shrinks it.
+      assert cells == %{"layout_mode" => "bento", "bento_columns" => 14}
     end
 
     test "clamping is identical for every replay of the same operation" do

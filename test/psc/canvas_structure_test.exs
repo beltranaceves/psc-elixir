@@ -172,11 +172,12 @@ defmodule Psc.Canvas.StructureTest do
   end
 
   describe "move, resize and accents" do
-    test "moves a card, clamped to the board" do
+    test "moves a card, growing the board to the right" do
       cells = bento(%{"a" => card(0, 0, 6, 2)})
       moved = Structure.move(cells, "a", 9, 3)
 
-      assert moved["a"]["placement"] == %{"x" => 6, "y" => 3, "w" => 6, "h" => 2}
+      assert moved["a"]["placement"] == %{"x" => 9, "y" => 3, "w" => 6, "h" => 2}
+      assert Structure.columns(moved) == 15
 
       # A card cannot be dragged off the left/top edge.
       moved = Structure.move(cells, "a", -4, -1)
@@ -184,12 +185,21 @@ defmodule Psc.Canvas.StructureTest do
       assert moved["a"]["placement"]["y"] == 0
     end
 
-    test "resizes a card, clamped to the board" do
+    test "resizes a card, growing the board and keeping its left edge" do
       cells = bento(%{"a" => card(8, 0, 4, 2)})
       resized = Structure.resize(cells, "a", 9, 0)
 
-      assert resized["a"]["placement"]["w"] == 4
+      # 8 + 9 = 17, past the 16-column ceiling: the board grows as far as it
+      # can and the card takes the space left of it.
+      assert Structure.columns(resized) == 16
+      assert resized["a"]["placement"]["x"] == 8
+      assert resized["a"]["placement"]["w"] == 8
       assert resized["a"]["placement"]["h"] == 0.5
+
+      # Inside the ceiling the width is taken as asked.
+      grown = Structure.resize(cells, "a", 4.5, 2)
+      assert Structure.columns(grown) == 13
+      assert grown["a"]["placement"]["w"] == 4.5
     end
 
     test "resize moves in half units" do
@@ -229,6 +239,34 @@ defmodule Psc.Canvas.StructureTest do
 
       assert [card] = Structure.cards(cells)
       assert Structure.placement_style(card) == "grid-column: 3 / span 3; grid-row: 5 / span 5;"
+    end
+
+    test "dragging past the right edge grows the board" do
+      cells = bento(%{"a" => card(0, 0, 6, 2)})
+      assert Structure.columns(cells) == 12
+
+      grown = Structure.move(cells, "a", 9, 0)
+      assert Structure.columns(grown) == 15
+      assert grown["a"]["placement"]["x"] == 9
+
+      # It cannot grow past the maximum; the card is clamped instead.
+      wide = Structure.move(cells, "a", 40, 0)
+      assert Structure.columns(wide) == 16
+      assert wide["a"]["placement"]["x"] == 10
+
+      # A resize grows it the same way, and a half step rounds up.
+      at_edge = Structure.move(cells, "a", 9, 0)
+      resized = Structure.resize(at_edge, "a", 6.5, 2)
+
+      assert Structure.columns(resized) == 16
+      assert resized["a"]["placement"]["w"] == 6.5
+    end
+
+    test "a drag inside the current grid does not change its width" do
+      cells = bento(%{"a" => card(0, 0, 4, 2), "bento_columns" => 16})
+
+      assert Structure.move(cells, "a", 2, 0)["bento_columns"] == 16
+      assert Structure.move(cells, "a", 0, 0)["bento_columns"] == 16
     end
 
     test "moving or resizing a missing card changes nothing" do

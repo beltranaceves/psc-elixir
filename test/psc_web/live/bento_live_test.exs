@@ -129,17 +129,28 @@ defmodule PscWeb.BentoLiveTest do
       # minimum, and the board keeps its content.
       assert has_element?(view, ~s|#bento-rows-input[min="5"]|)
 
+      # Widening the board leaves room to move a card into it.
+      render_change(view, "set_bento_columns", %{"value" => "16"})
+      assert Map.get(cells(canvas), "bento_columns") == 16
+
+      render_hook(view, "move_card", %{"cell_key" => "open_questions", "x" => 10, "y" => 3})
+      assert %{"x" => 10, "y" => 3} = placement(canvas, "open_questions")
+
       # Out-of-range values are ignored, not clamped, so typing 1 on the way
       # to 12 does not resize anything.
       render_change(view, "set_bento_columns", %{"value" => "1"})
-      assert Map.get(cells(canvas), "bento_columns") == 8
+      assert Map.get(cells(canvas), "bento_columns") == 16
 
       render_change(view, "set_bento_columns", %{"value" => "200"})
-      assert Map.get(cells(canvas), "bento_columns") == 8
+      assert Map.get(cells(canvas), "bento_columns") == 16
+
+      # Dragging a card past the edge grows the board with it.
+      render_hook(view, "move_card", %{"cell_key" => "evidence", "x" => 13, "y" => 0})
+      assert Map.get(cells(canvas), "bento_columns") == 16
 
       # Back to reading: the badge reports the new grid.
       view |> element("#edit-layout-toggle") |> render_click()
-      assert has_element?(view, "#bento-size", "8 × 9")
+      assert has_element?(view, "#bento-size", "16 × 9")
     end
 
     test "an empty board offers the first card", %{conn: conn, user: user} do
@@ -216,12 +227,13 @@ defmodule PscWeb.BentoLiveTest do
 
       assert %{"h" => 2.5} = placement(canvas, "decision")
 
-      # evidence is already at the right edge: it cannot grow wider.
+      # evidence sits at the old right edge: widening it grows the board.
       view
       |> element("#bento-move-evidence")
       |> render_keydown(%{"key" => "ArrowRight", "shiftKey" => true})
 
-      assert %{"x" => 8, "y" => 0, "w" => 4, "h" => 3} = placement(canvas, "evidence")
+      assert %{"x" => 8, "y" => 0, "w" => 4.5, "h" => 3} = placement(canvas, "evidence")
+      assert Map.get(cells(canvas), "bento_columns") == 13
     end
 
     test "a drag's final rectangle is applied like any other operation", %{

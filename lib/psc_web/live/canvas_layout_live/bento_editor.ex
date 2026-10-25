@@ -65,7 +65,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
               class="h-8 w-12 rounded-md border border-base-content/15 bg-base-100 px-1 text-center text-xs tabular-nums text-base-content focus:border-primary focus:outline-none disabled:opacity-60"
             />
           </form>
-          <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
+           <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
           <form id="designer-rows-form" phx-change="set_bento_rows">
             <input
               type="number"
@@ -84,7 +84,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
             />
           </form>
         </div>
-
+        
         <UIButton.button
           :if={@can_edit?}
           type="button"
@@ -96,7 +96,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
           <.icon name="hero-plus" class="size-4" /> Add card
         </UIButton.button>
       </div>
-
+      
       <div class="overflow-auto rounded-xl border border-base-content/10 bg-base-200/40 p-3">
         <%= if @cards == [] do %>
           <p class="p-6 text-center text-sm text-base-content/50">
@@ -107,6 +107,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
             id="designer-bento"
             phx-hook="BentoBoard"
             data-columns={@columns}
+            data-max-columns={Structure.column_range().last}
             class="bento-board grid gap-2"
             style={Structure.board_style(@columns, @rows)}
           >
@@ -131,7 +132,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                 >
                   {Structure.size_label(card.w, card.h)}
                 </span>
-
+                
                 <button
                   :if={@can_edit?}
                   type="button"
@@ -145,7 +146,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                 >
                   <.icon name="hero-arrows-pointing-out" class="size-3.5" />
                 </button>
-
+                
                 <form
                   id={"card-label-#{card.key}"}
                   phx-change="update_cell_meta"
@@ -163,7 +164,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                     class="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-medium text-base-content hover:border-base-content/10 focus:border-primary focus:outline-none"
                   />
                 </form>
-
+                
                 <button
                   :if={@can_edit?}
                   type="button"
@@ -190,7 +191,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                   <.icon name="hero-x-mark" class="size-3" />
                 </button>
               </div>
-
+              
               <div
                 :if={@accent_picker == {:card, card.key}}
                 id={"accent-picker-card-#{card.key}"}
@@ -220,7 +221,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                   None
                 </button>
               </div>
-
+              
               <ul class="space-y-1">
                 <li
                   :for={field <- card_fields(@layout_map, card.key)}
@@ -244,7 +245,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                       class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                     />
                   </form>
-
+                  
                   <form
                     id={"cell-#{card.key}-field-#{field}-form"}
                     phx-change="update_cell_field_default"
@@ -263,7 +264,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                       class="w-full min-w-0 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                     />
                   </form>
-
+                  
                   <button
                     :if={@can_edit?}
                     type="button"
@@ -278,7 +279,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                   </button>
                 </li>
               </ul>
-
+              
               <form
                 :if={@can_edit?}
                 id={"cell-#{card.key}-add-field-form"}
@@ -300,7 +301,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                   Add
                 </button>
               </form>
-
+              
               <button
                 :if={@can_edit?}
                 type="button"

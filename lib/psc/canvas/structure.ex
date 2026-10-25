@@ -477,32 +477,42 @@ defmodule Psc.Canvas.Structure do
     if bento?(map), do: Map.delete(map, key), else: map
   end
 
-  @doc "Move a card. Missing cards are a no-op."
+  @doc """
+  Move a card. Missing cards are a no-op.
+
+  Dragging past the right edge grows the board, the horizontal counterpart of
+  a card that drags the board taller: the columns follow the card instead of
+  clamping it. An explicit narrower grid (`set_columns/2`) still wins, because
+  that is the user asking for a smaller board.
+  """
   def move(map, key, x, y) do
-    update_card(map, key, fn cell ->
+    update_bento_card(map, key, fn map, cell ->
       current = placement(cell)
-      put_placement(cell, clamp_placement(map, %{current | x: x, y: y}))
+      x = x |> normalize_number(current.x) |> round()
+      map = grow_columns(map, x + current.w)
+
+      {map, put_placement(cell, clamp_placement(map, %{current | x: x, y: y}))}
     end)
   end
 
   @doc """
   Resize a card. Missing cards are a no-op.
 
-  The left edge stays put: a card that is dragged wider than the board shrinks
-  to the space left of it rather than jumping to a new column.
+  The left edge stays put, and a card dragged wider than the board grows the
+  board with it (up to the maximum column count).
   """
   def resize(map, key, w, h) do
-    update_card(map, key, fn cell ->
+    update_bento_card(map, key, fn map, cell ->
       current = placement(cell)
 
-      width =
-        w
-        |> normalize_number(current.w)
-        |> snap()
-        |> min(columns(map) - current.x)
-        |> max(min_size())
+      width = w |> normalize_number(current.w) |> snap() |> max(min_size())
+      map = grow_columns(map, current.x + width)
 
-      put_placement(cell, clamp_placement(map, %{current | w: width, h: h}))
+      # At the maximum width the card shrinks into the space left of it; its
+      # left edge never jumps to a different column.
+      width = width |> min(columns(map) - current.x) |> max(min_size())
+
+      {map, put_placement(cell, clamp_placement(map, %{current | w: width, h: h}))}
     end)
   end
 
@@ -558,6 +568,38 @@ defmodule Psc.Canvas.Structure do
         {:ok, cell} -> Map.put(map, key, fun.(cell))
         :error -> map
       end
+    else
+      map
+    end
+  end
+
+  # A card's geometry can change the board itself (the columns grow when a
+  # card is dragged past the edge), so the updater gets the map back too.
+  defp update_bento_card(map, key, fun) do
+    if bento?(map) do
+      case Map.fetch(cells(map), key) do
+        {:ok, cell} ->
+          {map, new_cell} = fun.(map, cell)
+          Map.put(map, key, new_cell)
+
+        :error ->
+          map
+      end
+    else
+      map
+    end
+  end
+
+  # Grow the grid so a card fits, up to the maximum width. Never shrinks: a
+  # narrower board is the explicit `set_columns/2`, never a side effect of a
+  # drag that ends before the edge.
+  defp grow_columns(map, needed) do
+    needed = ceil(needed)
+
+    if needed > columns(map) do
+      # Saturate at the maximum: a card dragged past it is clamped into the
+      # widest board the model allows rather than refusing to grow at all.
+      Map.put(map, "bento_columns", min(needed, @max_columns))
     else
       map
     end
