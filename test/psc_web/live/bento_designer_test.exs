@@ -69,7 +69,7 @@ defmodule PscWeb.BentoDesignerTest do
     card = Structure.card(template.layout_map, "card2")
 
     assert card.label == "Decision"
-    assert {card.x, card.y, card.w, card.h} == {5, 0, 6, 3}
+    assert {card.x, card.y, card.w, card.h} == {5, 0, 6, 2.5}
     assert card.accent == "teal"
   end
 

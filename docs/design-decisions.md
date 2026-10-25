@@ -1618,7 +1618,9 @@ long.
 
 **Decision.** A card's `h` is a minimum height in 72px row units, not a maximum. Cards
 grow with their content, and the board scrolls vertically. The table keeps its
-viewport-fit behaviour.
+viewport-fit behaviour. On a phone the board keeps its spatial layout and pans
+horizontally with a minimum column width, rather than squeezing twelve columns into the
+viewport or collapsing into one column (ADR-035's "the arrangement is the point").
 
 **Consequences.** The two modes scroll differently on purpose; the board is a document,
 the table is a dashboard.

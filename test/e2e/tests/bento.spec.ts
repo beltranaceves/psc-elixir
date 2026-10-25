@@ -85,7 +85,7 @@ test.describe('bento board', () => {
     // The move grip takes arrow keys: one column left, then shift+down grows.
     await page.locator('#bento-move-card1').focus();
     await page.keyboard.press('ArrowRight');
-    await expect(card).toHaveCSS('grid-column-start', '2');
+    await expect(card).toHaveCSS('grid-column-start', '3');
 
     await page.locator('#bento-move-card1').focus();
     await page.keyboard.press('Shift+ArrowDown');
@@ -97,7 +97,45 @@ test.describe('bento board', () => {
     const after = await card.boundingBox();
     expect(after).not.toBeNull();
     expect(before).not.toBeNull();
-    expect(after!.height).toBeGreaterThan(before!.height);
+
+    // Resize moves in half rows: a row unit is 72px, so half a step is 40px
+    // (one 32px track plus the 8px gap).
+    const grown = Math.round(after!.height - before!.height);
+    expect(grown).toBeGreaterThanOrEqual(38);
+    expect(grown).toBeLessThanOrEqual(42);
+  });
+
+  test('dragging the corner resizes by half a column', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Drag Resize'));
+
+    await page.locator('#edit-layout-toggle').click();
+
+    const card = page.locator('#bento-card-decision');
+    const handle = card.locator('[data-bento-resize]');
+    const board = page.locator('#bento-board');
+
+    const columns = Number(await board.getAttribute('data-columns'));
+    const boardBox = (await board.boundingBox())!;
+    const unit = boardBox.width / columns;
+
+    await expect(card).toHaveCSS('grid-column-end', 'span 12');
+
+    const handleBox = (await handle.boundingBox())!;
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2 + unit / 2,
+      handleBox.y + handleBox.height / 2,
+      { steps: 6 },
+    );
+    await page.mouse.up();
+
+    // One half-column step, not a whole one.
+    await expect(card).toHaveCSS('grid-column-end', 'span 13');
+
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
+      timeout: 15_000,
+    });
   });
 
   test('removes an empty card straight away and confirms one with content', async ({ page }) => {
@@ -132,6 +170,22 @@ test.describe('bento board on a phone', () => {
 
   test('a tap fullscreens a card and a swipe follows the board', async ({ page }) => {
     await createBentoAndOpen(page, uniqueName('Bento Phone'));
+
+    // The board keeps its spatial layout: it is wider than the viewport and
+    // pans horizontally instead of squeezing twelve columns into 390px.
+    const board = page.locator('#bento-board');
+    const scroll = await board.evaluate(el => ({
+      width: el.getBoundingClientRect().width,
+      viewport: el.parentElement!.clientWidth,
+    }));
+    expect(scroll.width).toBeGreaterThan(scroll.viewport + 40);
+
+    // And it actually pans: scrolling the board sideways moves it.
+    const scrolled = await page.locator('.canvas-bento-scroll').evaluate(el => {
+      el.scrollLeft = 240;
+      return el.scrollLeft;
+    });
+    expect(scrolled).toBeGreaterThan(100);
 
     // First tap opens the card full screen; it is not editing yet.
     await page.locator('#cell-card-big_picture').tap();

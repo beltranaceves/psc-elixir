@@ -27,7 +27,7 @@ A bento canvas (and a bento template) is flat, exactly like a canvas's `cells`:
 |---|---|
 | `layout_mode` | `"bento"`. Absent means a table. |
 | `bento_columns` | 4–16, default 12 |
-| `placement` | `x`, `y` (0-based grid units), `w`, `h` (units). `h` is a **minimum** |
+| `placement` | `x`, `y` (0-based whole columns/rows), `w`, `h` (whole or half units). `h` is a **minimum** |
 | `accent` | optional token from `Psc.Canvas.Accent` |
 | everything else | the cell's fields, `label` and `titles`, as in a table |
 
@@ -36,7 +36,11 @@ rendered as editable fields.
 
 ## Constraints
 
-- `w`, `h` ≥ 1; `x` ≥ 0, `y` ≥ 0; `x + w ≤ bento_columns`.
+- `w`, `h` ≥ 0.5, in half steps; `x` ≥ 0, `y` ≥ 0, both whole; `x + w ≤ bento_columns`.
+  A card starts on a column, but its size can be half a column (or row), so a resize
+  is twice as fine as the template's grid. The board renders two CSS tracks per column
+  (`Structure.tracks_per_unit/0`) to make that possible; one row unit is 72px including
+  the 8px gap, so a half step is 40px.
 - A template needs at least one card to save; a canvas may be empty (the empty state adds
   the first card).
 - Unknown accents and columns outside 4–16 are rejected by the schema.
@@ -71,6 +75,16 @@ started sends nothing.
   lives in the hook because the LiveView keydown payload does not carry modifier flags.
 - Removing a card with content opens the same confirmation as a row or column.
 - Cards carry `data-cell-nav` for the mobile fullscreen swipe (ADR-037).
+- A card's body is in the flow, so the card grows with its Markdown and takes its grid
+  rows along; `h` is a minimum, never a clip.
+
+## On a phone
+
+The spatial arrangement is the point, so a phone does not collapse the board into one
+column. Columns keep a minimum width (3rem below `sm`, 3.5rem up to `lg`) and the board
+pans horizontally inside its scroll area; the card cut off at the edge is the affordance,
+the same one the table grid uses. From `lg` the board fits the viewport again. Cards keep
+the tap-to-fullscreen behaviour, and edit-mode controls grow to 32px touch targets.
 
 ## Designer
 

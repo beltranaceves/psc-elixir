@@ -10,6 +10,11 @@
 // operation, so every client (including this one) converges on the same board.
 const PREVIEW_ATTR = "data-bento-preview"
 
+// The board is drawn with two CSS tracks per column (or row unit), so a card
+// can be resized by half a column without changing the template's grid.
+const TRACKS_PER_UNIT = 2
+const MIN_SIZE = 1 / TRACKS_PER_UNIT
+
 export default {
   mounted() {
     this.columns = Number(this.el.dataset.columns) || 12
@@ -62,22 +67,24 @@ export default {
     if (!this.card) return
     event.preventDefault()
 
-    const dx = Math.round((event.clientX - this.start.x) / this.units.x)
-    const dy = Math.round((event.clientY - this.start.y) / this.units.y)
+    const dx = (event.clientX - this.start.x) / this.units.x
+    const dy = (event.clientY - this.start.y) / this.units.y
 
     const next =
       this.mode === "move"
         ? {
-            x: clamp(this.origin.x + dx, 0, this.columns - this.origin.w),
-            y: Math.max(0, this.origin.y + dy),
+            x: clamp(this.origin.x + Math.round(dx), 0, this.columns - this.origin.w),
+            y: Math.max(0, this.origin.y + Math.round(dy)),
             w: this.origin.w,
             h: this.origin.h,
           }
         : {
             x: this.origin.x,
             y: this.origin.y,
-            w: clamp(this.origin.w + dx, 1, this.columns - this.origin.x),
-            h: Math.max(1, this.origin.h + dy),
+            // Half-column steps: the pointer has to travel half a column
+            // before the card grows.
+            w: clamp(snap(this.origin.w + dx), MIN_SIZE, this.columns - this.origin.x),
+            h: Math.max(MIN_SIZE, snap(this.origin.h + dy)),
           }
 
     this.preview = next
@@ -138,8 +145,8 @@ export default {
 
     this.pushEvent("resize_card", {
       cell_key: card.id.replace("bento-card-", ""),
-      w: clamp(placement.w + delta.x, 1, columns - placement.x),
-      h: Math.max(1, placement.h + delta.y),
+      w: clamp(placement.w + delta.x * MIN_SIZE, MIN_SIZE, columns - placement.x),
+      h: Math.max(MIN_SIZE, placement.h + delta.y * MIN_SIZE),
     })
   },
 
@@ -151,7 +158,8 @@ export default {
     const rowGap = parseFloat(styles.rowGap) || 0
     const width = this.el.clientWidth - gap * (this.columns - 1)
     const column = width / this.columns
-    const row = parseFloat(styles.gridAutoRows) || 72
+    // One row unit is two tracks of half height.
+    const row = (parseFloat(styles.gridAutoRows) || 36) * TRACKS_PER_UNIT
 
     return { x: column + gap, y: row + rowGap }
   },
@@ -164,10 +172,10 @@ export default {
     const rowEnd = style.gridRowEnd.replace("span ", "")
 
     return {
-      x: Number(columnStart || style.gridColumnStart) - 1,
-      y: Number(rowStart || style.gridRowStart) - 1,
-      w: Number(columnEnd),
-      h: Number(rowEnd),
+      x: (Number(columnStart || style.gridColumnStart) - 1) / TRACKS_PER_UNIT,
+      y: (Number(rowStart || style.gridRowStart) - 1) / TRACKS_PER_UNIT,
+      w: Number(columnEnd) / TRACKS_PER_UNIT,
+      h: Number(rowEnd) / TRACKS_PER_UNIT,
     }
   },
 
@@ -178,8 +186,8 @@ export default {
 
   applyPreview(placement) {
     if (!this.card) return
-    this.card.style.gridColumn = `${placement.x + 1} / span ${placement.w}`
-    this.card.style.gridRow = `${placement.y + 1} / span ${placement.h}`
+    this.card.style.gridColumn = `${round(placement.x * TRACKS_PER_UNIT) + 1} / span ${round(placement.w * TRACKS_PER_UNIT)}`
+    this.card.style.gridRow = `${round(placement.y * TRACKS_PER_UNIT) + 1} / span ${round(placement.h * TRACKS_PER_UNIT)}`
   },
 
   clearPreview() {
@@ -198,4 +206,13 @@ const KEY_DELTAS = {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
+}
+
+function round(value) {
+  return Math.round(value)
+}
+
+// Half-column steps, with no floating-point drift.
+function snap(value) {
+  return Math.round(value * TRACKS_PER_UNIT) / TRACKS_PER_UNIT
 }

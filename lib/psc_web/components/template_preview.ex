@@ -96,7 +96,8 @@ defmodule PscWeb.Components.TemplatePreview do
       |> assign(
         :boxes,
         Enum.map(cards, fn card ->
-          {card, clamp_int(card.y + 1, 1, clipped), clamp_int(card.h, 1, clipped)}
+          {card, clamp_int(Structure.track(card.y) + 1, 1, clipped),
+           clamp_int(Structure.track(card.h), 1, clipped * Structure.tracks_per_unit())}
         end)
       )
 
@@ -104,8 +105,8 @@ defmodule PscWeb.Components.TemplatePreview do
     <div
       class="grid h-16 w-full gap-1"
       style={
-        "grid-template-columns: repeat(#{@columns}, minmax(0, 1fr));" <>
-          "grid-template-rows: repeat(#{@cell_rows}, minmax(0, 1fr));"
+        "grid-template-columns: repeat(#{@columns * Structure.tracks_per_unit()}, minmax(0, 1fr));" <>
+          "grid-template-rows: repeat(#{@cell_rows * Structure.tracks_per_unit()}, minmax(0, 1fr));"
       }
     >
       <div
@@ -115,7 +116,7 @@ defmodule PscWeb.Components.TemplatePreview do
           card.accent && swatch_class(card.accent)
         ]}
         style={
-          "grid-column: #{card.x + 1} / span #{card.w};" <>
+          "grid-column: #{Structure.track(card.x) + 1} / span #{Structure.track(card.w)};" <>
             "grid-row: #{row_start} / span #{row_span};"
         }
         title={card.label}
@@ -188,8 +189,8 @@ defmodule PscWeb.Components.TemplatePreview do
     <div
       class="grid gap-1 p-2"
       style={
-        "grid-template-columns: repeat(#{@columns}, minmax(0, 1fr));" <>
-          "grid-template-rows: repeat(#{@rows}, minmax(3rem, auto));"
+        "grid-template-columns: repeat(#{@columns * Structure.tracks_per_unit()}, minmax(0, 1fr));" <>
+          "grid-template-rows: repeat(#{@rows * Structure.tracks_per_unit()}, minmax(1.5rem, auto));"
       }
     >
       <div
@@ -198,7 +199,7 @@ defmodule PscWeb.Components.TemplatePreview do
           "relative min-h-0 overflow-hidden rounded-md border border-base-content/15 bg-base-100 p-1.5 text-xs text-base-content/80",
           card.accent && swatch_class(card.accent)
         ]}
-        style={"grid-column: #{card.x + 1} / span #{card.w}; grid-row: #{card.y + 1} / span #{card.h};"}
+        style={Structure.placement_style(card)}
       >
         <span class="relative z-10 line-clamp-2 font-medium">{card.label}</span>
       </div>

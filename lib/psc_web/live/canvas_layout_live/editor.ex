@@ -324,7 +324,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     {:noreply,
      update_layout(
        socket,
-       &Structure.resize(&1, key, to_unit(params["w"]), to_unit(params["h"]))
+       &Structure.resize(&1, key, to_size(params["w"]), to_size(params["h"]))
      )}
   end
 
@@ -678,7 +678,8 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
       card ->
         if resize? do
-          Structure.resize(lm, key, card.w + dx, card.h + dy)
+          step = Structure.min_size()
+          Structure.resize(lm, key, card.w + dx * step, card.h + dy * step)
         else
           Structure.move(lm, key, card.x + dx, card.y + dy)
         end
@@ -712,6 +713,18 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
         0
     end
   end
+
+  # A size keeps its half: 2.5 rows must not become 2.
+  defp to_size(value) when is_integer(value) or is_float(value), do: value
+
+  defp to_size(value) when is_binary(value) do
+    case Float.parse(value) do
+      {number, _rest} -> number
+      :error -> 0
+    end
+  end
+
+  defp to_size(_other), do: 0
 
   defp add_column(lm) do
     idx = length(lm["columns"]) + 1

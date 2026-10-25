@@ -24,6 +24,14 @@ defmodule Psc.Canvas.Structure do
 
   alias Psc.Canvas.Accent
 
+  # A card's width and height move in half columns/rows, so a resize is fine
+  # grained without changing the column grid a template is designed on. The
+  # board is rendered with two CSS tracks per column (`tracks_per_unit/0`), and
+  # a stored `w` of 1.5 spans three tracks.
+  @tracks_per_unit 2
+  @unit_px 72
+  @row_gap_px 8
+
   @default_columns 12
   @min_columns 4
   @max_columns 16
@@ -78,6 +86,50 @@ defmodule Psc.Canvas.Structure do
 
   @doc "The smallest and largest column counts a bento may have."
   def column_range, do: @min_columns..@max_columns
+
+  @doc "How many CSS grid tracks one column (or row unit) spans."
+  def tracks_per_unit, do: @tracks_per_unit
+
+  @doc "The height of one row unit, in pixels, including one gap."
+  def unit_px, do: @unit_px
+
+  @doc "The gap between two cards, in pixels."
+  def gap_px, do: @row_gap_px
+
+  @doc "The smallest width or height a card may have, in columns/rows."
+  def min_size, do: 1 / @tracks_per_unit
+
+  @doc """
+  The CSS grid style of a board.
+
+  Two tracks per unit keep the template's column grid intact while letting a
+  card be resized by half a column.
+  """
+  def board_style(columns) do
+    tracks = round(columns * @tracks_per_unit)
+
+    # A card of `h` units spans `2h` tracks and the gaps between them, so the
+    # track height subtracts one gap to keep one unit exactly 72px:
+    #   2 * 32 + 8 = 72. Half a unit is then 32 + 8 = 40px, half a step.
+    gap = @row_gap_px
+    row_height = div(@unit_px - gap, @tracks_per_unit)
+
+    # `minmax` rather than a fixed height: a card's `h` is a minimum, so a card
+    # holding a long note grows and takes its grid rows with it.
+    "--bento-columns: #{columns}; " <>
+      "grid-template-columns: repeat(#{tracks}, minmax(0, 1fr)); " <>
+      "grid-auto-rows: minmax(#{row_height}px, auto); " <>
+      "gap: #{gap}px;"
+  end
+
+  @doc "The CSS grid placement of one card."
+  def placement_style(card) do
+    "grid-column: #{track(card.x) + 1} / span #{track(card.w)}; " <>
+      "grid-row: #{track(card.y) + 1} / span #{track(card.h)};"
+  end
+
+  @doc "A placement value converted to CSS tracks."
+  def track(value), do: round(value * @tracks_per_unit)
 
   @doc """
   The cells of a map.
@@ -206,10 +258,10 @@ defmodule Psc.Canvas.Structure do
     case cell["placement"] do
       %{} = placement ->
         %{
-          x: normalize_int(placement["x"], 0),
-          y: normalize_int(placement["y"], 0),
-          w: normalize_int(placement["w"], 1),
-          h: normalize_int(placement["h"], 1)
+          x: normalize_number(placement["x"], 0),
+          y: normalize_number(placement["y"], 0),
+          w: placement |> get_number("w", 1) |> snap() |> max(min_size()),
+          h: placement |> get_number("h", 1) |> snap() |> max(min_size())
         }
 
       _other ->
@@ -226,28 +278,64 @@ defmodule Psc.Canvas.Structure do
   def clamp_placement(map, placement) do
     board_columns = columns(map)
 
-    w = placement |> get_int("w", @default_card_width) |> min(board_columns) |> max(1)
+    w =
+      placement
+      |> get_number("w", @default_card_width)
+      |> snap()
+      |> min(board_columns)
+      |> max(min_size())
 
     h =
       placement
-      |> get_int("h", @default_card_height)
+      |> get_number("h", @default_card_height)
+      |> snap()
       |> min(@max_card_height)
-      |> max(1)
+      |> max(min_size())
 
+    # A card starts on a whole column: only its size is half-stepped, so the
+    # board keeps a tidy left edge and the neighbours stay easy to read.
     x =
       placement
-      |> get_int("x", 0)
+      |> get_number("x", 0)
+      |> round()
       |> max(0)
-      |> min(board_columns - w)
+      |> min(trunc(board_columns - w))
 
-    y = placement |> get_int("y", 0) |> max(0)
+    y = placement |> get_number("y", 0) |> round() |> max(0)
 
     %{x: x, y: y, w: w, h: h}
   end
 
-  defp get_int(map, key, default) do
+  defp get_number(map, key, default) do
     Map.get(map, key) || Map.get(map, String.to_existing_atom(key)) || default
   end
+
+  # Half steps, exactly: 0.5 is representable, so clamping the same value twice
+  # always lands on the same number.
+  defp snap(value) do
+    snapped =
+      value
+      |> normalize_number(0)
+      |> Kernel.*(@tracks_per_unit)
+      |> round()
+      |> Kernel./(@tracks_per_unit)
+
+    # Store whole sizes as integers: the JSON stays readable, and a replayed
+    # event compares equal to the one that produced it.
+    if snapped == trunc(snapped), do: trunc(snapped), else: snapped
+  end
+
+  defp normalize_number(value, _default) when is_integer(value), do: value
+  defp normalize_number(value, _default) when is_float(value), do: value
+
+  defp normalize_number(value, default) when is_binary(value) do
+    case Float.parse(value) do
+      {number, _rest} -> number
+      :error -> default
+    end
+  end
+
+  defp normalize_number(_value, default), do: default
 
   defp normalize_int(value, _default) when is_integer(value), do: value
   defp normalize_int(value, _default) when is_float(value), do: trunc(value)
@@ -350,9 +438,10 @@ defmodule Psc.Canvas.Structure do
 
       width =
         w
-        |> normalize_int(current.w)
+        |> normalize_number(current.w)
+        |> snap()
         |> min(columns(map) - current.x)
-        |> max(1)
+        |> max(min_size())
 
       put_placement(cell, clamp_placement(map, %{current | w: width, h: h}))
     end)
@@ -595,11 +684,12 @@ defmodule Psc.Canvas.Structure do
       not is_map(placement) ->
         {:error, :layout_map, "card #{key} has no placement"}
 
-      not integers?(placement) ->
-        {:error, :layout_map, "card #{key} has a placement that is not a whole number of units"}
+      not valid_placement_units?(placement) ->
+        {:error, :layout_map,
+         "card #{key} must start on a column and be a whole number of half columns wide"}
 
-      placement["w"] < 1 or placement["h"] < 1 ->
-        {:error, :layout_map, "card #{key} must be at least one unit wide and tall"}
+      placement["w"] < min_size() or placement["h"] < min_size() ->
+        {:error, :layout_map, "card #{key} must be at least half a unit wide and tall"}
 
       placement["x"] < 0 or placement["y"] < 0 ->
         {:error, :layout_map, "card #{key} is placed outside the board"}
@@ -615,7 +705,18 @@ defmodule Psc.Canvas.Structure do
     end
   end
 
-  defp integers?(placement), do: Enum.all?(["x", "y", "w", "h"], &is_integer(placement[&1]))
+  # A card starts on a whole column, and its size is a multiple of half a
+  # column - the granularity a resize moves in.
+  defp valid_placement_units?(placement) do
+    Enum.all?(["x", "y"], &is_number(placement[&1])) and
+      Enum.all?(["x", "y"], &(placement[&1] == round(placement[&1]))) and
+      Enum.all?(["w", "h"], &is_number(placement[&1])) and
+      Enum.all?(
+        ["w", "h"],
+        &(abs(placement[&1] * @tracks_per_unit - round(placement[&1] * @tracks_per_unit)) < 1.0e-9)
+      )
+  end
+
   defp valid_label?(nil), do: true
   defp valid_label?(label), do: is_binary(label)
 

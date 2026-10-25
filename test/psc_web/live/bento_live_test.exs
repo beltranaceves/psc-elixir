@@ -41,12 +41,12 @@ defmodule PscWeb.BentoLiveTest do
       # The placement is the card's grid rectangle.
       assert has_element?(
                view,
-               ~s|#bento-card-big_picture[style*="grid-column: 1 / span 8"]|
+               ~s|#bento-card-big_picture[style*="grid-column: 1 / span 16"]|
              )
 
       assert has_element?(
                view,
-               ~s|#bento-card-evidence[style*="grid-column: 9 / span 4"]|
+               ~s|#bento-card-evidence[style*="grid-column: 17 / span 8"]|
              )
 
       # The card's Markdown field keeps the same editor id as in a table.
@@ -140,7 +140,7 @@ defmodule PscWeb.BentoLiveTest do
       |> render_keydown(%{"key" => "ArrowRight"})
 
       assert %{"x" => 1, "y" => 3} = placement(canvas, "decision")
-      assert has_element?(view, ~s|#bento-card-decision[style*="grid-column: 2 / span 6"]|)
+      assert has_element?(view, ~s|#bento-card-decision[style*="grid-column: 3 / span 12"]|)
 
       view
       |> element("#bento-move-decision")
@@ -149,24 +149,33 @@ defmodule PscWeb.BentoLiveTest do
       assert %{"x" => 1, "y" => 4} = placement(canvas, "decision")
     end
 
-    test "shift with an arrow resizes a card", %{conn: conn, user: user} do
+    test "shift with an arrow resizes a card in half units", %{conn: conn, user: user} do
       canvas = bento_canvas(user)
       {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
       view |> element("#edit-layout-toggle") |> render_click()
 
+      # decision is 6 columns wide at x=0; one shift+right adds half a column.
+      view
+      |> element("#bento-move-decision")
+      |> render_keydown(%{"key" => "ArrowRight", "shiftKey" => true})
+
+      assert %{"x" => 0, "y" => 3, "w" => 6.5, "h" => 2} = placement(canvas, "decision")
+      assert has_element?(view, ~s|#bento-card-decision[style*="grid-column: 1 / span 13"]|)
+
+      # Height resizes in half rows too.
+      view
+      |> element("#bento-move-decision")
+      |> render_keydown(%{"key" => "ArrowDown", "shiftKey" => true})
+
+      assert %{"h" => 2.5} = placement(canvas, "decision")
+
+      # evidence is already at the right edge: it cannot grow wider.
       view
       |> element("#bento-move-evidence")
       |> render_keydown(%{"key" => "ArrowRight", "shiftKey" => true})
 
       assert %{"x" => 8, "y" => 0, "w" => 4, "h" => 3} = placement(canvas, "evidence")
-
-      # It cannot grow past the board's edge.
-      view
-      |> element("#bento-move-evidence")
-      |> render_keydown(%{"key" => "ArrowRight", "shiftKey" => true})
-
-      assert %{"w" => 4} = placement(canvas, "evidence")
     end
 
     test "a drag's final rectangle is applied like any other operation", %{
@@ -240,7 +249,7 @@ defmodule PscWeb.BentoLiveTest do
       # The browser reloads: the snapshot plus the event log rebuilds the board.
       {:ok, again, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      assert has_element?(again, ~s|#bento-card-open_questions[style*="grid-row: 6 / span 2"]|)
+      assert has_element?(again, ~s|#bento-card-open_questions[style*="grid-row: 11 / span 4"]|)
       assert %{"x" => 0, "y" => 5} = placement(canvas, "open_questions")
     end
   end

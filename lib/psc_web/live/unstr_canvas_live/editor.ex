@@ -844,8 +844,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      process_operation(socket, %{
        "type" => "resize_card",
        "cell_key" => key,
-       "w" => to_unit(params["w"]),
-       "h" => to_unit(params["h"])
+       "w" => to_size(params["w"]),
+       "h" => to_size(params["h"])
      })}
   end
 
@@ -990,11 +990,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       card ->
         operation =
           if resize? do
+            # Resize moves in half units; a move still goes one column at a
+            # time, so cards stay aligned to the template's grid.
+            step = Structure.min_size()
+
             %{
               "type" => "resize_card",
               "cell_key" => key,
-              "w" => card.w + dx,
-              "h" => card.h + dy
+              "w" => card.w + dx * step,
+              "h" => card.h + dy * step
             }
           else
             %{"type" => "move_card", "cell_key" => key, "x" => card.x + dx, "y" => card.y + dy}
@@ -1024,6 +1028,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         0
     end
   end
+
+  # A size keeps its half: 2.5 rows must not become 2.
+  defp to_size(value) when is_integer(value) or is_float(value), do: value
+
+  defp to_size(value) when is_binary(value) do
+    case Float.parse(value) do
+      {number, _rest} -> number
+      :error -> 0
+    end
+  end
+
+  defp to_size(_other), do: 0
 
   defp structure_has_content?(cells, ref_key, ref_id) do
     Enum.any?(cells, fn

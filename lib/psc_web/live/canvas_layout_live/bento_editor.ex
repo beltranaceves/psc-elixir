@@ -58,14 +58,14 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
             id="designer-bento"
             phx-hook="BentoBoard"
             data-columns={@columns}
-            class="grid gap-2"
-            style={"grid-template-columns: repeat(#{@columns}, minmax(0, 1fr)); grid-auto-rows: 72px;"}
+            class="bento-board grid gap-2"
+            style={Structure.board_style(@columns)}
           >
             <div
               :for={card <- @cards}
               id={"bento-card-#{card.key}"}
               class="relative min-h-0 rounded-lg border border-base-content/15 bg-base-100 p-2"
-              style={placement_style(card)}
+              style={Structure.placement_style(card)}
             >
               <div class="mb-1 flex items-center gap-1">
                 <button
@@ -75,7 +75,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                   id={"designer-move-#{card.key}"}
                   phx-keydown="nudge_card"
                   phx-value-cell_key={card.key}
-                  class="inline-flex size-6 cursor-move items-center justify-center rounded text-base-content/60 hover:bg-base-content/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  class="inline-flex size-8 cursor-move touch-none items-center justify-center rounded text-base-content/60 hover:bg-base-content/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:size-6"
                   title="Drag to move, or use the arrow keys (Shift to resize)"
                   aria-label={"Move #{card.label}. Use the arrow keys, with shift to resize."}
                 >
@@ -241,7 +241,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                 :if={@can_edit?}
                 type="button"
                 data-bento-resize
-                class="absolute -bottom-1 -right-1 size-4 cursor-nwse-resize rounded-sm border border-primary/50 bg-base-100"
+                class="absolute -bottom-1 -right-1 size-6 cursor-nwse-resize touch-none rounded-sm border border-primary/50 bg-base-100 sm:size-4"
                 title="Resize"
                 aria-label={"Resize #{card.label}"}
               ></button>
@@ -251,10 +251,6 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
       </div>
     </div>
     """
-  end
-
-  defp placement_style(card) do
-    "grid-column: #{card.x + 1} / span #{card.w}; grid-row: #{card.y + 1} / span #{card.h};"
   end
 
   defp card_fields(lm, key), do: (Structure.cell(lm, key) || %{})["fields"] || []

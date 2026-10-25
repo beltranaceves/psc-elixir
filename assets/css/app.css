@@ -630,6 +630,66 @@
     }
   }
 
+  /* Bento board. The spatial arrangement is the point, so a phone does not
+     collapse it into one column: columns keep a minimum width and the board
+     pans horizontally instead. The cut-off card at the edge is the affordance,
+     the same one the table grid uses. */
+  .bento-board {
+    --bento-min-column: 3rem;
+    --bento-gap: 0.5rem;
+    min-width: max(
+      100%,
+      calc(
+        var(--bento-columns) * var(--bento-min-column) +
+          (var(--bento-columns) - 1) * var(--bento-gap)
+      )
+    );
+  }
+
+  @media (min-width: 640px) {
+    .bento-board {
+      --bento-min-column: 3.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .bento-board {
+      --bento-min-column: 0rem;
+      min-width: 100%;
+    }
+  }
+
+  /* A bento card's height is a minimum (ADR-038): its body stays in the flow
+     and the card grows with its Markdown, taking its grid rows along. The
+     table's clip-and-fade treatment would hide exactly the text the card was
+     resized for. */
+  .bento-card .canvas-cell,
+  .bento-card .canvas-cell:focus-within {
+    position: relative;
+    top: auto;
+    left: auto;
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  .bento-card .canvas-cell .cell-body {
+    position: static;
+    height: auto;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .bento-card .canvas-cell.is-expanded {
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   /* Markdown headings stay proportionate in a space-constrained cell, so
      words wrap normally instead of breaking mid-word. */
   .canvas-cell .md-render :is(h1, h2) {

@@ -90,17 +90,15 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
             phx-hook="BentoBoard"
             data-columns={Structure.columns(@cells)}
             data-unit-x={bento_unit_x(Structure.columns(@cells))}
-            data-unit-y="72"
+            data-unit-y={Structure.unit_px()}
             class="bento-board grid gap-2"
-            style={
-              "grid-template-columns: repeat(#{Structure.columns(@cells)}, minmax(0, 1fr)); grid-auto-rows: 72px;"
-            }
+            style={Structure.board_style(Structure.columns(@cells))}
           >
             <div
               :for={card <- @cards}
               id={"bento-card-#{card.key}"}
-              class="relative min-h-0 rounded-lg"
-              style={placement_style(card)}
+              class="bento-card relative min-h-0 rounded-lg"
+              style={Structure.placement_style(card)}
             >
               <Cell.card
                 cell_key={card.key}
@@ -120,7 +118,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     id={"bento-move-" <> card.key}
                     phx-keydown="nudge_card"
                     phx-value-cell_key={card.key}
-                    class="inline-flex size-6 cursor-move items-center justify-center rounded text-base-content/60 hover:bg-base-content/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    class="inline-flex size-8 cursor-move touch-none items-center justify-center rounded text-base-content/60 hover:bg-base-content/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:size-6"
                     title="Drag to move, or use the arrow keys (Shift to resize)"
                     aria-label={"Move #{card.label}. Use the arrow keys, with shift to resize."}
                   >
@@ -134,7 +132,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     phx-value-group="card"
                     phx-value-id={card.key}
                     class={[
-                      "size-6 rounded-full ring-2 ring-base-content/20 transition hover:ring-primary",
+                      "size-8 rounded-full ring-2 ring-base-content/20 transition hover:ring-primary sm:size-6",
                       swatch_class(card.accent)
                     ]}
                     title="Card colour"
@@ -145,7 +143,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     id={"remove-card-" <> card.key}
                     phx-click="request_remove_card"
                     phx-value-cell_key={card.key}
-                    class="inline-flex size-6 items-center justify-center rounded border border-error/40 text-error transition-colors hover:bg-error/10"
+                    class="inline-flex size-8 items-center justify-center rounded border border-error/40 text-error transition-colors hover:bg-error/10 sm:size-6"
                     title="Remove card"
                     aria-label={"Remove #{card.label}"}
                   >
@@ -187,7 +185,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                 <button
                   type="button"
                   data-bento-resize
-                  class="absolute -bottom-1 -right-1 z-20 size-4 cursor-nwse-resize rounded-sm border border-primary/50 bg-base-100"
+                  class="absolute -bottom-1 -right-1 z-20 size-6 cursor-nwse-resize touch-none rounded-sm border border-primary/50 bg-base-100 sm:size-4"
                   title="Resize"
                   aria-label={"Resize #{card.label}"}
                 ></button>
@@ -198,12 +196,6 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
       </div>
     </div>
     """
-  end
-
-  # The card's rectangle, in the board's own units. The server clamps the
-  # values, so the style never has to.
-  defp placement_style(card) do
-    "grid-column: #{card.x + 1} / span #{card.w}; grid-row: #{card.y + 1} / span #{card.h};"
   end
 
   # The nominal width of one grid column, for the drag hook. The real width is

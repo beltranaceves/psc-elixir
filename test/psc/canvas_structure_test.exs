@@ -140,7 +140,7 @@ defmodule Psc.Canvas.StructureTest do
     test "clamps a placement into the board" do
       cells = Structure.add_card(bento(), "new", %{"x" => 11, "y" => -3, "w" => 40, "h" => 0})
 
-      assert %{"placement" => %{"x" => 0, "y" => 0, "w" => 12, "h" => 1}} = cells["new"]
+      assert %{"placement" => %{"x" => 0, "y" => 0, "w" => 12, "h" => 0.5}} = cells["new"]
     end
 
     test "is idempotent for an existing key" do
@@ -172,7 +172,40 @@ defmodule Psc.Canvas.StructureTest do
       resized = Structure.resize(cells, "a", 9, 0)
 
       assert resized["a"]["placement"]["w"] == 4
-      assert resized["a"]["placement"]["h"] == 1
+      assert resized["a"]["placement"]["h"] == 0.5
+    end
+
+    test "resize moves in half units" do
+      cells = bento(%{"a" => card(0, 0, 6, 2)})
+
+      half = Structure.resize(cells, "a", 6.5, 2.5)
+      assert half["a"]["placement"]["w"] == 6.5
+      assert half["a"]["placement"]["h"] == 2.5
+
+      # Anything finer than half a column snaps to the nearest half.
+      snapped = Structure.resize(cells, "a", 6.3, 2.2)
+      assert snapped["a"]["placement"]["w"] == 6.5
+      assert snapped["a"]["placement"]["h"] == 2.0
+    end
+
+    test "a half-width card is valid; a quarter-width card is not" do
+      assert Structure.validate(bento(%{"a" => card(0, 0, 0.5, 2)})) == :ok
+
+      assert {:error, _, message} =
+               Structure.validate(bento(%{"a" => card(0, 0, 1.25, 2)}))
+
+      assert message =~ "half columns"
+    end
+
+    test "the board renders two tracks per column" do
+      cells = bento(%{"a" => card(1, 2, 1.5, 2.5)})
+
+      assert Structure.board_style(12) ==
+               "--bento-columns: 12; grid-template-columns: repeat(24, minmax(0, 1fr)); " <>
+                 "grid-auto-rows: minmax(32px, auto); gap: 8px;"
+
+      assert [card] = Structure.cards(cells)
+      assert Structure.placement_style(card) == "grid-column: 3 / span 3; grid-row: 5 / span 5;"
     end
 
     test "moving or resizing a missing card changes nothing" do
@@ -273,7 +306,7 @@ defmodule Psc.Canvas.StructureTest do
       assert {:error, _, message} =
                Structure.validate(bento(%{"a" => card("0", 0, 6, 2)}))
 
-      assert message =~ "not a whole number"
+      assert message =~ "half columns"
     end
 
     test "the column count is bounded" do
