@@ -197,6 +197,12 @@ defmodule Psc.Canvas.StructureTest do
       assert message =~ "half columns"
     end
 
+    test "size labels print whole numbers without a decimal tail" do
+      assert Structure.size_label(12, 6) == "12 × 6"
+      assert Structure.size_label(6.5, 2.5) == "6.5 × 2.5"
+      assert Structure.size_label(12.0, 6.0) == "12 × 6"
+    end
+
     test "the board renders two tracks per column" do
       cells = bento(%{"a" => card(1, 2, 1.5, 2.5)})
 

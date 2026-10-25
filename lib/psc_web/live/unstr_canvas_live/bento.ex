@@ -30,7 +30,12 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
   attr :user_id, :integer, required: true
 
   def board(assigns) do
-    assigns = assign(assigns, :cards, Structure.cards(assigns.cells))
+    bounds = Structure.bounds(assigns.cells)
+
+    assigns =
+      assigns
+      |> assign(:cards, Structure.cards(assigns.cells))
+      |> assign(:board_size, Structure.size_label(bounds.columns, bounds.rows))
 
     ~H"""
     <div
@@ -53,16 +58,29 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           <.icon name="hero-pencil-square" class="size-4" /> Edit layout
         </button>
 
-        <UIButton.button
-          :if={@edit_structure?}
-          type="button"
-          id="add-card-button"
-          variant="outline"
-          size="sm"
-          phx-click="add_card"
-        >
-          <.icon name="hero-plus" class="size-4" /> Add card
-        </UIButton.button>
+        <div class="flex items-center gap-2">
+          <%!-- The board's real grid: columns × the rows its cards reach. Small
+          enough to stay out of the way, but always there to check a layout. --%>
+          <span
+            id="bento-size"
+            class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/50"
+            title={"Board grid: #{@board_size} (columns × rows)"}
+            aria-label={"Board grid: #{@board_size} columns by rows"}
+          >
+            <.icon name="hero-table-cells" class="size-3" /> {@board_size}
+          </span>
+
+          <UIButton.button
+            :if={@edit_structure?}
+            type="button"
+            id="add-card-button"
+            variant="outline"
+            size="sm"
+            phx-click="add_card"
+          >
+            <.icon name="hero-plus" class="size-4" /> Add card
+          </UIButton.button>
+        </div>
       </div>
 
       <div class="canvas-bento-scroll min-h-0 flex-1 overflow-auto p-3">
@@ -99,6 +117,8 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
               id={"bento-card-#{card.key}"}
               class="bento-card relative min-h-0 rounded-lg"
               style={Structure.placement_style(card)}
+              data-bento-size={Structure.size_label(card.w, card.h)}
+              title={"Card grid: #{Structure.size_label(card.w, card.h)} (columns × rows)"}
             >
               <Cell.card
                 cell_key={card.key}
@@ -107,11 +127,25 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                 user_id={@user_id}
                 focus_cell={@focus_cell}
                 accent_top={card.accent}
-                class="h-full"
+                class={["h-full", @edit_structure? && "pt-10 sm:pt-8"]}
                 nav={Structure.neighbours(@cells, card.key)}
               />
               <%= if @edit_structure? do %>
-                <div class="absolute right-1 top-1 z-20 flex items-center gap-1 rounded-md bg-base-100/90 p-0.5 shadow-sm">
+                <%!-- On a phone a wide card starts off-screen to the right, so
+                the controls sit at its left edge (the first part the pan
+                reaches); a pointer device gets them at the top right. --%>
+                <div class="absolute left-1 top-1 z-20 flex items-center gap-1 rounded-md bg-base-100/90 p-0.5 shadow-sm sm:left-auto sm:right-1">
+                  <%!-- The card's real grid: width × height in columns and rows. --%>
+                  <span
+                    id={"bento-size-" <> card.key}
+                    class="px-1 text-[0.65rem] tabular-nums text-base-content/50"
+                    aria-label={
+                      "Card grid: #{Structure.size_label(card.w, card.h)} columns by rows"
+                    }
+                  >
+                    {Structure.size_label(card.w, card.h)}
+                  </span>
+
                   <button
                     type="button"
                     data-bento-drag
@@ -153,7 +187,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
 
                 <div
                   :if={@structure_accent_picker == {:card, card.key}}
-                  class="absolute right-1 top-9 z-30 flex flex-wrap items-center gap-1 rounded-md border border-base-content/10 bg-base-100 p-1 shadow-lg"
+                  class="absolute left-1 top-11 z-30 flex flex-wrap items-center gap-1 rounded-md border border-base-content/10 bg-base-100 p-1 shadow-lg sm:left-auto sm:right-1 sm:top-9"
                 >
                   <%= for token <- Psc.Canvas.Accent.tokens() do %>
                     <button

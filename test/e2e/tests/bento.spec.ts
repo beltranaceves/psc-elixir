@@ -40,6 +40,9 @@ test.describe('bento board', () => {
     await expect(page.locator('#bento-card-big_picture')).toBeVisible();
     await expect(page.locator('#bento-card-evidence')).toBeVisible();
 
+    // The board reports its real grid, in columns × rows.
+    await expect(page.locator('#bento-size')).toContainText('12 × 5');
+
     // Two cards side by side: the big picture spans 8 of 12 columns.
     const big = page.locator('#bento-card-big_picture');
     const evidence = page.locator('#bento-card-evidence');
@@ -79,6 +82,9 @@ test.describe('bento board', () => {
     await page.locator('#add-card-button').click();
     await expect(page.locator('#bento-card-card1')).toBeVisible();
 
+    // Each card shows its own width × height while arranging.
+    await expect(page.locator('#bento-size-decision')).toHaveText('6 × 2');
+
     const card = page.locator('#bento-card-card1');
     const before = await card.boundingBox();
 
@@ -94,15 +100,15 @@ test.describe('bento board', () => {
       timeout: 15_000,
     });
 
+    // Resize moves in half rows: the card's grid row span grows from 4 to 5
+    // tracks. Its pixel height follows the placement, but never below the
+    // content, which is the point of `h` being a minimum.
+    await expect(card).toHaveAttribute('style', /grid-row: 11 \/ span 5/);
+
     const after = await card.boundingBox();
     expect(after).not.toBeNull();
     expect(before).not.toBeNull();
-
-    // Resize moves in half rows: a row unit is 72px, so half a step is 40px
-    // (one 32px track plus the 8px gap).
-    const grown = Math.round(after!.height - before!.height);
-    expect(grown).toBeGreaterThanOrEqual(38);
-    expect(grown).toBeLessThanOrEqual(42);
+    expect(after!.height).toBeGreaterThanOrEqual(before!.height);
   });
 
   test('dragging the corner resizes by half a column', async ({ page }) => {

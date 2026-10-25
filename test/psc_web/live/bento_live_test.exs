@@ -51,6 +51,9 @@ defmodule PscWeb.BentoLiveTest do
 
       # The card's Markdown field keeps the same editor id as in a table.
       assert has_element?(view, "#md-big_picture-content")
+
+      # The board reports its real grid: 12 columns, five rows of cards.
+      assert has_element?(view, "#bento-size", "12 × 5")
     end
 
     test "a table canvas still renders the grid", %{conn: conn, user: user} do
@@ -89,6 +92,9 @@ defmodule PscWeb.BentoLiveTest do
 
       view |> element("#edit-layout-toggle") |> render_click()
       assert has_element?(view, "#add-card-button")
+
+      # Every card shows its own width × height while arranging.
+      assert has_element?(view, "#bento-size-decision", "6 × 2")
 
       view |> element("#add-card-button") |> render_click()
 
@@ -162,6 +168,7 @@ defmodule PscWeb.BentoLiveTest do
 
       assert %{"x" => 0, "y" => 3, "w" => 6.5, "h" => 2} = placement(canvas, "decision")
       assert has_element?(view, ~s|#bento-card-decision[style*="grid-column: 1 / span 13"]|)
+      assert has_element?(view, "#bento-size-decision", "6.5 × 2")
 
       # Height resizes in half rows too.
       view
@@ -251,6 +258,9 @@ defmodule PscWeb.BentoLiveTest do
 
       assert has_element?(again, ~s|#bento-card-open_questions[style*="grid-row: 11 / span 4"]|)
       assert %{"x" => 0, "y" => 5} = placement(canvas, "open_questions")
+
+      # The board grew a row with the card.
+      assert has_element?(again, "#bento-size", "12 × 7")
     end
   end
 end

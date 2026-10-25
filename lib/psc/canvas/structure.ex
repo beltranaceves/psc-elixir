@@ -132,6 +132,23 @@ defmodule Psc.Canvas.Structure do
   def track(value), do: round(value * @tracks_per_unit)
 
   @doc """
+  A compact `columns × rows` label.
+
+  Whole numbers print without a decimal tail, so a card is `8 × 3` and a
+  half-step resize is `8.5 × 3`.
+  """
+  def size_label(columns, rows), do: "#{dimension(columns)} × #{dimension(rows)}"
+
+  defp dimension(value) when is_float(value) do
+    if value == trunc(value),
+      do: Integer.to_string(trunc(value)),
+      else: :erlang.float_to_binary(value, decimals: 1)
+  end
+
+  defp dimension(value) when is_integer(value), do: Integer.to_string(value)
+  defp dimension(value), do: to_string(value)
+
+  @doc """
   The cells of a map.
 
   A bento map is flat, exactly like a canvas. A table template nests its cells

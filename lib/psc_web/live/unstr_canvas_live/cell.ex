@@ -18,7 +18,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   attr :focus_cell, :string, default: nil
   attr :accent_top, :string, default: nil
   attr :accent_left, :string, default: nil
-  attr :class, :string, default: nil
+  attr :class, :any, default: nil
   attr :nav, :map, default: nil
 
   def card(assigns) do

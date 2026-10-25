@@ -74,6 +74,10 @@ started sends nothing.
 - Keyboard: focus the grip, arrow keys move one unit; shift+arrows resize. The shift path
   lives in the hook because the LiveView keydown payload does not carry modifier flags.
 - Removing a card with content opens the same confirmation as a row or column.
+- The toolbar reports the board's real grid (`12 × 5`: columns × the rows its cards reach),
+  and while Edit layout is on every card carries its own `w × h` (`8 × 3`, or `6.5 × 2` after
+  a half-step resize). Outside edit mode the size is the card's `title` tooltip and its
+  `data-bento-size` attribute.
 - Cards carry `data-cell-nav` for the mobile fullscreen swipe (ADR-037).
 - A card's body is in the flow, so the card grows with its Markdown and takes its grid
   rows along; `h` is a minimum, never a clip.

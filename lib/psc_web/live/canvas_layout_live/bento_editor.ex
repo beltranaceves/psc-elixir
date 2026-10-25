@@ -27,26 +27,38 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
   attr :accent_picker, :any, default: nil
 
   def editor(assigns) do
+    bounds = Structure.bounds(assigns.layout_map)
+
     assigns =
       assigns
       |> assign(:cards, Structure.cards(assigns.layout_map))
       |> assign(:columns, Structure.columns(assigns.layout_map))
+      |> assign(:board_size, Structure.size_label(bounds.columns, bounds.rows))
 
     ~H"""
     <div class="flex flex-col gap-3">
-      <%= if @can_edit? do %>
-        <div class="flex flex-wrap justify-end gap-2">
-          <UIButton.button
-            type="button"
-            id="designer-add-card"
-            variant="outline"
-            size="sm"
-            phx-click="add_card"
-          >
-            <.icon name="hero-plus" class="size-4" /> Add card
-          </UIButton.button>
-        </div>
-      <% end %>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <%!-- The board's real grid: columns × the rows its cards reach. --%>
+        <span
+          id="designer-bento-size"
+          class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/50"
+          title={"Board grid: #{@board_size} (columns × rows)"}
+          aria-label={"Board grid: #{@board_size} columns by rows"}
+        >
+          <.icon name="hero-table-cells" class="size-3" /> {@board_size}
+        </span>
+
+        <UIButton.button
+          :if={@can_edit?}
+          type="button"
+          id="designer-add-card"
+          variant="outline"
+          size="sm"
+          phx-click="add_card"
+        >
+          <.icon name="hero-plus" class="size-4" /> Add card
+        </UIButton.button>
+      </div>
 
       <div class="overflow-auto rounded-xl border border-base-content/10 bg-base-200/40 p-3">
         <%= if @cards == [] do %>
@@ -66,8 +78,23 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
               id={"bento-card-#{card.key}"}
               class="relative min-h-0 rounded-lg border border-base-content/15 bg-base-100 p-2"
               style={Structure.placement_style(card)}
+              data-bento-size={Structure.size_label(card.w, card.h)}
+              title={"Card grid: #{Structure.size_label(card.w, card.h)} (columns × rows)"}
             >
               <div class="mb-1 flex items-center gap-1">
+                <%!-- The card's real grid: width × height in columns and rows.
+                It leads the row, so it is the first thing a narrow screen
+                shows when a wide card starts off-screen. --%>
+                <span
+                  id={"designer-size-" <> card.key}
+                  class="shrink-0 px-0.5 text-[0.65rem] tabular-nums text-base-content/50"
+                  aria-label={
+                    "Card grid: #{Structure.size_label(card.w, card.h)} columns by rows"
+                  }
+                >
+                  {Structure.size_label(card.w, card.h)}
+                </span>
+
                 <button
                   :if={@can_edit?}
                   type="button"

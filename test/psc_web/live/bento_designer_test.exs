@@ -23,6 +23,8 @@ defmodule PscWeb.BentoDesignerTest do
 
     assert has_element?(view, "#designer-bento")
     assert has_element?(view, "#bento-card-card1")
+    assert has_element?(view, "#designer-bento-size", "12 × 2")
+    assert has_element?(view, "#designer-size-card1", "6 × 2")
     assert has_element?(view, "#card-card1-label")
     refute has_element?(view, "#template-grid table")
 
@@ -60,6 +62,9 @@ defmodule PscWeb.BentoDesignerTest do
 
     view |> element("#card-accent-card2") |> render_click()
     view |> element(~s|button[phx-value-accent="teal"]|) |> render_click()
+
+    # The card reports its own grid, including the half row.
+    assert has_element?(view, "#designer-size-card2", "6 × 2.5")
 
     view
     |> form("#template-form", %{"name" => "Bento shape #{user.id}", "description" => ""})
