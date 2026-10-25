@@ -178,6 +178,37 @@ test.describe('bento board', () => {
     await expect(page.locator('#bento-board')).toHaveCSS('min-height', '712px');
   });
 
+  test('a tall board scrolls the page on a desktop, not itself', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Tall'));
+
+    await page.locator('#edit-layout-toggle').click();
+    await page.locator('#bento-rows-input').fill('14');
+    await expect(page.locator('#bento-board')).toHaveCSS('min-height', '1112px', {
+      timeout: 10_000,
+    });
+
+    await expect(page.locator('#canvas-save-state-pill')).toContainText('Saved', {
+      timeout: 15_000,
+    });
+
+    // The board is not its own scroll box on a wide screen: the page is.
+    await expect(page.locator('.canvas-bento-scroll')).toHaveCSS('overflow-y', 'visible');
+
+    const metrics = await page.evaluate(() => {
+      const main = document.querySelector('main')!;
+      const board = document.querySelector('.canvas-bento-scroll')!;
+      return {
+        mainScroll: main.scrollHeight,
+        mainClient: main.clientHeight,
+        boardScroll: board.scrollHeight,
+        boardClient: board.clientHeight,
+      };
+    });
+
+    expect(metrics.boardScroll - metrics.boardClient).toBeLessThanOrEqual(2);
+    expect(metrics.mainScroll).toBeGreaterThan(metrics.mainClient + 100);
+  });
+
   test('dragging a card moves it in half columns', async ({ page }) => {
     await createBentoAndOpen(page, uniqueName('Bento Half Move'));
 
@@ -322,5 +353,28 @@ test.describe('bento board on a phone', () => {
     await page.mouse.up();
 
     await expect(page.locator('#cell-card-evidence')).toHaveClass(/is-expanded/);
+  });
+
+  test('a tall board keeps its own scroll area on a phone', async ({ page }) => {
+    await createBentoAndOpen(page, uniqueName('Bento Tall Phone'));
+
+    await page.locator('#edit-layout-toggle').click();
+    await page.locator('#bento-rows-input').fill('14');
+    await expect(page.locator('#bento-board')).toHaveCSS('min-height', '1112px', {
+      timeout: 10_000,
+    });
+
+    // On a phone the board keeps its inner scroll: the page shell itself does
+    // not scroll.
+    await expect(page.locator('.canvas-bento-scroll')).toHaveCSS('overflow-y', 'auto');
+
+    const metrics = await page.evaluate(() => {
+      const main = document.querySelector('main')!;
+      const board = document.querySelector('.canvas-bento-scroll')!;
+      return { mainOverflow: main.scrollHeight - main.clientHeight, boardOverflow: board.scrollHeight - board.clientHeight };
+    });
+
+    expect(metrics.boardOverflow).toBeGreaterThan(100);
+    expect(metrics.mainOverflow).toBeLessThanOrEqual(2);
   });
 });

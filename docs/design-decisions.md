@@ -1625,8 +1625,9 @@ content cannot: a card that holds a paragraph would clip it, and inquiry notes a
 long.
 
 **Decision.** A card's `h` is a minimum height in 72px row units, not a maximum. Cards
-grow with their content, and the board scrolls vertically. The table keeps its
-viewport-fit behaviour. On a phone the board keeps its spatial layout and pans
+grow with their content. On a desktop the board also makes the page scroll rather than
+scrolling inside a nested box; a phone keeps the board's own scroll area, because the app
+shell is a fixed-height frame there. The table keeps its viewport-fit behaviour. On a phone the board keeps its spatial layout and pans
 horizontally with a minimum column width, rather than squeezing twelve columns into the
 viewport or collapsing into one column (ADR-035's "the arrangement is the point").
 

@@ -99,6 +99,15 @@ smaller board, so it clamps the cards instead.
 - A card's body is in the flow, so the card grows with its Markdown and takes its grid
   rows along; `h` is a minimum, never a clip.
 
+## Scrolling
+
+The board is a document, not a dashboard: a board taller than the window grows and the
+page scrolls, so there is one scrollbar rather than a nested one. The editor panel is
+content-sized on `lg` for a bento (`lg:flex-none`) and the board's scroll wrapper becomes
+`overflow-visible`; the table canvas keeps its fill-the-viewport behaviour. On a phone the
+old behaviour stays — the board pans horizontally and scrolls vertically inside its own
+area, because the page shell is a fixed-height app frame there.
+
 ## On a phone
 
 The spatial arrangement is the point, so a phone does not collapse the board into one

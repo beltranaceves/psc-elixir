@@ -44,7 +44,15 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
     ~H"""
     <div
       id="canvas-bento"
-      class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
+      class={
+        [
+          "flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200",
+          # A phone keeps the board inside a scroll area of its own; a desktop
+          # lets it grow and scrolls the page, so a tall board is not trapped in
+          # a nested scrollbar.
+          "lg:flex-none lg:overflow-visible"
+        ]
+      }
     >
       <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2">
         <button
@@ -131,7 +139,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
         </div>
       </div>
 
-      <div class="canvas-bento-scroll min-h-0 flex-1 overflow-auto p-3">
+      <div class="canvas-bento-scroll min-h-0 flex-1 overflow-auto p-3 lg:flex-none lg:overflow-visible">
         <%= if @cards == [] do %>
           <div
             id="bento-empty"

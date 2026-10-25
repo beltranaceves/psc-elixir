@@ -1805,10 +1805,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             id="canvas-panel-editor"
             role="tabpanel"
             aria-labelledby="canvas-tab-editor"
-            class={[
-              "flex min-h-0 w-full flex-1 flex-col",
-              @active_tab != "editor" && "hidden"
-            ]}
+            class={
+              [
+                "flex min-h-0 w-full flex-1 flex-col",
+                # A bento grows with its content on a desktop (the page scrolls);
+                # the table keeps filling the viewport. A phone keeps the inner
+                # scroll for both.
+                Structure.bento?(@cells) && "lg:flex-none",
+                @active_tab != "editor" && "hidden"
+              ]
+            }
           >
             <%= if Structure.bento?(@cells) do %>
               <Bento.board
