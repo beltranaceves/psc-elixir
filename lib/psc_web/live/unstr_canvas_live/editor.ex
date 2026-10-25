@@ -1899,7 +1899,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           open
           on-close="dismiss_remove_structure"
         >
-          <UIDialog.dialog_content class="sm:max-w-md">
+          <UIDialog.dialog_content open class="sm:max-w-md">
             <UIDialog.dialog_header>
               <UIDialog.dialog_title>
                 Remove this {structure_remove_confirm(@structure_remove_confirm, :type)}?

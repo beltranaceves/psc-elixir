@@ -20,6 +20,7 @@ defmodule Psc.Agent.Connections do
 
   alias Psc.Accounts.User
   alias Psc.Agent.Connection
+  alias Psc.Agent.TurnConfig
   alias Psc.Repo
 
   @max_per_user 10
@@ -146,13 +147,13 @@ defmodule Psc.Agent.Connections do
   @doc """
   The model, key and endpoint a turn should use.
 
-  Returns `%{connection_id, model, api_key, base_url}`. `model` may be nil when
-  nothing is configured; callers gate on `missing_configuration/1` first.
+  Returns a `Psc.Agent.TurnConfig`; `model` may be nil when nothing is
+  configured, and callers gate on `missing_configuration/1` first.
   """
   def turn_config(session, %User{} = user) do
     case for_session(session, user) do
       %Connection{} = connection ->
-        %{
+        %TurnConfig{
           connection_id: connection.id,
           model: Connection.model_spec(connection),
           api_key: connection.api_key,
@@ -164,8 +165,7 @@ defmodule Psc.Agent.Connections do
     end
   end
 
-  def turn_config(_session, _user),
-    do: %{connection_id: nil, model: nil, api_key: nil, base_url: nil}
+  def turn_config(_session, _user), do: %TurnConfig{}
 
   @doc """
   What keeps a user from using the agent: `:connection` when they have neither a
@@ -217,7 +217,7 @@ defmodule Psc.Agent.Connections do
   defp from_session(_session, _user), do: nil
 
   defp legacy_config(%User{agent_api_key: key} = user) when is_binary(key) and key != "" do
-    %{
+    %TurnConfig{
       connection_id: nil,
       model: user.agent_model || deployment_model(),
       api_key: key,
@@ -226,7 +226,7 @@ defmodule Psc.Agent.Connections do
   end
 
   defp legacy_config(_user) do
-    %{connection_id: nil, model: deployment_model(), api_key: nil, base_url: nil}
+    %TurnConfig{connection_id: nil, model: deployment_model(), api_key: nil, base_url: nil}
   end
 
   defp legacy_usable?(%User{} = user) do

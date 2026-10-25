@@ -189,7 +189,7 @@ defmodule PscWeb.CatalogLive.Index do
         open
         on-close="close_template"
       >
-        <UIDialog.dialog_content class="sm:max-w-2xl">
+        <UIDialog.dialog_content open class="sm:max-w-2xl">
           <UIDialog.dialog_header class="min-w-0">
             <%!-- The title takes the initial focus: SaladUI's focus trap would
             otherwise land on the first button, which is in the footer, and

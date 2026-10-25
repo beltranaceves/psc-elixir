@@ -102,7 +102,7 @@ defmodule PscWeb.Components.UI.Command do
   def command_dialog(assigns) do
     ~H"""
     <.dialog id={@id <> "_dialog"} open={@open}>
-      <.dialog_content class="overflow-hidden p-0">
+      <.dialog_content open={@open} class="overflow-hidden p-0">
         <.command id={@id} class="[&_[data-part='input']]:h-12">
           {render_slot(@inner_block)}
         </.command>

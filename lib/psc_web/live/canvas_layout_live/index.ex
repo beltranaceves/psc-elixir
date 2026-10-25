@@ -219,6 +219,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
       on-close="new_template_closed"
     >
       <UIDialog.dialog_content
+        open
         class="sm:max-w-2xl"
         close_class="right-2 top-2 rounded-md p-2"
         close_icon_class="size-5"

@@ -193,10 +193,15 @@ defmodule Psc.Accounts.User do
     |> validate_agent_model()
   end
 
-  @doc "Providers the settings page offers. Anything else req_llm ships is not."
+  @doc """
+  Providers the legacy `agent_model` format accepts.
+
+  The catalog lives in `Psc.Agent.Connection` so the settings UI, connection
+  validation and this transitional check cannot drift. Both go away with the
+  legacy columns.
+  """
   def agent_providers do
-    ~w(openai anthropic google openrouter groq deepseek mistral xai
-       cerebras fireworks_ai moonshot_ai zai ollama lmstudio vllm)
+    Psc.Agent.Connection.provider_ids()
   end
 
   defp validate_agent_model(changeset) do

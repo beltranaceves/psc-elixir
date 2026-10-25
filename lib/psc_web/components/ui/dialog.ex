@@ -31,7 +31,7 @@ defmodule PscWeb.Components.UI.Dialog do
 
       <.dialog id="pro-dialog" open={true}>
         <.dialog_trigger>Click me</.dialog_trigger>
-        <.dialog_content class="sm:max-w-[425px]">
+        <.dialog_content open={true} class="sm:max-w-[425px]">
           <.dialog_header>
             <.dialog_title>Edit profile</.dialog_title>
             <.dialog_description>
@@ -98,6 +98,7 @@ defmodule PscWeb.Components.UI.Dialog do
       data-component="dialog"
       data-options={@options}
       data-open={to_string(@open)}
+      data-state={@initial_state}
       data-event-mappings={@event_map}
       phx-hook="SaladUI"
       data-part="root"
@@ -123,18 +124,29 @@ defmodule PscWeb.Components.UI.Dialog do
   attr :class, :string, default: nil
   attr :close_class, :string, default: "right-4 top-4 rounded-xs"
   attr :close_icon_class, :string, default: "h-4 w-4"
+
+  attr :open, :boolean,
+    required: true,
+    doc: """
+    Whether the dialog is open. The state is rendered into the markup so a
+    LiveView patch of the dialog's contents cannot strip it; the client keeps
+    it in sync for transitions.
+    """
+
   slot :inner_block, required: true
 
   def dialog_content(assigns) do
     ~H"""
-    <div data-part="content" tabindex="0" hidden class="z-50">
+    <div data-part="content" tabindex="0" hidden={not @open} data-state={state_name(@open)}>
       <div
         data-part="overlay"
+        data-state={state_name(@open)}
         class="fixed inset-0 bg-black/80  data-[state=open]/dialog:animate-in data-[state=closed]/dialog:animate-out data-[state=closed]/dialog:fade-out-0 data-[state=open]/dialog:fade-in-0"
       />
 
       <div
         data-part="content-panel"
+        data-state={state_name(@open)}
         class={
           classes([
             "fixed left-[50%] top-[50%] z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain rounded-lg border border-border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:p-6",
@@ -225,6 +237,9 @@ defmodule PscWeb.Components.UI.Dialog do
     </div>
     """
   end
+
+  defp state_name(true), do: "open"
+  defp state_name(false), do: "closed"
 
   defp get_animation_config do
     %{

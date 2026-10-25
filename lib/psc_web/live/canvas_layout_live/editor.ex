@@ -1509,7 +1509,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           open={@confirm_leave?}
           on-close="leave_dialog_closed"
         >
-          <UIDialog.dialog_content class="sm:max-w-md">
+          <UIDialog.dialog_content open class="sm:max-w-md">
             <UIDialog.dialog_header>
               <UIDialog.dialog_title>Discard unsaved changes?</UIDialog.dialog_title>
 

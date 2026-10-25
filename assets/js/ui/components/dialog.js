@@ -32,11 +32,41 @@ class DialogComponent extends Component {
     if (requestedState === this.state) {
       if (this.state === "open") {
         this.activateOpenState();
+
+        // The server rendered the dialog already open; report it once, the way
+        // the closed -> open transition would have.
+        this.pushEvent("open");
       }
       return;
     }
 
     this.transition(requestedState === "open" ? "open" : "close");
+  }
+
+  // A LiveView patch of the dialog's contents (a provider select, a form
+  // field, a list that changed) must not destroy and re-create the component:
+  // doing so replays the enter animation and steals focus, which reads as the
+  // modal "reloading". Reinitialize only when the server actually asked for a
+  // state change or changed the component's configuration.
+  skipReinitialize(el) {
+    return (
+      this.state === "open" &&
+      el.dataset.open !== "false" &&
+      el.dataset.options === this._optionsRaw &&
+      el.dataset.eventMappings === this._eventMappingsRaw
+    );
+  }
+
+  // The server renders data-state and hidden, so a LiveView patch preserves
+  // the open state; only the aria-* attributes this component adds can be
+  // stripped. Re-apply those, and put focus back inside the dialog if the
+  // patch replaced the focused element.
+  afterUpdate() {
+    this.ariaManager.applyAriaAttributes(this.stateMachine.state);
+
+    if (document.activeElement === document.body) {
+      this.el.focus();
+    }
   }
 
   getComponentConfig() {

@@ -40,7 +40,10 @@ const SaladUIHook = {
 
   updated() {
     if (this.component) {
-      if (this.component.skipReinitialize(this.el)) return;
+      if (this.component.skipReinitialize(this.el)) {
+        this.component.afterUpdate?.();
+        return;
+      }
 
       this.component.destroy();
       this.component = null;

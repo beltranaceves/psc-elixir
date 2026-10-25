@@ -52,7 +52,7 @@ defmodule Psc.Agent.Turn do
   Options:
 
     * `:script` - a list of steps to replay instead of calling a model. Test-only.
-    * `:config` - `%{model, api_key, base_url}`, resolved once before the turn
+    * `:config` - a `Psc.Agent.TurnConfig`, resolved once before the turn
       starts so editing a connection mid-turn cannot change the request. The
       turn resolves it from the session when the option is absent.
   """
@@ -220,8 +220,8 @@ defmodule Psc.Agent.Turn do
   # models that ReqLLM resolves through a strict schema fail to build a request.
   # OpenAI accepts the option. The workaround is a provider whose schema allows
   # it, or an upstream fix.
-  defp llm_opts(config) do
-    [api_key: config[:api_key], base_url: config[:base_url]]
+  defp llm_opts(%Psc.Agent.TurnConfig{} = config) do
+    [api_key: config.api_key, base_url: config.base_url]
     |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
   end
 

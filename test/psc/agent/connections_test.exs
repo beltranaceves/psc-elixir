@@ -8,6 +8,7 @@ defmodule Psc.Agent.ConnectionsTest do
   alias Psc.Agent.Connection
   alias Psc.Agent.Connections
   alias Psc.Agent.ModelCatalog
+  alias Psc.Agent.TurnConfig
 
   defp create_connection(user, attrs \\ %{}) do
     attrs =
@@ -139,13 +140,13 @@ defmodule Psc.Agent.ConnectionsTest do
 
     {:ok, session} = Agent.create_session(user.id)
 
-    assert %{model: "openai:gpt-4.1", api_key: "sk-test-123", base_url: nil} =
+    assert %TurnConfig{model: "openai:gpt-4.1", api_key: "sk-test-123", base_url: nil} =
              Connections.turn_config(session, user)
 
     # The session's own connection wins over the default.
     {:ok, session} = Agent.set_session_connection(session, second)
 
-    assert %{
+    assert %TurnConfig{
              connection_id: second_id,
              model: "anthropic:claude-haiku-4-5",
              api_key: "sk-test-123",
@@ -165,7 +166,7 @@ defmodule Psc.Agent.ConnectionsTest do
         "agent_model" => "groq:llama-3.3-70b-versatile"
       })
 
-    assert %{model: "groq:llama-3.3-70b-versatile", api_key: "sk-legacy"} =
+    assert %TurnConfig{model: "groq:llama-3.3-70b-versatile", api_key: "sk-legacy"} =
              Connections.turn_config(nil, user)
 
     assert Connections.missing_configuration(user) == nil
