@@ -70,9 +70,9 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           <%= if @edit_structure? do %>
             <div
               id="bento-size"
-              class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/60"
+              class="inline-flex h-8 items-center gap-1 text-xs tabular-nums text-base-content/60"
             >
-              <.icon name="hero-table-cells" class="size-3" />
+              <.icon name="hero-table-cells" class="size-4 shrink-0" />
               <form id="bento-columns-form" phx-change="set_bento_columns">
                 <input
                   type="number"
@@ -86,10 +86,10 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                   phx-debounce="400"
                   aria-label="Board columns"
                   title={"Board columns (#{@column_range.first}–#{@column_range.last})"}
-                  class="w-9 rounded border border-base-content/10 bg-base-100 px-1 py-0.5 text-center tabular-nums text-base-content focus:border-primary focus:outline-none"
+                  class="h-8 w-12 rounded-md border border-base-content/15 bg-base-100 px-1 text-center text-xs tabular-nums text-base-content focus:border-primary focus:outline-none"
                 />
               </form>
-              <span aria-hidden="true">×</span>
+              <span aria-hidden="true" class="text-sm text-base-content/50">×</span>
               <form id="bento-rows-form" phx-change="set_bento_rows">
                 <input
                   type="number"
@@ -103,18 +103,18 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                   phx-debounce="400"
                   aria-label="Board rows"
                   title={"Board rows (#{@min_rows}–#{@row_range.last}); cards set the minimum"}
-                  class="w-9 rounded border border-base-content/10 bg-base-100 px-1 py-0.5 text-center tabular-nums text-base-content focus:border-primary focus:outline-none"
+                  class="h-8 w-12 rounded-md border border-base-content/15 bg-base-100 px-1 text-center text-xs tabular-nums text-base-content focus:border-primary focus:outline-none"
                 />
               </form>
             </div>
           <% else %>
             <span
               id="bento-size"
-              class="inline-flex items-center gap-1 rounded border border-base-content/10 px-1.5 py-0.5 text-[0.7rem] tabular-nums text-base-content/50"
+              class="inline-flex h-8 items-center gap-1.5 rounded-md border border-base-content/10 px-2.5 text-xs tabular-nums text-base-content/50"
               title={"Board grid: #{@columns} × #{@rows} (columns × rows)"}
               aria-label={"Board grid: #{@columns} by #{@rows} rows"}
             >
-              <.icon name="hero-table-cells" class="size-3" /> {@columns} × {@rows}
+              <.icon name="hero-table-cells" class="size-4" /> {@columns} × {@rows}
             </span>
           <% end %>
 
