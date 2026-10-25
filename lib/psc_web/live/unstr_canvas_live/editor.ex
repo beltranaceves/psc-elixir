@@ -823,6 +823,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      )}
   end
 
+  # A click outside the pickers closes them (the client hook reports it), so
+  # the panel can be dismissed without finding its trigger again.
+  def handle_event("dismiss_color_pickers", _params, socket) do
+    {:noreply,
+     assign(socket,
+       structure_colors_picker: nil,
+       structure_accent_picker: nil
+     )}
+  end
+
   # Choosing either colour keeps the panel open: the outline and the
   # background are usually set together.
   def handle_event("set_cell_background", %{"cell_key" => key} = params, socket) do
@@ -1900,6 +1910,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
       <div
         id="canvas-workspace"
+        phx-hook="DismissPicker"
+        data-picker-open={
+          to_string(not is_nil(@structure_colors_picker) or not is_nil(@structure_accent_picker))
+        }
         class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2"
       >
         <Header.header

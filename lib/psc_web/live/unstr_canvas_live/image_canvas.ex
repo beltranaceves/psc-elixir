@@ -200,6 +200,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
               <div
                 :if={@colors_picker == card.key}
                 id={"cell-colors-panel-" <> card.key}
+                data-color-picker
                 class="absolute right-0 top-8 z-40 rounded-md border border-base-content/10 bg-base-100 p-2 shadow-lg"
               >
                 <.colors_panel

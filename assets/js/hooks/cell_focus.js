@@ -368,7 +368,10 @@ export default {
   },
 
   openField(event) {
-    if (event.target.closest("textarea, input, select, button, a")) return
+    // A colour picker is a control, not a place to start editing the cell: a
+    // click inside it (including its padding) must not open the field behind
+    // the panel, or its synthetic click would dismiss the panel.
+    if (event.target.closest("textarea, input, select, button, a, [data-color-picker]")) return
 
     const openField = wrapper => {
       const display = wrapper && wrapper.querySelector(".md-render")

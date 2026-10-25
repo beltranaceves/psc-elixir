@@ -29,6 +29,7 @@ defmodule PscWeb.UnstrCanvasLive.CellColors do
     <button
       type="button"
       id={"cell-colors-" <> @cell_key}
+      data-color-picker
       phx-click="toggle_cell_colors"
       phx-value-cell_key={@cell_key}
       aria-pressed={to_string(@open?)}
@@ -66,7 +67,7 @@ defmodule PscWeb.UnstrCanvasLive.CellColors do
 
   def colors_panel(assigns) do
     ~H"""
-    <div class="w-56 space-y-2">
+    <div class="w-56 space-y-2" data-color-picker>
       <div :if={@outline?}>
         <div class="mb-1 flex items-center justify-between">
           <span class="text-[0.65rem] font-medium uppercase tracking-wide text-base-content/50">

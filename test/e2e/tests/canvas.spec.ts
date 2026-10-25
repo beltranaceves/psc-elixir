@@ -900,6 +900,24 @@ test.describe('canvas accents', () => {
   });
 });
 
+test.describe('canvas color pickers', () => {
+  test('a click outside the colors panel closes it', async ({ page }) => {
+    await createCanvasAndOpen(page, uniqueName('Dismiss Colors'));
+
+    await page.locator('#edit-structure-toggle').click();
+    await page.locator('#cell-colors-problem').click();
+    await expect(page.locator('#cell-colors-panel-problem')).toBeVisible();
+
+    // A click inside the panel (not on a swatch) leaves it open.
+    await page.locator('#cell-colors-panel-problem').click();
+    await expect(page.locator('#cell-colors-panel-problem')).toBeVisible();
+
+    // A click anywhere else dismisses it.
+    await page.locator('#canvas-name-form input').click();
+    await expect(page.locator('#cell-colors-panel-problem')).toBeHidden();
+  });
+});
+
 test.describe('template designer accents', () => {
   test('styles headers in the designer and carries the accents into a new canvas', async ({
     page,

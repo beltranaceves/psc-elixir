@@ -169,6 +169,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                             <div class="flex shrink-0 items-center gap-1.5 sm:gap-1">
                               <button
                                 type="button"
+                                data-color-picker
                                 id={"accent-swatch-column-" <> column["id"]}
                                 phx-click="toggle_structure_accent"
                                 phx-value-group="column"
@@ -195,6 +196,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
 
                           <div
                             :if={@structure_accent_picker == {:column, column["id"]}}
+                            data-color-picker
                             class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
                           >
                             <%= for token <- Psc.Canvas.Accent.tokens() do %>
@@ -270,6 +272,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                           <div class="flex shrink-0 items-center gap-1.5 sm:gap-1">
                             <button
                               type="button"
+                              data-color-picker
                               id={"accent-swatch-row-" <> row["id"]}
                               phx-click="toggle_structure_accent"
                               phx-value-group="row"
@@ -296,6 +299,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
 
                         <div
                           :if={@structure_accent_picker == {:row, row["id"]}}
+                          data-color-picker
                           class="mt-1 flex flex-wrap items-center gap-1 rounded-md bg-base-100/80 p-1"
                         >
                           <%= for token <- Psc.Canvas.Accent.tokens() do %>

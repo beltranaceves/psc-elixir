@@ -630,6 +630,11 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       # The panel stays open so both colours can be picked in one go.
       assert has_element?(lv, "#cell-colors-panel-r1_c1")
       assert has_element?(lv, "#cell-card-r1_c1.bg-teal-100")
+
+      # A click outside the picker is reported by the client hook and closes
+      # the panel; the trigger does not need to be found again.
+      render_hook(lv, "dismiss_color_pickers", %{})
+      refute has_element?(lv, "#cell-colors-panel-r1_c1")
     end
 
     test "removing an empty row goes straight away", %{conn: conn, user: user} do

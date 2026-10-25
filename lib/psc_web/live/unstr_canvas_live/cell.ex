@@ -99,6 +99,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
           <div
             :if={@colors_palette? and @colors_picker == @cell_key}
             id={"cell-colors-panel-" <> @cell_key}
+            data-color-picker
             class="mb-1 rounded-md border border-base-content/10 bg-base-100/95 p-2 shadow-sm"
           >
             <.colors_panel cell_key={@cell_key} background={@background} outline?={false} />

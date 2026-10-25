@@ -210,6 +210,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
               <div
                 :if={@colors_picker == card.key}
                 id={"cell-colors-panel-" <> card.key}
+                data-color-picker
                 class="absolute left-1 top-11 z-40 rounded-md border border-base-content/10 bg-base-100 p-2 shadow-lg sm:left-auto sm:right-1 sm:top-9"
               >
                 <.colors_panel

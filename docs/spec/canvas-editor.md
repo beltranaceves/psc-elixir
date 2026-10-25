@@ -28,7 +28,9 @@ See `template-designer.md` → **Design System** for the full design direction. 
   belongs to the row and column headers). The tint is stored on the cell (`"background"`)
   and the outline on its accent, so the table, the bento and the image board render the
   same surface; the field editors go transparent over a tint. The panel stays open while
-  both colours are picked.
+  both colours are picked, and closes on a click outside it or on Escape (the
+  `DismissPicker` hook reports it; the panel and its trigger are marked
+  `data-color-picker` so clicks on them are left to the picker).
 - **The sidebar** (presence + sharing) is fixed at 280px on the right, collapsible via a button in the header. On mobile, it becomes a slide-over panel.
 - **The editor header** is the canvas title, edited inline in the layout toolbar above the
   grid, the bento board or the image board — the same row that holds **Edit structure**. On
