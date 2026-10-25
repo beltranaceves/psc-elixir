@@ -30,15 +30,16 @@ A bento canvas (and a bento template) is flat, exactly like a canvas's `cells`:
 | `bento_columns` | 4–16, default 12 |
 | `bento_rows` | 1–64, default 4. The container height: a board can reserve empty rows below its cards |
 | `placement` | `x`, `y`, `w`, `h` in half units, 0-based. `h` is a **minimum** |
-| `accent` | optional token from `Psc.Canvas.Accent` |
+| `accent` | optional token from `Psc.Canvas.Accent`, drawn as the card's outline |
+| `background` | optional cell surface tint from the same token list |
 | everything else | the cell's fields, `label` and `titles`, as in a table |
 
 `"$name"` and `"$description"` also live in the map: they are the canvas header, written by
 the name/description operations. They are metadata like `layout_mode`, never cards — a
 canvas that is renamed and then reloaded must still render its board.
 
-`placement` and `accent` are reserved cell keys: they can never be added, removed or
-rendered as editable fields.
+`placement`, `accent` and `background` are reserved cell keys: they can never be added,
+removed or rendered as editable fields.
 
 ## Constraints
 
@@ -66,6 +67,7 @@ reducer, the editor, the designer, the previews and the agent tools all call it.
 | `move_card` | `cell_key`, `x`, `y` | Last-write-wins |
 | `resize_card` | `cell_key`, `w`, `h` | The left edge stays put |
 | `set_card_accent` | `cell_key`, `accent` | Validated against the token list |
+| `set_cell_background` | `cell_key`, `background` | The cell's surface tint; works in every mode |
 | `set_bento_columns` | `columns` | Clamps every card into the new width |
 | `set_bento_rows` | `rows` | Sets the container height; clamps up to the deepest card |
 
@@ -82,8 +84,9 @@ smaller board, so it clamps the cards instead.
 
 ## Editor
 
-- `Edit layout` shows the drag grip, the resize corner, the accent swatch, the remove
-  action and `Add card`. Without it a card behaves like a table cell.
+- `Edit layout` shows the drag grip, the resize corner, a **Colors** control (one panel with
+  an **Outline** row and a **Background** row, each with the token palette and None), the
+  remove action and `Add card`. Without Edit layout a card behaves like a table cell.
 - Dragging or resizing previews locally (`BentoBoard`) and pushes the final rectangle.
 - Keyboard: focus the grip, arrow keys move half a unit; shift+arrows resize by the same
   step. The shift path

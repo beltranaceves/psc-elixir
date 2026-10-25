@@ -671,7 +671,10 @@
     height: auto;
     min-height: 100%;
     overflow: visible;
-    box-shadow: none;
+    /* Keep the card flat on its board (no focus elevation), but let the
+       cell's accent ring through: it is a box-shadow utility. */
+    box-shadow: var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+      var(--tw-ring-shadow);
   }
 
   .bento-card .canvas-cell .cell-body {
@@ -712,7 +715,10 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    box-shadow: none;
+    /* Flat inside the picture, but the accent ring (a box-shadow utility)
+       still draws. */
+    box-shadow: var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow),
+      var(--tw-ring-shadow);
   }
 
   .image-cell .canvas-cell .cell-body,

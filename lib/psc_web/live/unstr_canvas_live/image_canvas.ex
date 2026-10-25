@@ -15,9 +15,9 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
 
   use Phoenix.Component
 
-  import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
-  import PscWeb.UnstrCanvasLive.Header, only: [title_field: 1]
+  import PscWeb.UnstrCanvasLive.CellColors, only: [colors_button: 1, colors_panel: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
   alias Psc.Canvas.Structure
   alias PscWeb.Components.ImageBoard, as: ImageFrame
@@ -28,6 +28,11 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   attr :c_name, :string, required: true
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
+  attr :colors_picker, :string, default: nil
+  attr :presence, :map, required: true
+  attr :status, :map, required: true
+  attr :can_share?, :boolean, required: true
+  attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
 
@@ -40,26 +45,30 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
       class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
     >
       <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
-        <button
-          type="button"
-          id="edit-layout-toggle"
-          phx-click="toggle_structure"
-          aria-pressed={to_string(@edit_structure?)}
-          class={[
-            "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
-            @edit_structure? && "border-primary/50 bg-primary/10 text-base-content",
-            not @edit_structure? &&
-              "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
-          ]}
-        >
-          <.icon name="hero-pencil-square" class="size-4" /> Edit layout
-        </button>
-
         <div class="min-w-[8rem] flex-1">
           <.title_field c_name={@c_name} />
         </div>
 
+        <div :if={@status_row?} class="hidden sm:flex">
+          <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+        </div>
+
         <div class="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            id="edit-layout-toggle"
+            phx-click="toggle_structure"
+            aria-pressed={to_string(@edit_structure?)}
+            class={[
+              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+              @edit_structure? && "border-primary/50 bg-primary/10 text-base-content",
+              not @edit_structure? &&
+                "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
+            ]}
+          >
+            <.icon name="hero-pencil-square" class="size-4" /> Edit layout
+          </button>
+
           <span
             id="image-size"
             class="inline-flex h-8 items-center gap-1.5 rounded-md border border-base-content/10 px-2.5 text-xs tabular-nums text-base-content/50"
@@ -119,7 +128,11 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                   focus_cell={@focus_cell}
                   accent_top={card.accent}
                   class="h-full rounded-lg shadow-lg"
+                  body_class={@edit_structure? && "pt-10 sm:pt-8"}
+                  outline={card.accent}
+                  colors_control?={false}
                   nav={Structure.neighbours(@cells, card.key)}
+                  colors_picker={@colors_picker}
                 />
               <% end %>
 
@@ -164,20 +177,13 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                   {if card.kind == "text", do: "Card", else: "Text"}
                 </button>
 
-                <button
-                  :if={card.kind == "card"}
-                  type="button"
-                  id={"image-accent-" <> card.key}
-                  phx-click="toggle_structure_accent"
-                  phx-value-group="card"
-                  phx-value-id={card.key}
-                  class={[
-                    "size-6 rounded-full ring-2 ring-base-content/20 transition hover:ring-primary",
-                    swatch_class(card.accent)
-                  ]}
-                  title="Cell colour"
-                  aria-label={"Colour for #{card.label}"}
-                ></button>
+                <.colors_button
+                  cell_key={card.key}
+                  background={Map.get(@cells, card.key, %{})["background"]}
+                  outline={card.accent}
+                  open?={@colors_picker == card.key}
+                />
+
                 <button
                   type="button"
                   id={"remove-image-cell-" <> card.key}
@@ -192,34 +198,15 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
               </div>
 
               <div
-                :if={@structure_accent_picker == {:card, card.key}}
-                class="absolute right-0 top-8 z-40 flex flex-wrap items-center gap-1 rounded-md border border-base-content/10 bg-base-100 p-1 shadow-lg"
+                :if={@colors_picker == card.key}
+                id={"cell-colors-panel-" <> card.key}
+                class="absolute right-0 top-8 z-40 rounded-md border border-base-content/10 bg-base-100 p-2 shadow-lg"
               >
-                <%= for token <- Psc.Canvas.Accent.tokens() do %>
-                  <button
-                    type="button"
-                    phx-click="set_card_accent"
-                    phx-value-cell_key={card.key}
-                    phx-value-accent={token}
-                    class={[
-                      "size-5 rounded-full ring-1 ring-base-content/25 transition hover:scale-110",
-                      swatch_class(token),
-                      card.accent == token && "ring-2 ring-primary"
-                    ]}
-                    title={token}
-                    aria-label={"Set cell accent #{token}"}
-                  ></button>
-                <% end %>
-
-                <button
-                  type="button"
-                  phx-click="set_card_accent"
-                  phx-value-cell_key={card.key}
-                  phx-value-accent=""
-                  class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
-                >
-                  None
-                </button>
+                <.colors_panel
+                  cell_key={card.key}
+                  background={Map.get(@cells, card.key, %{})["background"]}
+                  outline={card.accent}
+                />
               </div>
 
               <button

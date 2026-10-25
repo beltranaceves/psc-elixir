@@ -590,10 +590,10 @@ test.describe('canvas editor layout', () => {
     const nameBox = await name.boundingBox();
     expect(nameBox).not.toBeNull();
 
-    // The structure toggle leads the row; the title follows it.
+    // The title leads the row; the structure toggle sits on the right.
     const toggleBox = await page.locator('#edit-structure-toggle').boundingBox();
     expect(toggleBox).not.toBeNull();
-    expect(toggleBox!.x).toBeLessThan(nameBox!.x);
+    expect(toggleBox!.x).toBeGreaterThan(nameBox!.x);
 
     // The toolbar sits above the header row of the table, inside the grid card.
     const grid = page.locator('#canvas-grid');

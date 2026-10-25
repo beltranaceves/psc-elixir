@@ -98,6 +98,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:note_presence, %{})
         |> assign(:edit_structure?, false)
         |> assign(:structure_accent_picker, nil)
+        |> assign(:structure_colors_picker, nil)
         |> assign(:structure_remove_confirm, nil)
         |> subscribe_to_canvas(id)
 
@@ -742,6 +743,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      socket
      |> assign(:edit_structure?, not socket.assigns.edit_structure?)
      |> assign(:structure_accent_picker, nil)
+     |> assign(:structure_colors_picker, nil)
      |> assign(:structure_remove_confirm, nil)}
   end
 
@@ -779,7 +781,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      |> process_operation(%{
        "type" => "set_row_accent",
        "id" => id,
-       "accent" => normalize_accent(accent)
+       "accent" => normalize_token(accent)
      })}
   end
 
@@ -790,7 +792,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      |> process_operation(%{
        "type" => "set_column_accent",
        "id" => id,
-       "accent" => normalize_accent(accent)
+       "accent" => normalize_token(accent)
      })}
   end
 
@@ -804,7 +806,32 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
     picker = if socket.assigns.structure_accent_picker == key, do: nil, else: key
 
-    {:noreply, assign(socket, :structure_accent_picker, picker)}
+    {:noreply,
+     assign(socket,
+       structure_accent_picker: picker,
+       structure_colors_picker: nil
+     )}
+  end
+
+  def handle_event("toggle_cell_colors", %{"cell_key" => key}, socket) do
+    picker = if socket.assigns.structure_colors_picker == key, do: nil, else: key
+
+    {:noreply,
+     assign(socket,
+       structure_colors_picker: picker,
+       structure_accent_picker: nil
+     )}
+  end
+
+  # Choosing either colour keeps the panel open: the outline and the
+  # background are usually set together.
+  def handle_event("set_cell_background", %{"cell_key" => key} = params, socket) do
+    {:noreply,
+     process_operation(socket, %{
+       "type" => "set_cell_background",
+       "cell_key" => key,
+       "background" => normalize_token(params["background"])
+     })}
   end
 
   def handle_event("request_remove_row", %{"id" => id}, socket) do
@@ -967,12 +994,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   def handle_event("set_card_accent", %{"cell_key" => key, "accent" => accent}, socket) do
     {:noreply,
-     socket
-     |> assign(:structure_accent_picker, nil)
-     |> process_operation(%{
+     process_operation(socket, %{
        "type" => "set_card_accent",
        "cell_key" => key,
-       "accent" => normalize_accent(accent)
+       "accent" => normalize_token(accent)
      })}
   end
 
@@ -1363,8 +1388,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
-  defp normalize_accent(""), do: nil
-  defp normalize_accent(accent), do: accent
+  defp normalize_token(""), do: nil
+  defp normalize_token(token), do: token
 
   @impl true
   def handle_params(params, _url, socket) do
@@ -1858,7 +1883,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       current_scope={@current_scope}
       header_title="Canvas Editor"
       fill_height
-      main_class="px-2 pt-2 sm:px-6 sm:pt-6 lg:px-8 lg:pt-8"
+      main_class="px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3"
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <:header_nav>
@@ -1881,6 +1906,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
+          controls?={@active_tab != "editor"}
         />
         <Header.share_dialog
           canvas={@canvas}
@@ -1956,6 +1982,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   c_name={@c_name}
                   edit_structure?={@edit_structure?}
                   structure_accent_picker={@structure_accent_picker}
+                  colors_picker={@structure_colors_picker}
+                  presence={@presence}
+                  status={@status}
+                  can_share?={@canvas.author_id == @user_id}
+                  status_row?={@active_tab == "editor"}
                   focus_cell={@focus_cell}
                   user_id={@user_id}
                 />
@@ -1965,6 +1996,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   c_name={@c_name}
                   edit_structure?={@edit_structure?}
                   structure_accent_picker={@structure_accent_picker}
+                  colors_picker={@structure_colors_picker}
+                  presence={@presence}
+                  status={@status}
+                  can_share?={@canvas.author_id == @user_id}
+                  status_row?={@active_tab == "editor"}
                   focus_cell={@focus_cell}
                   user_id={@user_id}
                 />
@@ -1974,6 +2010,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   c_name={@c_name}
                   edit_structure?={@edit_structure?}
                   structure_accent_picker={@structure_accent_picker}
+                  colors_picker={@structure_colors_picker}
+                  presence={@presence}
+                  status={@status}
+                  can_share?={@canvas.author_id == @user_id}
+                  status_row?={@active_tab == "editor"}
                   focus_cell={@focus_cell}
                   user_id={@user_id}
                 />

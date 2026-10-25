@@ -48,13 +48,15 @@ plus `"layout_mode"` and a `"backdrop"`.
 | `backdrop.aspect` | Optional width ÷ height. Absent means the picture's own shape sets the board |
 | `placement` | `x`, `y`, `w`, `h` in **percent of the backdrop**, 0–100 |
 | `kind` | `"card"` (default) or `"text"` |
+| `accent` | optional outline token, drawn as a ring around the card or the text label |
+| `background` | optional cell surface tint from the accent token list |
 | everything else | the cell's fields, `label` and `titles`, exactly as in a table cell |
 
 `"$name"` and `"$description"` are the canvas header, written by the name/description
 operations. They are metadata, never cells.
 
-`placement`, `accent` and `kind` are reserved cell keys: they can never be added,
-removed or rendered as editable fields.
+`placement`, `accent`, `background` and `kind` are reserved cell keys: they can never be
+added, removed or rendered as editable fields.
 
 ## Geometry
 
@@ -114,6 +116,7 @@ are simply not shown while it is text.
 | `resize_card` | `cell_key`, `w`, `h` | The left edge stays put |
 | `set_cell_kind` | `cell_key`, `kind` | `"card"` or `"text"` |
 | `set_card_accent` | `cell_key`, `accent` | Validated against the accent tokens |
+| `set_cell_background` | `cell_key`, `background` | Surface tint for a card or a text cell |
 | `set_backdrop` | `backdrop` (`url`, `fit`, `alt`, `aspect`) | Missing fields keep their value; an empty URL clears the picture |
 
 Cell content keeps the existing operations (`update_cell`, `update_cell_label`,
@@ -130,7 +133,9 @@ and the event log replays it.
   description. The values are stored through `set_backdrop`; an invalid URL is ignored
   and the current picture stays.
 - Every cell carries its size in percent, a drag grip, a **Text/Card** toggle, its
-  accent swatch (cards only), a remove action and a resize corner.
+  a **Colors** control, a remove action and a resize corner. The Colors panel labels the
+  two independent colours: **Outline** rings the card (or the text label) and **Background**
+  tints the surface; either row can be cleared with None.
 - A remove asks first when the cell has content, the same dialog the table and bento
   use. An empty cell goes immediately.
 - Dragging or resizing previews locally; the final rectangle is pushed on release.

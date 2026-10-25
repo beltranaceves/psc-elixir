@@ -273,15 +273,19 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
-      {:ok, _lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
+      {:ok, lv, html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      # The row-label column is a fixed width, not one that grows with the
-      # longest label: a content-derived width would resize a beat after the
-      # typing (the label reaches the server through a debounce) and would
-      # leave the input squeezed between the accent swatch and the remove
-      # button. Two 12rem minimum data columns follow it.
+      # The row-label column hugs the longest label ("Row 1" in the fixture),
+      # measured in the label's own 14px: two 12rem minimum data columns follow
+      # it. The width is recomputed when the debounced label reaches the server,
+      # not on every keystroke.
       assert html =~ "table-fixed"
-      assert html =~ "min-width: calc(11rem + 24rem)"
+      assert html =~ "min-width: calc(64px + 24rem)"
+
+      # Edit structure needs room for the swatch and the remove button beside
+      # the input, so the column never gets tighter than 8rem while editing.
+      lv |> element("#edit-structure-toggle") |> render_click()
+      assert render(lv) =~ "min-width: calc(128px + 24rem)"
 
       # The grid takes the remaining viewport height through flex, not a
       # viewport-unit calculation.
@@ -450,12 +454,15 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      # The title is renamed where it is read: in the grid's toolbar.
+      # The title is renamed where it is read: in the grid's toolbar. The
+      # presence, save state and Share share that row on the editor tab, so
+      # the header row above the panels is empty there.
       assert has_element?(lv, "#canvas-grid #canvas-name-form")
       # The description is not part of the editing surface.
       refute has_element?(lv, "#canvas-panel-editor #canvas-description-form")
-      assert has_element?(lv, "#canvas-header #active-users-tooltip")
-      assert has_element?(lv, "#canvas-header #share-canvas-button")
+      assert has_element?(lv, "#canvas-grid #active-users-tooltip")
+      assert has_element?(lv, "#canvas-grid #share-canvas-button")
+      refute has_element?(lv, "#canvas-header #active-users-tooltip")
 
       # The standalone "Canvas Structure" block is gone; the grid is the content.
       refute has_element?(lv, "#canvas-structure-tooltip")
@@ -471,6 +478,10 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       lv |> element("#canvas-tab-info") |> render_click()
       assert has_element?(lv, "#canvas-panel-info #canvas-info-name-form")
       assert has_element?(lv, "#canvas-panel-info #canvas-description-form")
+      # With the editor toolbar hidden, the status cluster returns to the
+      # header row, so it stays available on every tab.
+      assert has_element?(lv, "#canvas-header #active-users-tooltip")
+      assert has_element?(lv, "#canvas-header #share-canvas-button")
     end
 
     test "renames the canvas and edits its description from the Info view", %{
@@ -594,6 +605,31 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       cells = Canvas.get_unstr_canvas_content(canvas.id)
       assert Enum.at(cells["rows"], 0)["accent"] == "teal"
+    end
+
+    test "a cell takes a background from the palette", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      lv |> element("#edit-structure-toggle") |> render_click()
+
+      # The swatch in the cell's label row opens the colour panel. A table
+      # cell has no per-cell outline (accents belong to the headers), so the
+      # panel offers only the background row.
+      lv |> element("#cell-colors-r1_c1") |> render_click()
+      assert has_element?(lv, "#cell-colors-panel-r1_c1")
+      assert has_element?(lv, "#cell-colors-r1_c1-background-teal")
+      refute has_element?(lv, "#cell-colors-r1_c1-outline-teal")
+
+      lv |> element("#cell-colors-r1_c1-background-teal") |> render_click()
+
+      cells = Canvas.get_unstr_canvas_content(canvas.id)
+      assert cells["r1_c1"]["background"] == "teal"
+
+      # The panel stays open so both colours can be picked in one go.
+      assert has_element?(lv, "#cell-colors-panel-r1_c1")
+      assert has_element?(lv, "#cell-card-r1_c1.bg-teal-100")
     end
 
     test "removing an empty row goes straight away", %{conn: conn, user: user} do

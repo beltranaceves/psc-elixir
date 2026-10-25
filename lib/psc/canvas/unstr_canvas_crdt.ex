@@ -22,6 +22,7 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     * `%{"type" => "update_cell_field_title", "cell_key" => key, "field" => field, "title" => title}`
     * `%{"type" => "add_card" | "remove_card" | "move_card" | "resize_card", ...}` — free-form cells
     * `%{"type" => "set_card_accent", "cell_key" => key, "accent" => token}`
+    * `%{"type" => "set_cell_background", "cell_key" => key, "background" => token}` — any mode
     * `%{"type" => "set_bento_columns" | "set_bento_rows", ...}` — bento boards
     * `%{"type" => "set_backdrop", "backdrop" => %{"url" => ..., "fit" => ..., "alt" => ..., "aspect" => ...}}` — image boards
     * `%{"type" => "set_cell_kind", "cell_key" => key, "kind" => "card" | "text"}` — image cells
@@ -295,6 +296,13 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
         cells
       ) do
     Structure.set_accent(cells, key, accent)
+  end
+
+  def apply_operation(
+        %{"type" => "set_cell_background", "cell_key" => key, "background" => background},
+        cells
+      ) do
+    Structure.set_background(cells, key, background)
   end
 
   def apply_operation(%{"type" => "set_bento_columns", "columns" => count}, cells) do

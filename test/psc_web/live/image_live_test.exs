@@ -87,6 +87,56 @@ defmodule PscWeb.ImageLiveTest do
 
       assert cells(canvas)["next_step"]["content"] == "Emergency exit"
     end
+
+    test "a card takes a background from the palette", %{conn: conn, user: user} do
+      canvas = image_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      view |> element("#edit-layout-toggle") |> render_click()
+
+      view |> element("#cell-colors-brief") |> render_click()
+      assert has_element?(view, "#cell-colors-panel-brief")
+
+      view |> element("#cell-colors-brief-background-rose") |> render_click()
+
+      assert Structure.cell(cells(canvas), "brief")["background"] == "rose"
+      assert has_element?(view, "#cell-card-brief.bg-rose-100")
+    end
+
+    test "a text cell takes a background from the board control", %{conn: conn, user: user} do
+      canvas = image_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      view |> element("#edit-layout-toggle") |> render_click()
+
+      view |> element("#cell-colors-next_step") |> render_click()
+      assert has_element?(view, "#cell-colors-panel-next_step")
+
+      view |> element("#cell-colors-next_step-background-emerald") |> render_click()
+
+      assert Structure.cell(cells(canvas), "next_step")["background"] == "emerald"
+      assert has_element?(view, "#text-cell-next_step.bg-emerald-100")
+    end
+
+    test "an accent outlines a card and a text cell", %{conn: conn, user: user} do
+      canvas = image_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      view |> element("#edit-layout-toggle") |> render_click()
+
+      view |> element("#cell-colors-brief") |> render_click()
+      view |> element("#cell-colors-brief-outline-rose") |> render_click()
+
+      assert Structure.cell(cells(canvas), "brief")["accent"] == "rose"
+      assert has_element?(view, "#cell-card-brief.ring-rose-400")
+
+      # A text cell has no card frame, so the label itself carries the outline.
+      view |> element("#cell-colors-next_step") |> render_click()
+      view |> element("#cell-colors-next_step-outline-teal") |> render_click()
+
+      assert Structure.cell(cells(canvas), "next_step")["accent"] == "teal"
+      assert has_element?(view, "#text-cell-next_step.ring-teal-400")
+    end
   end
 
   describe "layout editing" do

@@ -16,9 +16,9 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
 
   use Phoenix.Component
 
-  import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
-  import PscWeb.UnstrCanvasLive.Header, only: [title_field: 1]
+  import PscWeb.UnstrCanvasLive.CellColors, only: [colors_button: 1, colors_panel: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
   alias Psc.Canvas.Structure
   alias PscWeb.Components.UI.Button, as: UIButton
@@ -28,6 +28,11 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
   attr :c_name, :string, required: true
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
+  attr :colors_picker, :string, default: nil
+  attr :presence, :map, required: true
+  attr :status, :map, required: true
+  attr :can_share?, :boolean, required: true
+  attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
 
@@ -57,26 +62,30 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
       }
     >
       <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
-        <button
-          type="button"
-          id="edit-layout-toggle"
-          phx-click="toggle_structure"
-          aria-pressed={to_string(@edit_structure?)}
-          class={[
-            "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
-            @edit_structure? && "border-primary/50 bg-primary/10 text-base-content",
-            not @edit_structure? &&
-              "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
-          ]}
-        >
-          <.icon name="hero-pencil-square" class="size-4" /> Edit layout
-        </button>
-
         <div class="min-w-[8rem] flex-1">
           <.title_field c_name={@c_name} />
         </div>
 
+        <div :if={@status_row?} class="hidden sm:flex">
+          <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+        </div>
+
         <div class="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            id="edit-layout-toggle"
+            phx-click="toggle_structure"
+            aria-pressed={to_string(@edit_structure?)}
+            class={[
+              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+              @edit_structure? && "border-primary/50 bg-primary/10 text-base-content",
+              not @edit_structure? &&
+                "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
+            ]}
+          >
+            <.icon name="hero-pencil-square" class="size-4" /> Edit layout
+          </button>
+
           <%!-- The board's real grid. In Edit layout it is the control itself:
           columns on the left of the ×, rows on the right. Outside it the same
           value is a read-only badge, so reading a canvas cannot restructure
@@ -190,9 +199,25 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                 user_id={@user_id}
                 focus_cell={@focus_cell}
                 accent_top={card.accent}
-                class={["h-full", @edit_structure? && "pt-10 sm:pt-8"]}
+                class="h-full"
+                body_class={@edit_structure? && "pt-10 sm:pt-8"}
+                outline={card.accent}
+                colors_control?={false}
                 nav={Structure.neighbours(@cells, card.key)}
+                colors_picker={@colors_picker}
               />
+
+              <div
+                :if={@colors_picker == card.key}
+                id={"cell-colors-panel-" <> card.key}
+                class="absolute left-1 top-11 z-40 rounded-md border border-base-content/10 bg-base-100 p-2 shadow-lg sm:left-auto sm:right-1 sm:top-9"
+              >
+                <.colors_panel
+                  cell_key={card.key}
+                  background={Map.get(@cells, card.key, %{})["background"]}
+                  outline={card.accent}
+                />
+              </div>
               <%= if @edit_structure? do %>
                 <%!-- On a phone a wide card starts off-screen to the right, so
                 the controls sit at its left edge (the first part the pan
@@ -222,19 +247,13 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     <.icon name="hero-arrows-pointing-out" class="size-3.5" />
                   </button>
 
-                  <button
-                    type="button"
-                    id={"card-accent-" <> card.key}
-                    phx-click="toggle_structure_accent"
-                    phx-value-group="card"
-                    phx-value-id={card.key}
-                    class={[
-                      "size-8 rounded-full ring-2 ring-base-content/20 transition hover:ring-primary sm:size-6",
-                      swatch_class(card.accent)
-                    ]}
-                    title="Card colour"
-                    aria-label={"Colour for #{card.label}"}
-                  ></button>
+                  <.colors_button
+                    cell_key={card.key}
+                    background={Map.get(@cells, card.key, %{})["background"]}
+                    outline={card.accent}
+                    open?={@colors_picker == card.key}
+                  />
+
                   <button
                     type="button"
                     id={"remove-card-" <> card.key}
@@ -245,37 +264,6 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                     aria-label={"Remove #{card.label}"}
                   >
                     <.icon name="hero-x-mark" class="size-3" />
-                  </button>
-                </div>
-
-                <div
-                  :if={@structure_accent_picker == {:card, card.key}}
-                  class="absolute left-1 top-11 z-30 flex flex-wrap items-center gap-1 rounded-md border border-base-content/10 bg-base-100 p-1 shadow-lg sm:left-auto sm:right-1 sm:top-9"
-                >
-                  <%= for token <- Psc.Canvas.Accent.tokens() do %>
-                    <button
-                      type="button"
-                      phx-click="set_card_accent"
-                      phx-value-cell_key={card.key}
-                      phx-value-accent={token}
-                      class={[
-                        "size-5 rounded-full ring-1 ring-base-content/25 transition hover:scale-110",
-                        swatch_class(token),
-                        card.accent == token && "ring-2 ring-primary"
-                      ]}
-                      title={token}
-                      aria-label={"Set card accent #{token}"}
-                    ></button>
-                  <% end %>
-
-                  <button
-                    type="button"
-                    phx-click="set_card_accent"
-                    phx-value-cell_key={card.key}
-                    phx-value-accent=""
-                    class="px-1 text-[0.65rem] text-base-content/50 hover:text-base-content"
-                  >
-                    None
                   </button>
                 </div>
 

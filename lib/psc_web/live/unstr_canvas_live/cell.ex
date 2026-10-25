@@ -6,6 +6,9 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
 
+  import PscWeb.UnstrCanvasLive.CellColors,
+    only: [colors_button: 1, colors_panel: 1]
+
   # One cell's body: the label, its fields and the Markdown editors. Shared by
   # the table grid and the bento board so the two layouts cannot drift - the
   # ids (`cell-card-<key>`, `cell-<key>-label`, `md-<key>-<field>`) are the
@@ -20,8 +23,20 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   attr :accent_left, :string, default: nil
   attr :class, :any, default: nil
   attr :nav, :map, default: nil
+  attr :colors_picker, :string, default: nil
+  attr :colors_palette?, :boolean, default: false
+  attr :colors_control?, :boolean, default: true
+  attr :body_class, :any, default: nil
+  attr :outline, :string, default: nil
 
   def card(assigns) do
+    background = normalize_background(Map.get(assigns.cell_data, "background"))
+
+    assigns =
+      assigns
+      |> assign(:background, background)
+      |> assign(:surface, if(background, do: "bg-transparent", else: "bg-base-300"))
+
     ~H"""
     <div
       id={"cell-card-" <> @cell_key}
@@ -29,7 +44,9 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
       data-cell-key={@cell_key}
       data-cell-nav={@nav && Jason.encode!(@nav)}
       class={[
-        "canvas-cell cursor-text bg-base-300 transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
+        "canvas-cell cursor-text transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
+        background_class(@background) || "bg-base-300",
+        outline_class(@outline),
         @focus_cell == @cell_key && "ring-2 ring-primary ring-inset",
         @class
       ]}
@@ -48,25 +65,44 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
         orientation={:left}
         class="cell-accent z-10"
       />
-      <div class="cell-body p-2">
+      <div class={["cell-body p-2", @body_class]}>
         <%= if @edit_structure? do %>
-          <.form
-            for={%{}}
-            id={"cell-label-" <> @cell_key}
-            phx-change="update_cell_label"
-            class="mb-1"
-          >
-            <input type="hidden" name="cell_key" value={@cell_key} />
-            <input
-              type="text"
-              id={"cell-" <> @cell_key <> "-label"}
-              name="label"
-              value={Map.get(@cell_data, "label", "")}
-              phx-debounce="300"
-              placeholder={@cell_key}
-              class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
+          <div class="mb-1 flex items-center gap-1">
+            <.colors_button
+              :if={@colors_control?}
+              cell_key={@cell_key}
+              background={@background}
+              outline={@outline}
+              open?={@colors_picker == @cell_key}
+              label="Cell background"
             />
-          </.form>
+
+            <.form
+              for={%{}}
+              id={"cell-label-" <> @cell_key}
+              phx-change="update_cell_label"
+              class="min-w-0 flex-1"
+            >
+              <input type="hidden" name="cell_key" value={@cell_key} />
+              <input
+                type="text"
+                id={"cell-" <> @cell_key <> "-label"}
+                name="label"
+                value={Map.get(@cell_data, "label", "")}
+                phx-debounce="300"
+                placeholder={@cell_key}
+                class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
+              />
+            </.form>
+          </div>
+
+          <div
+            :if={@colors_palette? and @colors_picker == @cell_key}
+            id={"cell-colors-panel-" <> @cell_key}
+            class="mb-1 rounded-md border border-base-content/10 bg-base-100/95 p-2 shadow-sm"
+          >
+            <.colors_panel cell_key={@cell_key} background={@background} outline?={false} />
+          </div>
         <% else %>
           <div class="mb-1">
             <div class="text-sm font-medium text-base-content break-words">
@@ -134,6 +170,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
                   field={field}
                   value={value}
                   user_id={@user_id}
+                  surface={@surface}
                 />
               </.form>
             </div>
@@ -188,6 +225,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   attr :field, :string, required: true
   attr :value, :any, required: true
   attr :user_id, :integer, required: true
+  attr :surface, :string, default: "bg-base-300"
 
   def cell_field_editor(assigns) do
     ~H"""
@@ -203,7 +241,10 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
     >
       <div
         id={"md-render-" <> @cell_key <> "-" <> @field}
-        class="md-render prose prose-sm dark:prose-invert break-words mb-0.5 bg-base-300 text-base-content p-1"
+        class={[
+          "md-render prose prose-sm dark:prose-invert break-words mb-0.5 text-base-content p-1",
+          @surface
+        ]}
         phx-update="ignore"
       >
         {@value}
@@ -211,7 +252,10 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
       <textarea
         name={"values[" <> @field <> "]"}
         phx-debounce="150"
-        class="field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto bg-base-300 px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none"
+        class={[
+          "field-sizing-content hidden max-h-[60vh] w-full resize-none overflow-y-auto px-1.5 py-0.5 text-base-content placeholder-base-content/40 focus:outline-none",
+          @surface
+        ]}
         placeholder="Enter value..."
         rows="3"
       >{@value}</textarea>
@@ -246,7 +290,9 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
         placeholder={@placeholder}
         aria-label={Map.get(@cell_data, "label") || @cell_key}
         class={[
-          "h-full w-full rounded-md border bg-base-100/90 px-2 text-center text-sm font-semibold text-base-content shadow-sm outline-none transition placeholder:font-normal placeholder:text-base-content/40 focus:border-primary focus:bg-base-100",
+          "h-full w-full rounded-md border px-2 text-center text-sm font-semibold text-base-content shadow-sm outline-none transition placeholder:font-normal placeholder:text-base-content/40 focus:border-primary",
+          background_class(Map.get(@cell_data, "background")) || "bg-base-100/90 focus:bg-base-100",
+          outline_class(Map.get(@cell_data, "accent")),
           @edit_structure? && "border-primary/40",
           not @edit_structure? && "border-base-content/10 hover:border-base-content/25"
         ]}
@@ -254,4 +300,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
     </.form>
     """
   end
+
+  defp normalize_background(""), do: nil
+  defp normalize_background(token), do: token
 end

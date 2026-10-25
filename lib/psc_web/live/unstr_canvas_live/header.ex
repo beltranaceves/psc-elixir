@@ -14,13 +14,44 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
+  attr :controls?, :boolean, default: true
 
   def header(assigns) do
     ~H"""
     <div
       id="canvas-header"
-      class="hidden shrink-0 items-center justify-end gap-2 px-2 sm:flex sm:px-0"
+      class={[
+        "shrink-0 items-center justify-end gap-2 px-2 sm:px-0",
+        @controls? && "hidden sm:flex",
+        not @controls? && "hidden"
+      ]}
     >
+      <.canvas_status
+        :if={@controls?}
+        presence={@presence}
+        status={@status}
+        can_share?={@can_share?}
+      />
+    </div>
+    """
+  end
+
+  attr :presence, :map, required: true
+  attr :status, :map, required: true
+  attr :can_share?, :boolean, required: true
+  attr :class, :any, default: nil
+
+  @doc """
+  Presence, save state and Share.
+
+  One instance is rendered at a time: the editor toolbar hosts it on the
+  Editor tab (from `sm` up), and the header row above the panels hosts it on
+  the other tabs. Both use the same ids, so the tests and the hooks do not
+  need to know where it lives.
+  """
+  def canvas_status(assigns) do
+    ~H"""
+    <div class={["flex min-w-0 items-center gap-2", @class]}>
       <%!-- Active users: truncated, with the full list in a hover tooltip --%>
       <div id="canvas-presence">
         <UITooltip.tooltip id="active-users-tooltip">
@@ -54,7 +85,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
       </div>
 
       <%= if @can_share? do %>
-        <div>
+        <div class="shrink-0">
           <.share_button id="share-canvas-button" label="Share" />
         </div>
       <% end %>

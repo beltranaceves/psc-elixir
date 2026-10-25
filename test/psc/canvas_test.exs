@@ -682,6 +682,45 @@ defmodule Psc.CanvasTest do
       assert Enum.at(cells["rows"], 1)["accent"] == nil
     end
 
+    test "set_cell_background sets and clears a known token, and ignores an unknown one" do
+      cells =
+        apply_op(structured_cells(), %{
+          "type" => "set_cell_background",
+          "cell_key" => "r1_c1",
+          "background" => "sky"
+        })
+
+      assert cells["r1_c1"]["background"] == "sky"
+
+      cells =
+        apply_op(cells, %{
+          "type" => "set_cell_background",
+          "cell_key" => "r1_c1",
+          "background" => ""
+        })
+
+      refute Map.has_key?(cells["r1_c1"], "background")
+
+      cells =
+        apply_op(cells, %{
+          "type" => "set_cell_background",
+          "cell_key" => "r1_c1",
+          "background" => "chartreuse"
+        })
+
+      refute Map.has_key?(cells["r1_c1"], "background")
+
+      # A metadata key is not a cell, and a background cannot overwrite it.
+      cells =
+        apply_op(cells, %{
+          "type" => "set_cell_background",
+          "cell_key" => "rows",
+          "background" => "sky"
+        })
+
+      assert is_list(cells["rows"])
+    end
+
     test "update_cell_label renames a cell" do
       cells =
         apply_op(structured_cells(), %{

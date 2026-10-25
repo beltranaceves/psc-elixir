@@ -5,7 +5,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
 
   import PscWeb.Components.Accent
   import PscWeb.CoreComponents, only: [icon: 1]
-  import PscWeb.UnstrCanvasLive.Header, only: [title_field: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
@@ -14,15 +14,28 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   # the viewport and scrolls horizontally.
   @min_column_width_rem 12
 
-  # The row-label column is a fixed width, not one that grows with the longest
-  # label. A content-derived width would resize a beat after the typing and
-  # move the input under the cursor.
-  @row_label_width_rem 11
+  # The row-label column hugs the longest label instead of taking a fixed
+  # share of the table. Measuring the text in the 14px the labels use keeps
+  # that tight without a canvas measurement: capitals and wide letters take
+  # more room than lowercase, a space less. The padding covers the cell's
+  # px-2 plus the borders. The width is recomputed when the debounced label
+  # reaches the server, never on every keystroke.
+  @row_label_padding_px 22
+  @row_label_min_px 56
+  # Edit structure puts the accent swatch and the remove button beside the
+  # label input, so the column cannot shrink to the text alone or the input
+  # would be unusable.
+  @row_label_edit_min_px 128
 
   attr :cells, :map, required: true
   attr :c_name, :string, required: true
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
+  attr :colors_picker, :string, default: nil
+  attr :presence, :map, required: true
+  attr :status, :map, required: true
+  attr :can_share?, :boolean, required: true
+  attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
 
@@ -35,28 +48,32 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
       <%!-- Structure editing is available to everyone with access to the
               canvas: the toggle, and — while it is on — the add actions. --%>
       <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
-        <button
-          type="button"
-          id="edit-structure-toggle"
-          phx-click="toggle_structure"
-          aria-pressed={to_string(@edit_structure?)}
-          class={[
-            "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
-            @edit_structure? &&
-              "border-primary/50 bg-primary/10 text-base-content",
-            not @edit_structure? &&
-              "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
-          ]}
-        >
-          <.icon name="hero-pencil-square" class="size-4" /> Edit structure
-        </button>
-
         <div class="min-w-[8rem] flex-1">
           <.title_field c_name={@c_name} />
         </div>
 
-        <%= if @edit_structure? do %>
-          <div class="ml-auto flex gap-2">
+        <div :if={@status_row?} class="hidden sm:flex">
+          <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+        </div>
+
+        <div class="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            id="edit-structure-toggle"
+            phx-click="toggle_structure"
+            aria-pressed={to_string(@edit_structure?)}
+            class={[
+              "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+              @edit_structure? &&
+                "border-primary/50 bg-primary/10 text-base-content",
+              not @edit_structure? &&
+                "border-base-content/10 text-base-content/70 hover:bg-base-content/5 hover:text-base-content"
+            ]}
+          >
+            <.icon name="hero-pencil-square" class="size-4" /> Edit structure
+          </button>
+
+          <%= if @edit_structure? do %>
             <UIButton.button
               type="button"
               variant="outline"
@@ -69,8 +86,8 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
             <UIButton.button type="button" variant="outline" size="sm" phx-click="add_row">
               Add Row
             </UIButton.button>
-          </div>
-        <% end %>
+          <% end %>
+        </div>
       </div>
 
       <div class="canvas-grid-scroll flex min-h-0 flex-1 flex-col overflow-auto">
@@ -106,10 +123,10 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
         <% else %>
           <table
             class="h-full min-h-0 w-full flex-1 table-fixed border-collapse"
-            style={"min-width: #{table_min_width(@cells)}"}
+            style={"min-width: #{table_min_width(@cells, @edit_structure?)}"}
           >
             <colgroup>
-              <col style={"width: #{row_label_width()}rem"} />
+              <col style={"width: #{row_label_width(@cells, @edit_structure?)}"} />
               <%= for _column <- @cells["columns"] || [] do %>
                 <col />
               <% end %>
@@ -334,6 +351,8 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                           focus_cell={@focus_cell}
                           accent_top={column["accent"]}
                           accent_left={row["accent"]}
+                          colors_picker={@colors_picker}
+                          colors_palette?
                         />
                       <% end %>
                     </td>
@@ -348,12 +367,40 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
     """
   end
 
-  defp table_min_width(cells) do
+  defp table_min_width(cells, edit_structure?) do
     columns = length(cells["columns"] || [])
-    "calc(#{row_label_width()}rem + #{columns * @min_column_width_rem}rem)"
+    "calc(#{row_label_width(cells, edit_structure?)} + #{columns * @min_column_width_rem}rem)"
   end
 
-  defp row_label_width, do: @row_label_width_rem
+  defp row_label_width(cells, edit_structure?) do
+    width = cells |> longest_row_label() |> label_text_px() |> Kernel.+(@row_label_padding_px)
+    width = max(width, if(edit_structure?, do: @row_label_edit_min_px, else: @row_label_min_px))
+    "#{width}px"
+  end
+
+  defp longest_row_label(cells) do
+    cells
+    |> Map.get("rows", [])
+    |> Enum.map(fn row -> row |> Map.get("label", "") |> to_string() end)
+    |> Enum.max_by(&String.length/1, fn -> "" end)
+  end
+
+  defp label_text_px(label) do
+    label
+    |> String.graphemes()
+    |> Enum.map(&glyph_px/1)
+    |> Enum.sum()
+  end
+
+  defp glyph_px(" "), do: 4
+  defp glyph_px(glyph) when glyph in ["m", "w", "M", "W"], do: 13
+
+  defp glyph_px(glyph) do
+    case String.to_charlist(glyph) do
+      [codepoint] when codepoint > 0x2E80 -> 14
+      _ -> if String.upcase(glyph) == glyph, do: 9, else: 7
+    end
+  end
 
   # A canvas with no rows or no columns has nothing to render as a table: the
   # empty state takes over, and anyone with access builds the structure in place.

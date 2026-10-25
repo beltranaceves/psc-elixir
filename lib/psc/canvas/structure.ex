@@ -81,9 +81,10 @@ defmodule Psc.Canvas.Structure do
 
   @metadata_keys Enum.uniq(@bento_metadata ++ @image_metadata)
 
-  # Cell keys that are metadata, not content, in every mode. `placement` and
-  # `accent` are how a free-form cell is drawn, and `kind` is whether an image
-  # cell is a card or a bare text box; they are never editable fields.
+  # Cell keys that are metadata, not content, in every mode. `placement`,
+  # `accent` and `background` are how a free-form cell is drawn, and `kind` is
+  # whether an image cell is a card or a bare text box; they are never editable
+  # fields.
   @reserved_cell_keys [
     "row",
     "column",
@@ -93,6 +94,7 @@ defmodule Psc.Canvas.Structure do
     "titles",
     "placement",
     "accent",
+    "background",
     "kind"
   ]
 
@@ -982,7 +984,28 @@ defmodule Psc.Canvas.Structure do
   @doc "Set a cell's accent (`nil` or `\"\"` clears it)."
   def set_accent(map, key, accent) do
     if Accent.valid?(accent) do
-      update_card(map, key, &maybe_put(&1, "accent", nilify(accent)))
+      update_card(map, key, &put_or_delete(&1, "accent", nilify(accent)))
+    else
+      map
+    end
+  end
+
+  @doc """
+  Set a cell's background token in any layout mode (`nil` or `\"\"` clears it).
+
+  The surface is part of the cell, not of the mode, so a table cell, a bento
+  card and an image card are coloured the same way. An unknown token leaves the
+  map untouched, exactly like an accent.
+  """
+  def set_background(map, key, background) do
+    if Accent.valid?(background) and key not in metadata_keys() do
+      case Map.fetch(map, key) do
+        {:ok, cell} when is_map(cell) ->
+          Map.put(map, key, put_or_delete(cell, "background", nilify(background)))
+
+        _other ->
+          map
+      end
     else
       map
     end
@@ -1081,6 +1104,9 @@ defmodule Psc.Canvas.Structure do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp put_or_delete(map, key, nil), do: Map.delete(map, key)
+  defp put_or_delete(map, key, value), do: Map.put(map, key, value)
 
   defp nilify(value) when value in [nil, ""], do: nil
   defp nilify(value), do: value

@@ -22,15 +22,25 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **Structure-editing controls** (add/remove row/column, add/remove field) are hidden behind an
   "Edit structure" toggle in the layout toolbar. When active, they appear as small outline
   buttons with accent color on hover.
+- **Cell colors** use the same token palette as the accents. While Edit structure is on,
+  each cell carries a **Colors** control that opens a panel with a labelled **Outline** row
+  and a **Background** row (table cells only get the Background row: their outline role
+  belongs to the row and column headers). The tint is stored on the cell (`"background"`)
+  and the outline on its accent, so the table, the bento and the image board render the
+  same surface; the field editors go transparent over a tint. The panel stays open while
+  both colours are picked.
 - **The sidebar** (presence + sharing) is fixed at 280px on the right, collapsible via a button in the header. On mobile, it becomes a slide-over panel.
 - **The editor header** is the canvas title, edited inline in the layout toolbar above the
-  grid, the bento board or the image board — the same row that holds **Edit structure**. The
-  only chrome above the panels is the presence pill, the save state and Share.
+  grid, the bento board or the image board — the same row that holds **Edit structure**. On
+  the Editor tab the presence pill, the save state and Share sit at the right end of that
+  same row from `sm` up; on the other tabs they move to a slim row above the panels. Only
+  one of the two locations is rendered at a time, so the ids stay unique.
 - **The description lives in the Info view.** It is not shown above the grid: the canvas's
   details, sharing and settings have a tab of their own at the right end of the strip.
 - **No manual save button.** Auto-save is indicated by a subtle "Saved" text that appears briefly after each save cycle.
-- **The status pill reports more than the state.** The pill (beside the presence button in the
-  status row above the panels, an icon in the app header on phones) opens a tooltip with the
+- **The status pill reports more than the state.** The pill (beside the presence button in
+  the editor toolbar on the Editor tab, in the row above the panels on the other tabs, an
+  icon in the app header on phones) opens a tooltip with the
   details: when
   the last write landed ("just now", "2 min ago"), how many writes this session made, how
   many failed, and how long the last write took. Hovering opens it on a desktop; a tap opens
@@ -209,12 +219,14 @@ a label input, per-field section-title inputs with a remove ×, and an add-field
 Content editing keeps working throughout. Removing a row or column that holds content
 opens a confirmation dialog; an empty one goes straight away.
 
-The **row-label column is a fixed 11 rem**, not one that grows with the longest label. A
-content-derived width resizes a beat *after* the typing (the label reaches the server
-through a debounce), so the column moves under the cursor; and because the column also
-holds the accent swatch and the remove button, a short label left the input about 17 px
-wide. A fixed width gives the input room at every viewport and never moves while typing.
-A long row label truncates in the read-only view (its full text is the cell's `title`).
+The **row-label column hugs its content**: it is as wide as the longest row label, measured per
+glyph in the 14px the label uses (capitals and wide letters take more room than lowercase, a
+space less) plus the cell padding. A short label therefore leaves almost all of a phone's
+width to the data columns. While Edit structure is on, the column never shrinks below 8 rem:
+it also holds the accent swatch and the remove button beside the label input, and a tighter
+column would leave the input a few pixels wide. The width is recomputed when the debounced
+label reaches the server, not on every keystroke. If the estimate is a little short (very
+wide glyphs), the read-only label truncates and its full text is the cell's `title`.
 
 The edit-mode controls are **stacked on a phone** (the input on its own line, the swatch
 and the remove button below it) and side by side from `sm` up, with 28 px touch targets

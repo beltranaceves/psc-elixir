@@ -84,6 +84,7 @@ any state.
 | `add_cell_field` | `cell_key`, `field` | Add `cells[key][field] = ""` and `titles[field] = ""` (untitled) |
 | `remove_cell_field` | `cell_key`, `field` | Delete the value key and its `titles` entry |
 | `update_cell_field_title` | `cell_key`, `field`, `title` | Set `titles[field]` |
+| `set_cell_background` | `cell_key`, `background` (nil clears) | Set the cell's surface token; applies in every mode |
 
 Notes on the shape:
 
@@ -91,8 +92,9 @@ Notes on the shape:
   which does not preserve key order; the editor already renders a cell's fields in map
   order. Adding a field adds a key — where it lands in the render is jsonb's business, the
   same as today.
-- **The reserved keys** (`row`, `column`, `label`, `titles`, and the canvas-level
-  `$name`/`$description`) are never touchable as fields; `add_cell_field` rejects them.
+- **The reserved keys** (`row`, `column`, `label`, `titles`, `background`, and the
+  canvas-level `$name`/`$description`) are never touchable as fields; `add_cell_field`
+  rejects them.
 - **A removed cell's content is gone.** The confirm in decision 5 is the only guard.
 
 ## UI
@@ -110,9 +112,10 @@ The designer's controls, applied to the canvas's own map:
 
 - Row and column headers become **inputs** (label), with an **accent swatch** opening the
   inline palette, and a **remove ×** (confirming when the row/column holds content).
-- Each cell gains a **label input** and, per field, a **section-title input** and a
-  **remove ×**; an **add-field** form sits at the bottom of the cell — the designer's cell
-  editing, verbatim in interaction.
+- Each cell gains a **label input**, a **background swatch** (the accent palette, applied
+  as the cell's surface), and, per field, a **section-title input** and a **remove ×**; an
+  **add-field** form sits at the bottom of the cell — the designer's cell editing, verbatim
+  in interaction.
 - Content inputs keep working the whole time.
 
 ### The empty canvas

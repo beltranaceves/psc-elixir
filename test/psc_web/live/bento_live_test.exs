@@ -326,15 +326,36 @@ defmodule PscWeb.BentoLiveTest do
 
       view |> element("#edit-layout-toggle") |> render_click()
 
-      view |> element("#card-accent-decision") |> render_click()
-      assert has_element?(view, ~s|button[phx-value-accent="rose"]|)
+      view |> element("#cell-colors-decision") |> render_click()
+      assert has_element?(view, "#cell-colors-decision-outline-rose")
 
-      view
-      |> element(~s|button[phx-click="set_card_accent"][phx-value-accent="rose"]|)
-      |> render_click()
+      view |> element("#cell-colors-decision-outline-rose") |> render_click()
 
       assert Structure.cell(cells(canvas), "decision")["accent"] == "rose"
-      refute has_element?(view, ~s|button[phx-value-accent="rose"]|)
+
+      # The accent is the card's outline, visible outside the mobile fullscreen.
+      assert has_element?(view, "#cell-card-decision.ring-rose-400")
+
+      # "None" clears it, so the outline goes away with the value.
+      view |> element("#cell-colors-decision-outline-none") |> render_click()
+
+      assert Structure.cell(cells(canvas), "decision")["accent"] == nil
+      refute has_element?(view, "#cell-card-decision.ring-rose-400")
+    end
+
+    test "a card takes a background from the palette", %{conn: conn, user: user} do
+      canvas = bento_canvas(user)
+      {:ok, view, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      view |> element("#edit-layout-toggle") |> render_click()
+
+      view |> element("#cell-colors-decision") |> render_click()
+      assert has_element?(view, "#cell-colors-panel-decision")
+
+      view |> element("#cell-colors-decision-background-amber") |> render_click()
+
+      assert Structure.cell(cells(canvas), "decision")["background"] == "amber"
+      assert has_element?(view, "#cell-card-decision.bg-amber-100")
     end
   end
 
