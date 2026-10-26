@@ -2354,12 +2354,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             />
           </div>
 
+          <%!-- The Info view scrolls inside its panel, like Notes and Agent. Its
+          sections are taller than the phone viewport, and a panel that merely
+          overflowed the workspace painted its last rows under the bottom bar:
+          the workspace's reservation sits inside the box the content spills
+          out of. --%>
           <div
             id="canvas-panel-info"
             role="tabpanel"
             aria-labelledby="canvas-tab-info"
             class={[
-              "flex min-h-0 w-full flex-1 flex-col",
+              "flex min-h-0 w-full flex-1 flex-col overflow-y-auto",
               @active_tab != "info" && "hidden"
             ]}
           >

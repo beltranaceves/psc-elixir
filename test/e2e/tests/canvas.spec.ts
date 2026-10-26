@@ -650,6 +650,80 @@ test.describe('canvas editor layout', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
+  test('scrolls the Info view to its end without the app bar covering it', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('Info Scroll'));
+
+    await page.locator('#canvas-tab-bar-info').click();
+    await expect(page.locator('#canvas-panel-info')).toBeVisible();
+
+    // The panel is its own scroll box, so the page behind the app bar stays put.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    const end = await page.evaluate(() => {
+      const panel = document.querySelector('#canvas-panel-info') as HTMLElement;
+      panel.scrollTop = panel.scrollHeight;
+      const info = document.querySelector('#canvas-info')!.getBoundingClientRect();
+      const bar = document.querySelector('#canvas-tabs-bar')!.getBoundingClientRect();
+      return { gap: bar.top - info.bottom, scrollable: panel.scrollHeight - panel.clientHeight };
+    });
+
+    // The sections are taller than the viewport, and the last one (About) ends
+    // in the breathing room above the bar instead of underneath it.
+    expect(end.scrollable).toBeGreaterThan(50);
+    expect(end.gap).toBeGreaterThanOrEqual(0);
+    expect(end.gap).toBeLessThanOrEqual(12);
+  });
+
+  test('keeps the agent chat and model selectors on screen on phones', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await createCanvasAndOpen(page, uniqueName('Agent Header'));
+
+    await page.locator('#canvas-tab-bar-agent').click();
+    await page.getByRole('button', { name: 'Start a chat' }).click();
+
+    // The title keeps its own line instead of being squeezed to nothing by
+    // the controls beside it.
+    const title = page.locator('#canvas-agent-title');
+    await expect(title).toBeVisible();
+    const titleBox = await title.boundingBox();
+    expect(titleBox).not.toBeNull();
+    expect(titleBox!.width).toBeGreaterThan(160);
+
+    const panel = await page.locator('#canvas-agent-panel').boundingBox();
+    expect(panel).not.toBeNull();
+
+    for (const control of ['#canvas-agent-connection', '#canvas-agent-chats']) {
+      const box = await page.locator(control).boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(panel!.x);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(panel!.x + panel!.width + 0.5);
+    }
+
+    // Both menus open inside the viewport instead of off its left edge.
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+
+    for (const [trigger, menu] of [
+      ['#canvas-agent-chats', '#canvas-agent-chat-list'],
+      ['#canvas-agent-connection', '#canvas-agent-connection-list'],
+    ]) {
+      await page.locator(trigger).click();
+      await expect(page.locator(menu)).toBeVisible();
+      const box = await page.locator(menu).boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 0.5);
+    }
+  });
+
   test('moves presence, save state and Share into the app header on phones', async ({
     page,
   }) => {
@@ -1137,5 +1211,91 @@ test.describe('canvas library', () => {
     // The card itself must not grow past its column.
     const overflow = await card.evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
+  });
+
+  test('offers arrows to pan the template picker on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    const track = page.locator('#template-picker');
+    const prev = page.getByRole('button', { name: 'Scroll templates left' });
+    const next = page.getByRole('button', { name: 'Scroll templates right' });
+
+    // At the start of the strip only the forward arrow is offered.
+    await expect(next).toBeVisible();
+    await expect(prev).toBeHidden();
+
+    await next.click();
+    await expect.poll(() => track.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+    await expect(prev).toBeVisible();
+
+    // At the far end the forward arrow steps aside.
+    await track.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await expect(next).toBeHidden();
+  });
+
+  test('states each canvas type and its dates on the cards', async ({ page }) => {
+    const name = uniqueName('Card Meta');
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    await page.getByPlaceholder('Enter canvas name...').fill(name);
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    const card = page
+      .getByRole('heading', { name })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+
+    await expect(card).toContainText('Table');
+    await expect(card).toContainText('Created');
+    await expect(card).toContainText('Edited');
+  });
+
+  test('asks before deleting, and cancelling keeps the canvas', async ({ page }) => {
+    const name = uniqueName('Delete Ask');
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+
+    await page.getByPlaceholder('Enter canvas name...').fill(name);
+    await page.getByRole('button', { name: 'Create Canvas' }).click();
+    await page.waitForURL(/\/canvas\/[0-9a-f-]{36}/);
+
+    await page.goto('/canvas');
+    await page.locator('.phx-connected').first().waitFor();
+    await dismissFlash(page);
+
+    const remove = page.getByRole('button', { name: `Delete ${name}`, exact: true });
+    const dialog = page.locator('#delete-canvas-dialog');
+    const panel = dialog.locator('[data-part="content-panel"]');
+
+    // The card's button only asks: the canvas survives the dialog appearing.
+    await remove.click();
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(name);
+
+    // The X is a tap target, not a 16 px glyph.
+    const closeBox = await dialog.locator('[data-part="close-trigger"]').boundingBox();
+    expect(closeBox).not.toBeNull();
+    expect(closeBox!.width).toBeGreaterThanOrEqual(32);
+    expect(closeBox!.height).toBeGreaterThanOrEqual(32);
+
+    await dialog.getByRole('button', { name: 'Keep it' }).click();
+    await expect(panel).toBeHidden();
+    await expect(page.getByRole('heading', { name })).toBeVisible();
+
+    // Only the dialog's own Delete removes it.
+    await remove.click();
+    await expect(panel).toBeVisible();
+    await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(page.getByRole('heading', { name })).toHaveCount(0);
+    await expect(page.locator('#flash-group')).toContainText('Canvas deleted');
   });
 });

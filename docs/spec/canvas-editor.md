@@ -72,6 +72,14 @@ See `template-designer.md` → **Design System** for the full design direction. 
 - **The grid meets the bottom app bar.** Below `lg` the app bar's height (3.75 rem plus the
   phone's safe-area inset) is reserved below the grid, so the table ends just above the bar:
   a 6 px sliver to breathe, not a dead band, and the last row is never hidden behind the bar.
+  The Info view's sections are taller than that box, so the panel scrolls itself (like Notes
+  and Agent) instead of spilling under the bar; its last section ends in the same sliver.
+- **The Agent view is a chat column.** Its header carries the chat title and turn count, the
+  model-connection selector, the chat selector and **New chat**. Below `sm` the title takes
+  its own line, the controls share the next, and both selector menus anchor to that row so
+  they cannot open off the screen. Assistant messages drop their sparkle avatar below `sm` —
+  the answer gets the full column. The read-only promise ("nothing is created or changed")
+  is stated in the empty transcript, not under every composer.
 - **Rendered Markdown** is intentionally denser than the editing controls: line height and block
   margins are reduced only inside `.md-render` cells.
 

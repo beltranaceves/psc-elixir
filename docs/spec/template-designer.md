@@ -253,7 +253,12 @@ Each template card shows: name, description, grid dimensions (e.g., "3 × 4"), c
 
 **Create template** button opens the designer with an empty 2×2 grid.
 
-**Delete** button on own templates (with confirmation dialog).
+**Delete** button on own templates. It opens a confirmation dialog (`#delete-template-dialog`)
+that names the template and says what survives: canvases created from it keep working, a
+public template leaves the catalog, and a shared one stops being listed for its readers. Only
+the dialog's **Delete** (`#confirm-delete-template`) sends `delete_template`; the card's button
+(`phx-click="confirm_delete"`) just asks. Keep it, Escape, an outside click and the close
+button all dismiss the dialog without deleting.
 
 ### Template designer (`/canvas-layouts/new` and `/canvas-layouts/:id`)
 

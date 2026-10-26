@@ -76,4 +76,43 @@ test.describe('authenticated app', () => {
     expect(Math.abs(createBox!.width - templateBox!.width)).toBeLessThan(1);
     expect(Math.abs(createBox!.height - templateBox!.height)).toBeLessThan(1);
   });
+
+  test('deletes a template only through the confirmation dialog', async ({ page }) => {
+    const name = uniqueName('Delete Template');
+
+    await page.goto('/templates/new');
+    await page.locator('.phx-connected').first().waitFor();
+    await page.getByRole('button', { name: 'Add Column' }).click();
+    await page.getByRole('button', { name: 'Add Row' }).click();
+    await page.locator('#template-form input[name="name"]').fill(name);
+    await page.getByRole('button', { name: 'Save Template' }).click();
+    await page.waitForURL(/\/templates$/);
+    // Saving lands on the library through a full redirect; a click before the
+    // socket is up is lost.
+    await page.locator('.phx-connected').first().waitFor();
+
+    const card = page
+      .getByRole('heading', { name })
+      .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]');
+    const remove = card.getByRole('button', { name: `Delete ${name}` });
+    const dialog = page.locator('#delete-template-dialog');
+    const panel = dialog.locator('[data-part="content-panel"]');
+
+    // The card's button only asks, and the dialog names the template.
+    await remove.click();
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(name);
+
+    // Cancelling keeps the card.
+    await dialog.getByRole('button', { name: 'Keep it' }).click();
+    await expect(panel).toBeHidden();
+    await expect(page.getByRole('heading', { name })).toBeVisible();
+
+    // The dialog's own Delete removes it.
+    await remove.click();
+    await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(page.getByRole('heading', { name })).toHaveCount(0);
+    await expect(page.locator('#flash-group')).toContainText('Template deleted');
+  });
 });

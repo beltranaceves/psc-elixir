@@ -21,7 +21,7 @@ defmodule PscWeb.CanvasLayoutLive.Index do
     {:ok,
      socket
      |> assign(:templates, templates)
-     |> assign(:delete_confirm_id, nil)
+     |> assign(:delete_confirm, nil)
      |> assign(:share_form_for, nil)
      |> assign(:new_template_open, false)}
   end
@@ -35,30 +35,70 @@ defmodule PscWeb.CanvasLayoutLive.Index do
     {:noreply, assign(socket, :new_template_open, false)}
   end
 
+  # Deleting asks in a dialog that names the template; the card's button only
+  # parks it in an assign. `delete_template` refuses an id that does not match
+  # that pending confirmation, so a forged event cannot skip the question.
   @impl true
   def handle_event("confirm_delete", %{"id" => id}, socket) do
-    {:noreply, assign(socket, :delete_confirm_id, id)}
+    user_id = socket.assigns.current_scope.user.id
+
+    case Enum.find(socket.assigns.templates, &(&1.id == id)) do
+      %{author_id: ^user_id} = template ->
+        {:noreply, assign(socket, :delete_confirm, template)}
+
+      _other ->
+        {:noreply, put_flash(socket, :error, "Only the template owner can delete")}
+    end
   end
 
   def handle_event("cancel_delete", _params, socket) do
-    {:noreply, assign(socket, :delete_confirm_id, nil)}
+    {:noreply, assign(socket, :delete_confirm, nil)}
   end
 
   @impl true
   def handle_event("delete_template", %{"id" => id}, socket) do
     user = socket.assigns.current_scope.user
+    user_id = user.id
 
-    with %{} = template <- Canvas.get_canvas_layout(id),
-         true <- template.author_id == user.id,
-         {:ok, _} <- Canvas.delete_template(template) do
-      {:noreply,
-       socket
-       |> assign(:templates, Canvas.list_templates(user))
-       |> assign(:delete_confirm_id, nil)
-       |> put_flash(:success, "Template deleted")}
-    else
-      false -> {:noreply, put_flash(socket, :error, "Only the template owner can delete")}
-      _ -> {:noreply, put_flash(socket, :error, "Template not found")}
+    case socket.assigns.delete_confirm do
+      %{id: ^id, author_id: ^user_id} ->
+        # Re-read: the template may have vanished or changed hands while the
+        # dialog was open, and deleting a stale struct would raise.
+        case Canvas.get_canvas_layout(id) do
+          %{author_id: ^user_id} = template ->
+            case Canvas.delete_template(template) do
+              {:ok, _} ->
+                {:noreply,
+                 socket
+                 |> assign(:templates, Canvas.list_templates(user))
+                 |> assign(:delete_confirm, nil)
+                 |> put_flash(:success, "Template deleted")}
+
+              {:error, :built_in} ->
+                {:noreply,
+                 socket
+                 |> assign(:delete_confirm, nil)
+                 |> put_flash(:error, "Built-in templates cannot be deleted")}
+
+              {:error, _changeset} ->
+                {:noreply,
+                 socket
+                 |> assign(:delete_confirm, nil)
+                 |> put_flash(:error, "Failed to delete template")}
+            end
+
+          _other ->
+            {:noreply,
+             socket
+             |> assign(:delete_confirm, nil)
+             |> put_flash(:error, "That template is no longer there")}
+        end
+
+      _other ->
+        {:noreply,
+         socket
+         |> assign(:delete_confirm, nil)
+         |> put_flash(:error, "Only the template owner can delete")}
     end
   end
 
@@ -158,7 +198,6 @@ defmodule PscWeb.CanvasLayoutLive.Index do
               <.template_card
                 template={template}
                 current_user={@current_scope.user}
-                delete_confirm_id={@delete_confirm_id}
                 share_form_for={@share_form_for}
               />
             <% end %>
@@ -178,9 +217,83 @@ defmodule PscWeb.CanvasLayoutLive.Index do
         </div>
 
         <.new_template_dialog new_template_open={@new_template_open} />
+        <.delete_template_dialog delete_confirm={@delete_confirm} />
       </div>
     </Layouts.app>
     """
+  end
+
+  # Deleting asks in a dialog that names the template and says what survives.
+  # The card's actions row keeps a single Delete button; the question used to
+  # swell that row into "Delete? Yes No".
+  attr :delete_confirm, :any, required: true
+
+  defp delete_template_dialog(assigns) do
+    ~H"""
+    <UIDialog.dialog
+      :if={@delete_confirm}
+      id="delete-template-dialog"
+      open
+      on-close="cancel_delete"
+    >
+      <UIDialog.dialog_content
+        open
+        class="sm:max-w-md"
+        close_class="right-2 top-2 rounded-md p-2"
+        close_icon_class="size-5"
+      >
+        <UIDialog.dialog_header>
+          <UIDialog.dialog_title>Delete this template?</UIDialog.dialog_title>
+
+          <UIDialog.dialog_description>
+            {delete_description(@delete_confirm)}
+          </UIDialog.dialog_description>
+        </UIDialog.dialog_header>
+
+        <UIDialog.dialog_footer class="flex flex-row justify-end gap-2">
+          <UIButton.button
+            type="button"
+            variant="outline"
+            id="cancel-delete-template"
+            phx-click="cancel_delete"
+          >
+            Keep it
+          </UIButton.button>
+
+          <UIButton.button
+            type="button"
+            variant="destructive"
+            id="confirm-delete-template"
+            phx-click="delete_template"
+            phx-value-id={@delete_confirm.id}
+            phx-disable-with="Deleting…"
+          >
+            Delete
+          </UIButton.button>
+        </UIDialog.dialog_footer>
+      </UIDialog.dialog_content>
+    </UIDialog.dialog>
+    """
+  end
+
+  # What the deletion actually costs. A template is copied into canvases when
+  # they are created (ADR-009), so those keep working; a public template also
+  # leaves the catalog, and a shared one stops being listed for its readers.
+  defp delete_description(template) do
+    extras =
+      [
+        template.public && "It disappears from the catalog.",
+        template.shared_with not in [nil, []] &&
+          "The people you shared it with lose access to it."
+      ]
+      |> Enum.filter(&is_binary/1)
+
+    [
+      ~s("#{template.name}" will be removed from your templates.),
+      "Canvases created from it keep working."
+      | extras
+    ]
+    |> Enum.join(" ")
   end
 
   # The first tile of the library: a dashed card that opens the type picker.
@@ -320,7 +433,6 @@ defmodule PscWeb.CanvasLayoutLive.Index do
 
   attr :template, :map, required: true
   attr :current_user, :map, required: true
-  attr :delete_confirm_id, :any, required: true
   attr :share_form_for, :any, required: true
 
   defp template_card(assigns) do
@@ -376,36 +488,17 @@ defmodule PscWeb.CanvasLayoutLive.Index do
           >
             Share
           </UIButton.button>
-          <%= if @delete_confirm_id == @template.id do %>
-            <span class="flex items-center gap-1 text-xs">
-              <span class="text-base-content/60">Delete?</span>
-              <UIButton.button
-                variant="destructive"
-                size="sm"
-                phx-click="delete_template"
-                phx-value-id={@template.id}
-              >
-                Yes
-              </UIButton.button>
-              <UIButton.button
-                variant="outline"
-                size="sm"
-                phx-click="cancel_delete"
-              >
-                No
-              </UIButton.button>
-            </span>
-          <% else %>
-            <UIButton.button
-              variant="outline"
-              size="sm"
-              class="text-error hover:text-error"
-              phx-click="confirm_delete"
-              phx-value-id={@template.id}
-            >
-              Delete
-            </UIButton.button>
-          <% end %>
+          <UIButton.button
+            variant="outline"
+            size="sm"
+            class="text-error hover:text-error"
+            phx-click="confirm_delete"
+            phx-value-id={@template.id}
+            aria-label={"Delete #{@template.name}"}
+            aria-haspopup="dialog"
+          >
+            Delete
+          </UIButton.button>
         <% end %>
       </div>
 

@@ -263,6 +263,61 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert html =~ "do not have access to that template"
       assert Canvas.list_user_unstr_canvases(user.id) == []
     end
+
+    test "deleting asks first, and only the dialog's button removes the canvas", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, canvas} =
+        Canvas.create_unstr_canvas(user.id, %{
+          "name" => "Ask first",
+          "cells" => Canvas.blank_cells()
+        })
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      # The card's button opens the dialog; it does not delete anything.
+      lv |> element(~s|#my-canvases-grid button[phx-value-id="#{canvas.id}"]|) |> render_click()
+      assert has_element?(lv, "#delete-canvas-dialog[data-state='open']")
+      assert has_element?(lv, "#delete-canvas-dialog", "Ask first")
+      assert Canvas.get_unstr_canvas(canvas.id)
+
+      # Dismissing leaves the canvas alone.
+      lv |> element("#cancel-delete-canvas") |> render_click()
+      refute has_element?(lv, "#delete-canvas-dialog")
+      assert Canvas.get_unstr_canvas(canvas.id)
+
+      # A delete event with no dialog open is refused, so a forged id cannot
+      # remove a canvas behind the confirmation's back.
+      lv |> render_click("delete_canvas", %{"id" => canvas.id})
+      assert Canvas.get_unstr_canvas(canvas.id)
+
+      # The dialog's own button is the one that deletes.
+      lv |> element(~s|#my-canvases-grid button[phx-value-id="#{canvas.id}"]|) |> render_click()
+      lv |> element("#confirm-delete-canvas") |> render_click()
+
+      refute Canvas.get_unstr_canvas(canvas.id)
+      refute has_element?(lv, "#delete-canvas-dialog")
+      assert render(lv) =~ "Canvas deleted"
+    end
+
+    test "confirming after the canvas vanished reports it instead of crashing", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, canvas} =
+        Canvas.create_unstr_canvas(user.id, %{"name" => "Gone", "cells" => Canvas.blank_cells()})
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas")
+
+      lv |> element(~s|#my-canvases-grid button[phx-value-id="#{canvas.id}"]|) |> render_click()
+
+      # Another tab removes it while the dialog is open.
+      Canvas.delete_unstr_canvas(canvas)
+
+      html = lv |> element("#confirm-delete-canvas") |> render_click()
+      assert html =~ "no longer there"
+    end
   end
 
   describe "editor (canvas editor)" do

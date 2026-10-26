@@ -45,6 +45,8 @@ it costs, and the evidence it was verified against.
 | [ADR-033](#adr-033--a-canvass-structure-is-editable-in-place) | A canvas's structure is editable in place | Accepted | 2026-10-21 |
 | [ADR-034](#adr-034--administration-is-a-role-and-the-defaults-are-rows) | Administration is a role, and the defaults are rows | Accepted | 2026-10-22 |
 | [ADR-040](#adr-040--the-canvas-title-lives-in-the-layout-toolbar-and-details-in-an-info-tab) | The canvas title lives in the layout toolbar, and details in an Info tab | Accepted | 2026-10-25 |
+| [ADR-041](#adr-041--phone-chrome-folds-first-the-agent-header-the-cards-and-the-picker) | Phone chrome folds first: the agent header, the cards and the picker | Accepted | 2026-10-26 |
+| [ADR-042](#adr-042--a-destructive-action-asks-in-the-apps-dialog-never-windowconfirm) | A destructive action asks in the app's dialog, never `window.confirm` | Accepted | 2026-10-26 |
 
 ---
 
@@ -813,6 +815,15 @@ same amount below the grid. The table therefore ends just above the bar: a
 6 px sliver (`--canvas-tab-bar-gap`) to breathe, not a dead band, and the last row
 is never hidden behind the bar, so the grid does not need scrolling to reach it.
 The bar's own padding keeps the tab labels clear of the home indicator.
+
+**Addendum (2026-10-26): a tall panel scrolls itself, not the page.** The reservation
+only works for content that stays inside the workspace's box. The Info view's sections
+are taller than a phone viewport and used to paint *outside* that box, running its last
+rows under the bottom bar (the workspace's padding is inside the box the content spills
+out of, so the page scroll ended at the bar). The Info panel now scrolls inside itself
+(`overflow-y-auto`), the way Notes and Agent already do, so its scroll end lands the
+same 6 px above the bar. No extra padding: the panel's box already stops at the
+workspace's reserved edge.
 
 ---
 
@@ -1729,3 +1740,83 @@ and clips long text); a title-only header with no title in the Info view (then s
 renaming live in different places); moving presence, save state and Share into the app header
 at every width (the desktop header overflows between 1024 px and 1280 px once the section nav
 and the account controls are on the same line).
+
+
+---
+
+## ADR-041 — Phone chrome folds first: the agent header, the cards and the picker
+
+**Context.** These phone complaints shared one cause: surfaces laid out for a pointer and a
+wide window. The Agent header put the title and three controls in one non-wrapping row, so at
+390 px the title collapsed to **0 px**, **New chat** was clipped by the panel's edge, and both
+menus — anchored `right-0` to buttons that already sat past the edge — opened off the left of
+the screen. Every assistant message spent 38 px of its 348 px column on a decorative
+sparkle. The read-only promise occupied a line under every composer. The canvas library cards
+said nothing about what a canvas *is* or when it moved, and their two full-width buttons read
+as a form, not a list. The template picker panned silently: the only hint was a half-cut
+card.
+
+**Decision.**
+- **The Agent header stacks below `sm`.** The title takes its own line and the controls share
+  the next one; each control flexes and truncates, and **New chat** becomes its icon with an
+  accessible name. The menus anchor to the controls row on phones (`max-sm:`), so a 320 px
+  list always opens inside the screen; from `sm` up they still hang off their own button.
+  Chat-row options show on coarse pointers — they were reachable only by hover.
+- **The sparkle avatars are desktop decoration.** Both the message and the "thinking" avatars
+  are `hidden sm:flex`; the answer uses the full column on a phone.
+- **Read-only is a first-visit statement.** It moved from the composer footer to the empty
+  transcript (both the no-session intro and a chat with no messages).
+- **A library card states its canvas.** A badge reads the layout mode plus its size
+  (`Table · 3 × 4`, `Bento · 12 × 5`, `Image · 3 cells`), and a meta line carries the created
+  date and a relative "Edited 3h ago". The actions are one primary **Edit** and an icon-only
+  delete that keeps its confirmation.
+- **The template picker has arrows below `lg`.** Two round buttons outside `#template-picker`
+  (its children stay the cards, in order) page the strip; a colocated hook hides each arrow
+  when the strip cannot move in that direction and respects `prefers-reduced-motion`.
+
+**Consequences.** The Agent tab is usable one-handed: the title is readable, both selectors
+open on screen and the answer owns the width. The library reads as an inventory rather than a
+wall of buttons, and a canvas's age is visible without opening it. The Info view's overflow
+is fixed in ADR-021's second addendum. The cost is one colocated JS hook and a handful of
+responsive classes; no schema, context or event change.
+
+**Alternatives considered.** Making every control icon-only on phones (loses which model is
+pinned); keeping the menus button-anchored and clamping them with JS (the row anchor is CSS
+and needs no measurement); showing only a right arrow (strands the user at the end);
+replacing the two card buttons with a menu (hides delete behind a tap, and the confirmation is
+worth keeping in reach).
+
+---
+
+## ADR-042 — A destructive action asks in the app's dialog, never `window.confirm`
+
+**Context.** The canvas library's delete button paired `phx-click="delete_canvas"` with
+`onclick="return confirm('Delete this canvas?')"`. Returning false from an inline handler
+stops the browser's default action, not LiveView's delegated click handler, so the event
+reached the server whichever button was pressed: **Keep it and Delete both deleted the
+canvas**. The prompt was also the operating system's, could not be styled, and could not be
+asserted in a test.
+
+**Decision.** The card's button sends `confirm_delete_canvas`, which only parks the canvas in
+an assign. A SaladUI dialog (`#delete-canvas-dialog`) names the canvas, warns that its notes
+go with it (and, for a shared canvas, that everyone loses access), and offers **Keep it** and
+**Delete**. Escape, an outside click and the close button all send `dismiss_delete_canvas`.
+Only the dialog's own button sends `delete_canvas`, and that handler refuses an id that does
+not match the pending confirmation, so a forged event cannot bypass the dialog. This is the
+pattern the editor already uses for removing rows and columns.
+
+**Consequences.** The confirmation is the app's own surface, keyboard- and screen-reader
+reachable, and covered twice: a LiveView test (open, dismiss, forged event, confirm) and a
+Playwright test (cancel keeps the card, confirm removes it). The cost is one assign and two
+handlers on the index LiveView. The dialog also overrides the shared close button, whose
+default is a bare 16 px glyph used where dialogs have no header (the command palette): here it
+is a 36 px tap target with a 20 px icon. Future destructive actions should reach for the
+dialog rather than `window.confirm`.
+
+**Addendum (2026-10-26): the template library follows.** Template deletion had grown an inline
+`Delete? Yes / No` inside the card's action row — cramped on a phone, and the `delete_template`
+event was accepted without it. It now uses the same dialog (`#delete-template-dialog`), which
+names the template and says what survives (canvases made from it keep working; a public
+template leaves the catalog; shared readers lose access). `delete_template` requires the
+pending confirmation to match, re-reads the row, and reports built-ins instead of deleting
+them. One pattern, two libraries.

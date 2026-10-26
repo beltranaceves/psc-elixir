@@ -87,24 +87,35 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
       <div :if={@agent_session} class="flex min-h-0 flex-1 flex-col">
         <div class="shrink-0 border-b border-base-content/10">
-          <div class="mx-auto flex w-full max-w-3xl items-center gap-2 px-3 py-2.5 sm:px-4">
-            <span class="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:flex">
-              <.icon name="hero-sparkles" class="size-4" />
-            </span>
+          <div class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:px-4">
+            <div class="flex min-w-0 items-center gap-2 sm:flex-1">
+              <span class="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:flex">
+                <.icon name="hero-sparkles" class="size-4" />
+              </span>
 
-            <div class="min-w-0 flex-1">
-              <h2 id="canvas-agent-title" class="truncate text-sm font-semibold text-base-content">
-                {@agent_session.title}
-              </h2>
+              <div class="min-w-0 flex-1">
+                <h2
+                  id="canvas-agent-title"
+                  class="truncate text-sm font-semibold text-base-content"
+                >
+                  {@agent_session.title}
+                </h2>
 
-              <p class="truncate text-[11px] leading-4 text-base-content/45">
-                {plural(turn_count(@agent_session), "turn")} · {agent_relative_time(
-                  @agent_session.last_message_at || @agent_session.inserted_at
-                )}
-              </p>
+                <p class="truncate text-[11px] leading-4 text-base-content/45">
+                  {plural(turn_count(@agent_session), "turn")} · {agent_relative_time(
+                    @agent_session.last_message_at || @agent_session.inserted_at
+                  )}
+                </p>
+              </div>
             </div>
 
-            <div class="flex shrink-0 items-center gap-1.5">
+            <%!-- On a phone the controls get their own line and share its width;
+            the dropdowns anchor to this row (their wrappers are static below
+            `sm`), so a 288 px menu cannot open off the left edge. --%>
+            <div
+              class="relative flex min-w-0 flex-wrap items-center gap-1.5 sm:shrink-0 sm:flex-nowrap"
+              phx-click-away="agent_close_lists"
+            >
               <select
                 :if={@agent_roles != []}
                 id="canvas-agent-role"
@@ -112,7 +123,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 phx-change="agent_select_role"
                 disabled={@agent_session.message_count not in [nil, 0] or not is_nil(@agent_turn_pid)}
                 title="Agent role"
-                class="max-w-[10rem] rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
+                class="min-w-0 flex-1 basis-[6.5rem] rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-[10rem] sm:flex-none sm:basis-auto"
               >
                 <option
                   :for={role <- @agent_roles}
@@ -123,24 +134,26 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 </option>
               </select>
 
-              <div class="relative" phx-click-away="agent_close_lists">
+              <div class="min-w-0 flex-1 basis-[6.5rem] sm:relative sm:flex-none sm:basis-auto">
                 <button
                   type="button"
                   id="canvas-agent-connection"
                   phx-click="agent_toggle_connections"
                   disabled={not is_nil(@agent_turn_pid)}
                   title="Model connection"
-                  class="flex max-w-[11rem] items-center gap-1.5 rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="flex w-full items-center justify-between gap-1.5 rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:max-w-[11rem]"
                 >
                   <.icon name="hero-bolt" class="size-3.5 shrink-0" />
-                  <span class="truncate">{connection_label(@agent_connection)}</span>
+                  <span class="min-w-0 flex-1 truncate text-left">
+                    {connection_label(@agent_connection)}
+                  </span>
                   <.icon name="hero-chevron-down" class="size-3 shrink-0 opacity-60" />
                 </button>
 
                 <div
                   :if={@agent_connection_list_open}
                   id="canvas-agent-connection-list"
-                  class="absolute right-0 z-30 mt-2 w-72 rounded-xl border border-base-content/10 bg-base-100 p-1.5 shadow-xl"
+                  class="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-base-content/10 bg-base-100 p-1.5 shadow-xl max-sm:inset-x-0 max-sm:w-auto"
                 >
                   <p class="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-base-content/40">
                     Model connection
@@ -201,22 +214,24 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 </div>
               </div>
 
-              <div class="relative" phx-click-away="agent_close_lists">
+              <div class="min-w-0 flex-1 basis-[6.5rem] sm:relative sm:flex-none sm:basis-auto">
                 <button
                   type="button"
                   id="canvas-agent-chats"
                   phx-click="agent_toggle_list"
-                  class="flex max-w-[10rem] items-center gap-1.5 rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  class="flex w-full items-center justify-between gap-1.5 rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:w-auto sm:max-w-[10rem]"
                 >
                   <.icon name="hero-chat-bubble-left-right" class="size-3.5 shrink-0" />
-                  <span class="truncate">{plural(length(@agent_sessions), "chat")}</span>
+                  <span class="min-w-0 flex-1 truncate text-left">
+                    {plural(length(@agent_sessions), "chat")}
+                  </span>
                   <.icon name="hero-chevron-down" class="size-3 shrink-0 opacity-60" />
                 </button>
 
                 <div
                   :if={@agent_list_open}
                   id="canvas-agent-chat-list"
-                  class="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-base-content/10 bg-base-100 p-1.5 shadow-xl"
+                  class="absolute right-0 top-full z-30 mt-2 w-80 rounded-xl border border-base-content/10 bg-base-100 p-1.5 shadow-xl max-sm:inset-x-0 max-sm:w-auto"
                 >
                   <p class="px-2 pb-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-base-content/40">
                     Chats on this canvas
@@ -263,7 +278,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                         aria-label="Chat options"
                         class={[
                           "absolute right-1.5 top-1.5 rounded-md p-1 text-base-content/50 transition hover:bg-base-300 hover:text-base-content focus:opacity-100 group-hover:opacity-100",
-                          "opacity-0",
+                          "opacity-0 [@media(pointer:coarse)]:opacity-100",
                           @agent_menu_session == session.id && "opacity-100"
                         ]}
                       >
@@ -327,9 +342,12 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
               <button
                 type="button"
                 phx-click="agent_new"
-                class="flex items-center gap-1.5 rounded-lg border border-primary/30 px-2 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                aria-label="New chat"
+                title="New chat"
+                class="flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/30 px-2 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                <.icon name="hero-plus" class="size-3.5" /> New chat
+                <.icon name="hero-plus" class="size-3.5" />
+                <span class="hidden sm:inline">New chat</span>
               </button>
             </div>
           </div>
@@ -354,6 +372,11 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
               <p class="mt-1 text-xs leading-relaxed text-base-content/50">
                 Its cells, its notes, or what changed recently.
+              </p>
+
+              <p class="mx-auto mt-2 flex max-w-[18rem] items-center justify-center gap-1.5 text-[11px] leading-relaxed text-base-content/40">
+                <.icon name="hero-lock-closed" class="size-3.5 shrink-0" />
+                <span>Read-only. Nothing is created or changed.</span>
               </p>
 
               <div
@@ -382,7 +405,9 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 </div>
 
                 <div :if={message.role == :assistant} class="flex gap-2.5">
-                  <span class="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/25 to-accent/20 text-primary ring-1 ring-primary/20 ring-inset">
+                  <%!-- The avatar is decoration, and on a phone its 38 px are
+                  better spent on the answer. --%>
+                  <span class="mt-1 hidden size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/25 to-accent/20 text-primary ring-1 ring-primary/20 ring-inset sm:flex">
                     <.icon name="hero-sparkles" class="size-4" />
                   </span>
 
@@ -503,7 +528,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
               </div>
 
               <div :if={@agent_phase} id="canvas-agent-status" class="flex gap-2.5">
-                <span class="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/25 to-accent/20 text-primary ring-1 ring-primary/20 ring-inset">
+                <span class="mt-1 hidden size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/25 to-accent/20 text-primary ring-1 ring-primary/20 ring-inset sm:flex">
                   <.icon name="hero-sparkles" class="size-4" />
                 </span>
 
@@ -559,26 +584,23 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
               </button>
             </div>
 
-            <div class="mt-2 flex items-center justify-between gap-3 px-1 text-[11px] text-base-content/45">
-              <p class="flex min-w-0 items-center gap-1.5">
-                <.icon name="hero-lock-closed" class="size-3.5 shrink-0" />
-                <span :if={@agent_enabled?} class="truncate">
-                  Read-only. Nothing is created or changed.
-                </span>
+            <%!-- The read-only promise is a first-visit note (see the empty
+            transcript), not a permanent footer: on a phone it cost a line under
+            every conversation. --%>
+            <.link
+              :if={not @agent_enabled?}
+              navigate={~p"/users/settings#agent-connections"}
+              class="link link-primary mt-2 block px-1 text-[11px]"
+            >
+              Add a connection in settings
+            </.link>
 
-                <.link
-                  :if={not @agent_enabled?}
-                  navigate={~p"/users/settings#agent-connections"}
-                  class="link link-primary truncate"
-                >
-                  Add a connection in settings
-                </.link>
-              </p>
-
-              <p :if={@agent_enabled? and is_nil(@agent_turn_pid)} class="hidden shrink-0 sm:block">
-                Enter to send · Shift+Enter for a new line
-              </p>
-            </div>
+            <p
+              :if={@agent_enabled? and is_nil(@agent_turn_pid)}
+              class="mt-2 hidden px-1 text-right text-[11px] text-base-content/45 sm:block"
+            >
+              Enter to send · Shift+Enter for a new line
+            </p>
           </div>
         </.form>
       </div>

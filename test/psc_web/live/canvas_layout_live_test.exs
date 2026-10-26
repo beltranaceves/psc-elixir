@@ -90,20 +90,39 @@ defmodule PscWeb.CanvasLayoutLiveTest do
       refute html =~ "Delete"
     end
 
-    test "deleting requires two-step confirmation", %{conn: conn, user: user} do
+    test "deleting asks in a dialog, and only its button removes the template", %{
+      conn: conn,
+      user: user
+    } do
       CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Doomed Tpl"})
       [template] = Canvas.list_templates(user)
 
       {:ok, lv, _html} = live(conn, ~p"/templates")
 
+      # The card's button opens the dialog; it does not delete anything.
       lv
       |> element("button[phx-click='confirm_delete'][phx-value-id='#{template.id}']")
       |> render_click()
 
-      html =
-        lv
-        |> element("button[phx-click='delete_template'][phx-value-id='#{template.id}']")
-        |> render_click()
+      assert has_element?(lv, "#delete-template-dialog[data-state='open']")
+      assert has_element?(lv, "#delete-template-dialog", "Doomed Tpl")
+      assert Canvas.get_canvas_layout(template.id)
+
+      # Dismissing leaves the template alone.
+      lv |> element("#cancel-delete-template") |> render_click()
+      refute has_element?(lv, "#delete-template-dialog")
+      assert Canvas.get_canvas_layout(template.id)
+
+      # A delete event with no dialog open is refused.
+      lv |> render_click("delete_template", %{"id" => template.id})
+      assert Canvas.get_canvas_layout(template.id)
+
+      # The dialog's own button is the one that deletes.
+      lv
+      |> element("button[phx-click='confirm_delete'][phx-value-id='#{template.id}']")
+      |> render_click()
+
+      html = lv |> element("#confirm-delete-template") |> render_click()
 
       assert html =~ "Template deleted"
       refute html =~ "Doomed Tpl"

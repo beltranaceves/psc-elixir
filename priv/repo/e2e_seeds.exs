@@ -40,6 +40,21 @@ primary = ensure_user.("e2e@example.com", "e2e-password-123")
 # The admin surface needs an administrator; the primary E2E user is it.
 {:ok, _admin} = Accounts.promote_admin(primary)
 
+# The Agent tab's composer only enables with a saved provider connection. The
+# E2E specs that visit the tab render its shell and open its menus; they never
+# send a turn, so a placeholder key is enough and no request leaves the box.
+if Psc.Agent.Connections.list(primary.id) == [] do
+  {:ok, _connection} =
+    Psc.Agent.Connections.create(primary, %{
+      "name" => "E2E model",
+      "provider" => "openai",
+      "api_key" => "sk-e2e-not-a-real-key",
+      "model_id" => "gpt-4.1-mini"
+    })
+end
+
+IO.puts("E2E agent connection ready")
+
 # The release tasks seed the built-in templates on boot. The E2E database is
 # reset between runs, so seed them here too — the picker shows them.
 {created, _present} = Psc.Canvas.seed_builtin_templates()
