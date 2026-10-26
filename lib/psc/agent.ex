@@ -14,6 +14,7 @@ defmodule Psc.Agent do
 
   alias Psc.Agent.Connections
   alias Psc.Agent.Message
+  alias Psc.Agent.Profile
   alias Psc.Agent.Session
   alias Psc.Repo
 
@@ -185,14 +186,20 @@ defmodule Psc.Agent do
 
   @doc """
   Adds a user message and names the session when this is its first message.
+
+  The first message also pins the profile the chat will run with (option
+  `:profile`, a `Psc.Agent.Profile`). Pinning before the turn starts is what
+  keeps the system prompt stable for the whole conversation.
   """
-  def append_user_message(session, content) do
+  def append_user_message(session, content, opts \\ []) do
     Repo.transaction(fn ->
       first? = session.message_count in [nil, 0]
       {:ok, message} = insert_message(session, %{role: :user, content: content})
 
       session =
-        if first?, do: rename_first(session, content), else: session
+        session
+        |> maybe_rename_first(first?, content)
+        |> maybe_pin_profile(first?, Keyword.get(opts, :profile))
 
       session
       |> touch()
@@ -201,6 +208,40 @@ defmodule Psc.Agent do
       message
     end)
   end
+
+  defp maybe_rename_first(session, true, content), do: rename_first(session, content)
+  defp maybe_rename_first(session, false, _content), do: session
+
+  defp maybe_pin_profile(session, true, %Profile{} = profile) do
+    session
+    |> Ecto.Changeset.change(role: profile.role, profile: Profile.to_map(profile))
+    |> Repo.update!()
+  end
+
+  defp maybe_pin_profile(session, _first?, _profile), do: session
+
+  @doc """
+  Selects the role a not-yet-started chat will use.
+
+  Once the chat has messages, its profile (and therefore its role) is pinned; a
+  different role needs a new chat.
+  """
+  def set_session_role(%Session{} = session, role) when is_binary(role) or is_nil(role) do
+    # Callers hold the session they rendered with; a send in another tab may
+    # already have started it. Re-read before deciding.
+    session = Repo.reload!(session)
+
+    if session.message_count in [nil, 0] do
+      session
+      |> Ecto.Changeset.change(role: role)
+      |> Repo.update()
+    else
+      {:error, :started}
+    end
+  end
+
+  @doc "The profile a session runs with: its pin, else the canvas's current setup."
+  def profile_for(%Session{} = session), do: Profile.for_session(session)
 
   @doc """
   Creates the assistant message a turn fills in, so the UI has something to

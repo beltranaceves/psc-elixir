@@ -22,6 +22,11 @@ defmodule Psc.Agent.Tools.Ref do
     ref("note", label, "/canvas/#{canvas_id}?tab=notes&note=#{note_id}", excerpt)
   end
 
+  @doc "A reference file, opened on the canvas's Info tab."
+  def file(canvas_id, label, excerpt \\ nil) do
+    ref("file", label, "/canvas/#{canvas_id}?tab=info", excerpt)
+  end
+
   @doc "A template, opened in the designer."
   def template(id, label, excerpt \\ nil) do
     ref("template", label, "/templates/#{id}", excerpt)

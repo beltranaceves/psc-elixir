@@ -80,6 +80,7 @@ defmodule Psc.Agent.Turn do
   ## The real path
 
   defp run_agent(session, message, scope, topic, config) do
+    profile = Psc.Agent.Profile.for_session(session)
     prompt = render_prompt(session)
 
     # The agent server is linked to this process, so a crash inside the ReAct
@@ -89,27 +90,40 @@ defmodule Psc.Agent.Turn do
     previous = Process.flag(:trap_exit, true)
 
     try do
-      case start_agent() do
-        {:ok, pid} ->
-          try do
-            execute(pid, prompt, message, topic, scope, config)
-          after
-            stop_agent(pid)
-          end
+      if profile.canvas_id do
+        case start_agent() do
+          {:ok, pid} ->
+            try do
+              set_system_prompt(pid, profile.system_prompt)
+              execute(pid, prompt, message, topic, scope, config, profile)
+            after
+              stop_agent(pid)
+            end
 
-        {:error, reason} ->
-          fail(message, topic, "The agent could not start: #{inspect(reason)}")
+          {:error, reason} ->
+            fail(message, topic, "The agent could not start: #{inspect(reason)}")
+        end
+      else
+        fail(message, topic, "The agent is not attached to a canvas.")
       end
     after
       Process.flag(:trap_exit, previous)
     end
   end
 
-  defp execute(pid, prompt, message, topic, scope, config) do
+  defp execute(pid, prompt, message, topic, scope, config, profile) do
     request =
       [
-        tool_context: %{scope: scope, model: config.model},
+        tool_context: %{
+          scope: scope,
+          model: config.model,
+          canvas_id: profile.canvas_id,
+          agent_role: profile.role
+        },
         request_transformer: Psc.Agent.UserModel,
+        # A canvas can narrow the read-only tool surface. Jido rejects unknown
+        # names here, so the profile already intersected them with the registry.
+        allowed_tools: profile.tools,
         # A provider that accepts the request and then goes quiet would hold the
         # turn (and the "streaming" bubble) far too long. Bound it.
         stream_timeout_ms: @stream_timeout_ms,
@@ -209,6 +223,32 @@ defmodule Psc.Agent.Turn do
       register_global: false
     )
   end
+
+  # The agent's `use Jido.AI.Agent` prompt is compile-time, so the per-canvas
+  # profile is applied through the ReAct strategy's documented command. The call
+  # is synchronous: the prompt must be in place before the query is cast.
+  #
+  # A failure here is not fatal. The turn falls back to the base policy rather
+  # than refusing to answer; the next turn will try again.
+  defp set_system_prompt(pid, prompt) when is_binary(prompt) and prompt != "" do
+    signal =
+      Jido.Signal.new!(
+        "ai.react.set_system_prompt",
+        %{system_prompt: prompt},
+        source: "/psc/agent/turn"
+      )
+
+    case Jido.AgentServer.call(pid, signal) do
+      {:ok, _agent} -> :ok
+      _other -> :ok
+    end
+  rescue
+    error ->
+      Logger.warning("agent system prompt was not applied: #{Exception.message(error)}")
+      :ok
+  end
+
+  defp set_system_prompt(_pid, _prompt), do: :ok
 
   # The key and endpoint come from the resolved connection (or the legacy user
   # pair) and travel as per-request generation options.

@@ -85,9 +85,28 @@ defmodule PscWeb.Components.TemplatePreviewTest do
       assert html =~ "grid-row: 7 / span 4"
       assert html =~ "grid-row: 17 / span 4"
 
-      # Accents survive.
-      assert html =~ "bg-sky-400"
-      assert html =~ "bg-amber-400"
+      # The accent is the card's outline, never its fill: a preview draws a
+      # bento card the way the canvas does.
+      assert html =~ "ring-sky-400"
+      assert html =~ "ring-amber-400"
+      refute html =~ "bg-sky-400"
+      refute html =~ "bg-amber-400"
+    end
+
+    test "a bento card's background token fills the box and its accent outlines it" do
+      map =
+        bento(%{
+          "a" =>
+            card("A", 0, 0, 6, 2)
+            |> Map.put("accent", "sky")
+            |> Map.put("background", "emerald")
+        })
+
+      html = render_component(&TemplatePreview.mini_preview/1, layout_map: map)
+
+      assert html =~ "bg-emerald-100"
+      assert html =~ "ring-sky-400"
+      refute html =~ "bg-sky-400"
     end
 
     test "the schematic is decorative" do
@@ -162,6 +181,22 @@ defmodule PscWeb.Components.TemplatePreviewTest do
 
       assert html =~ "Deep"
       assert html =~ "grid-row: 41 / span 4"
+    end
+
+    test "a bento card's background token fills the box and its accent outlines it" do
+      map =
+        bento(%{
+          "a" =>
+            card("A", 0, 0, 6, 2)
+            |> Map.put("accent", "sky")
+            |> Map.put("background", "emerald")
+        })
+
+      html = render_component(&TemplatePreview.grid_preview/1, layout_map: map)
+
+      assert html =~ "bg-emerald-100"
+      assert html =~ "ring-sky-400"
+      refute html =~ "bg-sky-400"
     end
 
     test "an image board is drawn over its picture" do

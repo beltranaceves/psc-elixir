@@ -14,7 +14,9 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
   import PscWeb.Components.Section, only: [section: 1]
   import PscWeb.CoreComponents, only: [icon: 1]
 
+  alias Psc.Agent.Config, as: AgentConfig
   alias Psc.Canvas.Structure
+  alias PscWeb.Components.AgentConfigEditor
   alias PscWeb.Components.UI.Button, as: UIButton
 
   attr :canvas, :map, required: true
@@ -22,10 +24,17 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
   attr :c_name, :string, required: true
   attr :c_desc, :string, default: ""
   attr :can_share?, :boolean, required: true
+  attr :agent_config, :map, required: true
+  attr :agent_files, :list, required: true
+  attr :agent_uploads, :map, required: true
+  attr :agent_can_edit?, :boolean, default: true
+  attr :agent_source_name, :string, default: nil
+  attr :agent_drift?, :boolean, default: false
+  attr :agent_dirty?, :boolean, default: false
 
   def panel(assigns) do
     ~H"""
-    <div id="canvas-info" class="min-h-0 w-full flex-1 overflow-y-auto">
+    <div id="canvas-info" class="w-full">
       <div class="mx-auto w-full max-w-2xl space-y-3 pb-2">
         <.section id="canvas-info-details" title="Details" hint="Name and description">
           <div class="space-y-4">
@@ -110,6 +119,25 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
           </div>
         </.section>
 
+        <.section
+          id="canvas-info-agent"
+          title="Agent"
+          hint={agent_hint(@agent_config, @agent_files)}
+        >
+          <AgentConfigEditor.editor
+            config={@agent_config}
+            files={@agent_files}
+            uploads={@agent_uploads}
+            id_prefix="canvas"
+            can_edit?={@agent_can_edit?}
+            show_save?
+            show_reset?={not is_nil(@agent_source_name)}
+            dirty?={@agent_dirty?}
+            source_name={@agent_source_name}
+            drift?={@agent_drift?}
+          />
+        </.section>
+
         <.section id="canvas-info-about" title="About" hint="Layout, notes and ownership">
           <dl class="grid grid-cols-[minmax(5rem,auto)_1fr] items-baseline gap-x-4 gap-y-2 text-sm">
             <dt class="text-base-content/50">Layout</dt>
@@ -135,6 +163,24 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
     </div>
     """
   end
+
+  defp agent_hint(config, files) do
+    [
+      role_hint(length(List.wrap(Map.get(config, "roles")))),
+      "#{length(AgentConfig.enabled_tool_names(config))} tools",
+      file_hint(length(files))
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  defp role_hint(0), do: nil
+  defp role_hint(1), do: "1 role"
+  defp role_hint(count), do: "#{count} roles"
+
+  defp file_hint(0), do: nil
+  defp file_hint(1), do: "1 file"
+  defp file_hint(count), do: "#{count} files"
 
   defp shared_hint([]), do: "Only you"
   defp shared_hint([_email]), do: "1 person"

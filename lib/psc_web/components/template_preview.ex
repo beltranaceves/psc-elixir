@@ -154,7 +154,8 @@ defmodule PscWeb.Components.TemplatePreview do
   The whole board is drawn: every card keeps its own row, so a card near the
   bottom is not folded back over the ones above it. The picture takes the
   board's proportions, with a floor and a ceiling so a very flat or very tall
-  board still reads as a thumbnail.
+  board still reads as a thumbnail. A card is drawn the way the canvas draws
+  it: its `background` token fills the box and its `accent` token outlines it.
   """
   attr :lm, :map, required: true
 
@@ -193,14 +194,7 @@ defmodule PscWeb.Components.TemplatePreview do
       <div
         :for={card <- @cards}
         data-card-key={card.key}
-        class={
-          [
-            "min-h-0 rounded-[2px]",
-            # One background only: two utilities for the same property would let
-            # the stylesheet order, not the accent, decide the colour.
-            if(card.accent, do: swatch_class(card.accent), else: "bg-base-content/20")
-          ]
-        }
+        class={["min-h-0 rounded-[2px]", card_surface(card, "bg-base-content/20")]}
         style={Structure.placement_style(card)}
       >
       </div>
@@ -349,8 +343,8 @@ defmodule PscWeb.Components.TemplatePreview do
       <div
         :for={card <- @cards}
         class={[
-          "relative min-h-0 overflow-hidden rounded-md border border-base-content/15 bg-base-100 p-1.5 text-xs text-base-content/80",
-          card.accent && swatch_class(card.accent)
+          "relative min-h-0 overflow-hidden rounded-md border border-base-content/15 p-1.5 text-xs text-base-content/80",
+          card_surface(card, "bg-base-100")
         ]}
         style={Structure.placement_style(card)}
       >
@@ -395,6 +389,16 @@ defmodule PscWeb.Components.TemplatePreview do
       Structure.bento?(lm) -> "Board"
       true -> "Grid"
     end
+  end
+
+  # A bento card's surface is its `background` token and its outline the
+  # `accent` token, exactly as the canvas draws it. One fill utility only: two
+  # backgrounds would let the stylesheet order, not the token, decide.
+  defp card_surface(card, fallback) do
+    [
+      background_class(Map.get(card, :background)) || fallback,
+      outline_class(Map.get(card, :accent))
+    ]
   end
 
   defp bento?(lm), do: Structure.bento?(lm || %{})

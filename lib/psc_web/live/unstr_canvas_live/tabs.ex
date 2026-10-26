@@ -8,7 +8,7 @@ defmodule PscWeb.UnstrCanvasLive.Tabs do
      "Insights over the canvas: relevance, staleness and content coverage."},
     {"notes", "Notes", "hero-document-text", "Shared notes attached to this canvas."},
     {"editor", "Editor", "hero-pencil-square", "The canvas grid."},
-    {"agent", "Agent", "hero-sparkles", "Talk to an agent that can read and edit this canvas."},
+    {"agent", "Agent", "hero-sparkles", "Talk to a read-only agent about this canvas."},
     {"info", "Info", "hero-information-circle", "Canvas details, sharing and settings."}
   ]
 

@@ -15,6 +15,12 @@ defmodule Psc.Canvas.UnstrCanvas do
 
     belongs_to :author, Psc.Accounts.User, type: :id
 
+    # Copied from the source template on instantiation and editable afterwards.
+    # The source fields are set by the context, never by a request.
+    field :agent_config, :map, default: %{}
+    field :source_template_id, :binary_id
+    field :agent_config_source_hash, :string
+
     field :snapshot_seq, :integer, default: 0
     has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
 
@@ -39,8 +45,10 @@ defmodule Psc.Canvas.UnstrCanvas do
       :shared_with,
       :cells,
       :snapshot_seq,
-      :notes_mode
+      :notes_mode,
+      :agent_config
     ])
+    |> update_change(:agent_config, &Psc.Agent.Config.normalize/1)
     |> validate_required([:name, :author_id, :cells])
     |> validate_inclusion(:notes_mode, Psc.Canvas.NotesMode.modes())
     |> validate_cells_structure()

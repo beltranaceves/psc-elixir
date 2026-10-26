@@ -20,6 +20,11 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   alias Psc.Canvas.Accent
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
+  alias Psc.Agent.Config, as: AgentConfig
+  alias Psc.Agent.Files, as: AgentFiles
+  alias PscWeb.AgentUploads
+  alias PscWeb.Components.AgentConfigEditor
+  alias PscWeb.Markdown
   alias PscWeb.CanvasLayoutLive.BentoEditor
   alias PscWeb.CanvasLayoutLive.ImageEditor
   alias PscWeb.Components.ImageBoard, as: ImageFrame
@@ -50,6 +55,9 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
          |> assign(:accent_picker, nil)
          |> assign(:confirm_leave?, false)
          |> assign(:dirty?, false)
+         |> assign(:agent_config, AgentConfig.default())
+         |> assign(:agent_files, [])
+         |> AgentUploads.allow()
          |> assign(:public_draft, false)}
 
       id ->
@@ -74,6 +82,12 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                |> assign(:accent_picker, nil)
                |> assign(:confirm_leave?, false)
                |> assign(:dirty?, false)
+               |> assign(:agent_config, AgentConfig.normalize(template.agent_config))
+               |> assign(
+                 :agent_files,
+                 AgentFiles.drafts(:template, template.id) |> AgentUploads.with_html()
+               )
+               |> AgentUploads.allow()
                |> assign(:public_draft, template.public)}
             else
               {:ok,
@@ -400,6 +414,101 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
     end
   end
 
+  # ─── Agent section ───
+
+  @impl true
+  def handle_event("agent_cfg_change", %{"_target" => target} = params, socket) do
+    {:noreply,
+     socket
+     |> update_agent_config(&AgentConfig.apply_form_change(&1, target, params))
+     |> assign(
+       :agent_files,
+       AgentFiles.apply_form_change(socket.assigns.agent_files, target, params)
+     )}
+  end
+
+  def handle_event("agent_cfg_change", _params, socket), do: {:noreply, socket}
+
+  def handle_event("agent_cfg_cancel_upload", %{"upload" => upload, "ref" => ref}, socket) do
+    {:noreply, AgentUploads.cancel(socket, upload, ref)}
+  end
+
+  def handle_event("agent_cfg_cancel_directory", %{"path" => path}, socket) do
+    {:noreply, AgentUploads.cancel_directory(socket, path)}
+  end
+
+  def handle_event("agent_cfg_upload", _params, socket) do
+    cond do
+      AgentUploads.pending?(socket.assigns.uploads) ->
+        {:noreply, put_flash(socket, :info, "Files are still uploading. Try again in a moment.")}
+
+      not AgentUploads.ready?(socket.assigns.uploads) ->
+        {:noreply, socket}
+
+      true ->
+        {files, stats} = AgentUploads.apply(socket, socket.assigns.agent_files)
+        socket = update_agent_files(socket, fn _files -> files end)
+
+        {:noreply, put_flash(socket, :info, AgentFiles.upload_summary(stats))}
+    end
+  end
+
+  def handle_event("agent_file_render", %{"index" => index, "content" => content}, socket)
+      when is_binary(content) do
+    with {index, ""} <- Integer.parse(to_string(index)),
+         true <- index >= 0 and index < length(socket.assigns.agent_files) do
+      html = Markdown.render(content, empty_message: "")
+      files = List.update_at(socket.assigns.agent_files, index, &Map.put(&1, "html", html))
+
+      {:noreply,
+       socket
+       |> assign(:agent_files, files)
+       |> push_event("agent_file_rendered", %{content: content, html: html})}
+    else
+      _other -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("agent_file_render", _params, socket), do: {:noreply, socket}
+
+  def handle_event("agent_cfg_add_role", _params, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.add_role/1)}
+  end
+
+  def handle_event("agent_cfg_remove_role", %{"key" => key}, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.remove_role(&1, key))}
+  end
+
+  def handle_event("agent_cfg_set_default_role", %{"key" => key}, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.set_default_role(&1, key))}
+  end
+
+  def handle_event("agent_cfg_toggle_tool", %{"name" => name}, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.toggle_tool(&1, name))}
+  end
+
+  def handle_event("agent_cfg_add_file", _params, socket) do
+    if length(socket.assigns.agent_files) < AgentFiles.max_files() do
+      {:noreply, update_agent_files(socket, &(&1 ++ [AgentFiles.blank_draft()]))}
+    else
+      {:noreply, put_flash(socket, :error, "At most #{AgentFiles.max_files()} reference files.")}
+    end
+  end
+
+  def handle_event("agent_cfg_remove_file", %{"index" => index}, socket) do
+    case parse_index(index) do
+      nil ->
+        {:noreply, socket}
+
+      index ->
+        {:noreply, update_agent_files(socket, &List.delete_at(&1, index))}
+    end
+  end
+
+  # The agent section is its own form so its inputs can emit form events. The
+  # template is still saved by the page-level button.
+  def handle_event("agent_cfg_form_submit", _params, socket), do: {:noreply, socket}
+
   # ─── Save / share events ───
 
   @impl true
@@ -414,14 +523,17 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       "name" => name,
       "description" => description,
       "layout_map" => socket.assigns.layout_map,
+      "agent_config" => AgentConfig.normalize(socket.assigns.agent_config),
       "public" => public?(params)
     }
 
     result =
-      case socket.assigns.editing_layout do
-        nil -> Canvas.create_template(user.id, attrs)
-        template -> Canvas.update_template(template, attrs)
-      end
+      Canvas.save_template_with_agent(
+        socket.assigns.editing_layout,
+        user.id,
+        attrs,
+        socket.assigns.agent_files
+      )
 
     case result do
       {:ok, _template} ->
@@ -560,6 +672,47 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       put_in(lm, ["cells", key], cell)
     end
   end
+
+  defp update_agent_config(socket, fun) do
+    socket
+    |> assign(:agent_config, fun.(socket.assigns.agent_config))
+    |> assign(:dirty?, true)
+  end
+
+  defp update_agent_files(socket, fun) do
+    socket
+    |> assign(:agent_files, fun.(socket.assigns.agent_files))
+    |> assign(:dirty?, true)
+  end
+
+  defp parse_index(value) when is_integer(value), do: value
+
+  defp parse_index(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {index, ""} when index >= 0 -> index
+      _other -> nil
+    end
+  end
+
+  defp parse_index(_value), do: nil
+
+  defp agent_hint(config, files) do
+    [
+      role_hint(length(List.wrap(Map.get(config, "roles")))),
+      "#{length(AgentConfig.enabled_tool_names(config))} tools",
+      file_hint(length(files))
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+  end
+
+  defp role_hint(0), do: nil
+  defp role_hint(1), do: "1 role"
+  defp role_hint(count), do: "#{count} roles"
+
+  defp file_hint(0), do: nil
+  defp file_hint(1), do: "1 file"
+  defp file_hint(count), do: "#{count} files"
 
   defp empty_layout_map(:table) do
     %{
@@ -1493,12 +1646,18 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
             />
           </.section>
 
-          <.section id="template-agent" title="Agent" hint="Not configured" open>
-            <.empty_section
-              id="template-agent-placeholder"
-              icon="hero-cpu-chip"
-              title="Nothing here yet"
-              description="Agent settings for templates are coming soon."
+          <.section
+            id="template-agent"
+            title="Agent"
+            hint={agent_hint(@agent_config, @agent_files)}
+            open
+          >
+            <AgentConfigEditor.editor
+              config={@agent_config}
+              files={@agent_files}
+              uploads={@uploads}
+              id_prefix="template"
+              can_edit?={@can_edit?}
             />
           </.section>
         </div>
@@ -1509,13 +1668,13 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
           open={@confirm_leave?}
           on-close="leave_dialog_closed"
         >
-          <UIDialog.dialog_content open class="sm:max-w-md">
+          <UIDialog.dialog_content open={@confirm_leave?} class="sm:max-w-md">
             <UIDialog.dialog_header>
               <UIDialog.dialog_title>Discard unsaved changes?</UIDialog.dialog_title>
 
               <UIDialog.dialog_description>
                 This template has edits that have not been saved. Leaving now discards the
-                grid, cell and accent changes made in this session.
+                grid, cell, accent and agent changes made in this session.
               </UIDialog.dialog_description>
             </UIDialog.dialog_header>
 

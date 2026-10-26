@@ -8,10 +8,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias PscWeb.Components.UI.Dialog, as: UIDialog
   alias PscWeb.Components.ImageBoard, as: ImageFrame
 
+  alias Psc.Agent.Config, as: AgentConfig
+  alias Psc.Agent.Files, as: AgentFiles
   alias Psc.Canvas
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
   alias Psc.Notes
+  alias PscWeb.AgentUploads
   alias PscWeb.Markdown
   alias PscWeb.Presence
   alias PscWeb.UnstrCanvasLive.AgentPanel
@@ -50,6 +53,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       c_name = Map.get(cells, "$name", canvas.name)
       c_desc = Map.get(cells, "$description", canvas.description)
 
+      agent_config = AgentConfig.normalize(canvas.agent_config)
+      agent_source = Canvas.agent_source_template(canvas)
+
       socket =
         socket
         |> assign(:canvas, canvas)
@@ -86,6 +92,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:agent_connections, [])
         |> assign(:agent_connection, nil)
         |> assign(:agent_connection_list_open, false)
+        |> assign(:agent_config, agent_config)
+        |> assign(
+          :agent_files,
+          AgentFiles.drafts(:canvas, canvas.id) |> AgentUploads.with_html()
+        )
+        |> assign(:agent_config_dirty?, false)
+        |> assign(:agent_source_template, agent_source)
+        |> assign(:agent_config_drift?, Canvas.agent_config_drift?(canvas, agent_source))
+        |> assign(:agent_roles, agent_config["roles"] || [])
+        |> assign(:agent_role, agent_config["default_role"])
+        |> AgentUploads.allow()
         |> assign(:notes, [])
         |> assign(:note, nil)
         |> assign(:note_content, "")
@@ -193,10 +210,152 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  # ─── Canvas agent settings (Info tab) ───
+
+  @impl true
+  def handle_event("agent_cfg_change", %{"_target" => target} = params, socket) do
+    {:noreply,
+     socket
+     |> update_agent_config(&AgentConfig.apply_form_change(&1, target, params))
+     |> assign(
+       :agent_files,
+       AgentFiles.apply_form_change(socket.assigns.agent_files, target, params)
+     )}
+  end
+
+  def handle_event("agent_cfg_change", _params, socket), do: {:noreply, socket}
+
+  def handle_event("agent_cfg_cancel_upload", %{"upload" => upload, "ref" => ref}, socket) do
+    {:noreply, AgentUploads.cancel(socket, upload, ref)}
+  end
+
+  def handle_event("agent_cfg_cancel_directory", %{"path" => path}, socket) do
+    {:noreply, AgentUploads.cancel_directory(socket, path)}
+  end
+
+  def handle_event("agent_cfg_upload", _params, socket) do
+    cond do
+      AgentUploads.pending?(socket.assigns.uploads) ->
+        {:noreply, put_flash(socket, :info, "Files are still uploading. Try again in a moment.")}
+
+      not AgentUploads.ready?(socket.assigns.uploads) ->
+        {:noreply, socket}
+
+      true ->
+        {files, stats} = AgentUploads.apply(socket, socket.assigns.agent_files)
+        socket = update_agent_files(socket, fn _files -> files end)
+
+        {:noreply, put_flash(socket, :info, AgentFiles.upload_summary(stats))}
+    end
+  end
+
+  def handle_event("agent_file_render", %{"index" => index, "content" => content}, socket)
+      when is_binary(content) do
+    with {index, ""} <- Integer.parse(to_string(index)),
+         true <- index >= 0 and index < length(socket.assigns.agent_files) do
+      html = Markdown.render(content, empty_message: "")
+      files = List.update_at(socket.assigns.agent_files, index, &Map.put(&1, "html", html))
+
+      {:noreply,
+       socket
+       |> assign(:agent_files, files)
+       |> push_event("agent_file_rendered", %{content: content, html: html})}
+    else
+      _other -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("agent_file_render", _params, socket), do: {:noreply, socket}
+
+  def handle_event("agent_cfg_add_role", _params, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.add_role/1)}
+  end
+
+  def handle_event("agent_cfg_remove_role", %{"key" => key}, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.remove_role(&1, key))}
+  end
+
+  def handle_event("agent_cfg_set_default_role", %{"key" => key}, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.set_default_role(&1, key))}
+  end
+
+  def handle_event("agent_cfg_toggle_tool", %{"name" => name}, socket) do
+    {:noreply, update_agent_config(socket, &AgentConfig.toggle_tool(&1, name))}
+  end
+
+  def handle_event("agent_cfg_add_file", _params, socket) do
+    if length(socket.assigns.agent_files) < AgentFiles.max_files() do
+      {:noreply, update_agent_files(socket, &(&1 ++ [AgentFiles.blank_draft()]))}
+    else
+      {:noreply, put_flash(socket, :error, "At most #{AgentFiles.max_files()} reference files.")}
+    end
+  end
+
+  def handle_event("agent_cfg_remove_file", %{"index" => index}, socket) do
+    case parse_index(index) do
+      nil ->
+        {:noreply, socket}
+
+      index ->
+        {:noreply, update_agent_files(socket, &List.delete_at(&1, index))}
+    end
+  end
+
+  def handle_event("agent_cfg_save", _params, socket) do
+    {:noreply, save_agent_config(socket)}
+  end
+
+  # Enter in one of the section's text fields submits its form; saving is the
+  # least surprising outcome on the canvas.
+  def handle_event("agent_cfg_form_submit", _params, socket) do
+    {:noreply, save_agent_config(socket)}
+  end
+
+  def handle_event("agent_cfg_reset", _params, socket) do
+    case Canvas.reset_agent_config(socket.assigns.canvas) do
+      {:ok, canvas} ->
+        {:noreply,
+         socket
+         |> assign(:canvas, canvas)
+         |> reload_agent_config()
+         |> put_flash(:success, "Agent settings reset to the template")}
+
+      {:error, :no_template} ->
+        {:noreply, put_flash(socket, :error, "The source template is no longer available")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Could not reset the agent settings")}
+    end
+  end
+
+  def handle_event("agent_select_role", %{"role" => role}, socket) do
+    session = socket.assigns.agent_session
+
+    cond do
+      is_nil(session) ->
+        {:noreply, assign(socket, :agent_role, role)}
+
+      session.message_count in [nil, 0] ->
+        case Psc.Agent.set_session_role(session, role) do
+          {:ok, session} ->
+            {:noreply, assign(socket, agent_session: session, agent_role: role)}
+
+          {:error, _reason} ->
+            {:noreply, socket}
+        end
+
+      true ->
+        {:noreply, put_flash(socket, :error, "Start a new chat to change the role.")}
+    end
+  end
+
   @impl true
   def handle_event("agent_new", _params, socket) do
     socket = stop_running_turn(socket)
     user = socket.assigns.current_scope.user
+    # The saved config, not the Info tab's unsaved draft, decides what a new
+    # chat starts with.
+    default_role = AgentConfig.normalize(socket.assigns.canvas.agent_config)["default_role"]
 
     case Psc.Agent.create_session(user.id, %{canvas_id: socket.assigns.canvas_id}) do
       {:ok, session} ->
@@ -209,6 +368,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
            Psc.Agent.list_sessions_for_canvas(session.canvas_id, session.user_id)
          )
          |> assign(:agent_messages, [])
+         |> assign(:agent_role, default_role)
          |> assign(:agent_composer, to_form(%{"content" => ""}, as: :message))
          |> assign(:agent_list_open, false)
          |> assign(:agent_connection_list_open, false)
@@ -250,7 +410,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         connection = Psc.Agent.Connections.for_session(session, scope.user)
         config = Psc.Agent.Connections.turn_config(session, scope.user)
 
-        with {:ok, user_message} <- Psc.Agent.append_user_message(session, content),
+        profile =
+          Psc.Agent.Profile.for_canvas(
+            socket.assigns.canvas,
+            session.role || socket.assigns.agent_role
+          )
+
+        with {:ok, user_message} <-
+               Psc.Agent.append_user_message(session, content, profile: profile),
+             %{} = session <-
+               Psc.Agent.get_session(session.id, session.user_id) || {:error, :not_found},
              {:ok, session} <- pin_connection(session, connection),
              {:ok, assistant} <-
                Psc.Agent.start_assistant_message(session, model: config.model) do
@@ -1330,11 +1499,91 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           |> assign(:agent_messages, messages)
       end
 
+    config = AgentConfig.normalize(socket.assigns.canvas.agent_config)
+    roles = config["roles"] || []
+
+    role =
+      case socket.assigns[:agent_session] do
+        %{role: role} when is_binary(role) ->
+          if Enum.any?(roles, &(&1["key"] == role)), do: role, else: config["default_role"]
+
+        _other ->
+          config["default_role"]
+      end
+
     socket
     |> assign(:agent_enabled?, enabled?)
     |> assign(:agent_missing, missing)
+    |> assign(:agent_roles, roles)
+    |> assign(:agent_role, role)
     |> assign_agent_connections()
   end
+
+  # Re-reads the saved agent setup after a save or a collaborator's broadcast.
+  # The draft is replaced on purpose: the database is the source of truth.
+  defp reload_agent_config(socket) do
+    canvas =
+      Psc.Canvas.get_unstr_canvas_with_author(socket.assigns.canvas.id) || socket.assigns.canvas
+
+    config = AgentConfig.normalize(canvas.agent_config)
+    source = Canvas.agent_source_template(canvas)
+
+    role =
+      case socket.assigns[:agent_session] do
+        %{role: role} when is_binary(role) -> role
+        _other -> config["default_role"]
+      end
+
+    socket
+    |> assign(:canvas, canvas)
+    |> assign(:agent_config, config)
+    |> assign(:agent_files, AgentFiles.drafts(:canvas, canvas.id) |> AgentUploads.with_html())
+    |> assign(:agent_config_dirty?, false)
+    |> assign(:agent_source_template, source)
+    |> assign(:agent_config_drift?, Canvas.agent_config_drift?(canvas, source))
+    |> assign(:agent_roles, config["roles"] || [])
+    |> assign(:agent_role, role)
+  end
+
+  defp save_agent_config(socket) do
+    case Canvas.update_agent_config(
+           socket.assigns.canvas,
+           socket.assigns.agent_config,
+           socket.assigns.agent_files
+         ) do
+      {:ok, canvas} ->
+        socket
+        |> assign(:canvas, canvas)
+        |> reload_agent_config()
+        |> put_flash(:success, "Agent settings saved")
+
+      {:error, _reason} ->
+        put_flash(socket, :error, "Could not save the agent settings")
+    end
+  end
+
+  defp update_agent_config(socket, fun) do
+    socket
+    |> assign(:agent_config, fun.(socket.assigns.agent_config))
+    |> assign(:agent_config_dirty?, true)
+  end
+
+  defp update_agent_files(socket, fun) do
+    socket
+    |> assign(:agent_files, fun.(socket.assigns.agent_files))
+    |> assign(:agent_config_dirty?, true)
+  end
+
+  defp parse_index(value) when is_integer(value), do: value
+
+  defp parse_index(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {index, ""} when index >= 0 -> index
+      _other -> nil
+    end
+  end
+
+  defp parse_index(_value), do: nil
 
   # A turn's stream only reaches the socket if it subscribed to the session's
   # topic. Starting a chat from the tab creates the session *after* mount, so
@@ -1669,6 +1918,24 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      |> update_agent_message(message_id, &%{&1 | status: :error, error: to_string(reason)})
      |> assign(:agent_turn_pid, nil)
      |> assign(:agent_phase, nil)}
+  end
+
+  def handle_info({:agent_config_updated, canvas_id}, socket) do
+    cond do
+      socket.assigns.canvas_id != canvas_id ->
+        {:noreply, socket}
+
+      socket.assigns.agent_config_dirty? ->
+        {:noreply,
+         put_flash(
+           socket,
+           :info,
+           "Agent settings were updated in another tab. Save yours to overwrite them."
+         )}
+
+      true ->
+        {:noreply, reload_agent_config(socket)}
+    end
   end
 
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
@@ -2077,6 +2344,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               agent_menu_session={@agent_menu_session}
               agent_phase={@agent_phase}
               agent_enabled?={@agent_enabled?}
+              agent_roles={@agent_roles}
+              agent_role={@agent_role}
               agent_missing={@agent_missing}
               agent_composer={@agent_composer}
               agent_connections={@agent_connections}
@@ -2100,6 +2369,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               c_name={@c_name}
               c_desc={@c_desc}
               can_share?={@canvas.author_id == @user_id}
+              agent_config={@agent_config}
+              agent_files={@agent_files}
+              agent_uploads={@uploads}
+              agent_can_edit?={true}
+              agent_source_name={@agent_source_template && @agent_source_template.name}
+              agent_drift?={@agent_config_drift?}
+              agent_dirty?={@agent_config_dirty?}
             />
           </div>
 

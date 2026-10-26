@@ -95,6 +95,17 @@ defmodule Psc.Canvas.StructureTest do
       assert [%{x: 0, y: 0, w: 1, h: 1}] = Structure.cards(cells)
     end
 
+    test "a card carries its own accent and background tokens" do
+      cells =
+        bento(%{
+          "a" => card(0, 0, 6, 2, %{"accent" => "sky", "background" => "emerald"}),
+          "b" => card(6, 0, 6, 2)
+        })
+
+      assert [%{accent: "sky", background: "emerald"}, %{accent: nil, background: nil}] =
+               Structure.cards(cells)
+    end
+
     test "bounds report the column count and the container height" do
       cells = bento(%{"a" => card(6, 2, 6, 3)})
 

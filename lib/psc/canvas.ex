@@ -11,6 +11,8 @@ defmodule Psc.Canvas do
   alias Psc.Canvas.Layout
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
+  alias Psc.Agent.Config, as: AgentConfig
+  alias Psc.Agent.Files, as: AgentFiles
 
   # The built-in Problem–Solution Canvas: the 12-cell grid (Perceive / Form /
   # Consolidate / Learn × Rationale / Strategy / Tactics) that used to be the
@@ -619,6 +621,7 @@ defmodule Psc.Canvas do
       with {:ok, fork} <- create_template(user_id, fork_attrs(template, attempt)),
            {:ok, fork} <- record_lineage(fork, template.id),
            {:ok, _template} <- bump_count(template, :fork_count) do
+        AgentFiles.copy_to_template(template.id, fork.id)
         fork
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -630,7 +633,8 @@ defmodule Psc.Canvas do
     %{
       "name" => fork_name(template.name, attempt),
       "description" => template.description || "",
-      "layout_map" => template.layout_map || %{}
+      "layout_map" => template.layout_map || %{},
+      "agent_config" => template.agent_config || %{}
     }
   end
 
@@ -710,19 +714,32 @@ defmodule Psc.Canvas do
         "description" => template.description || "",
         "cells" => cells,
         # The note mode is a property of the template, not of the canvas.
-        "notes_mode" => NotesMode.normalize(lm["notes_mode"])
+        "notes_mode" => NotesMode.normalize(lm["notes_mode"]),
+        # The agent's setup is a copy, like the cells and the notes.
+        "agent_config" => AgentConfig.normalize(template.agent_config)
       }
       |> Map.merge(Map.reject(overrides || %{}, fn {_k, v} -> is_nil(v) or v == "" end))
 
     Repo.transaction(fn ->
       with {:ok, canvas} <- create_unstr_canvas(user_id, attrs),
+           {:ok, canvas} <- record_agent_source(canvas, template),
            {:ok, _template} <- bump_count(template, :use_count) do
         Psc.Notes.seed_notes(canvas, lm["notes"] || [])
+        AgentFiles.copy_to_canvas(template.id, canvas.id)
         canvas
       else
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp record_agent_source(canvas, template) do
+    canvas
+    |> Ecto.Changeset.change(
+      source_template_id: template.id,
+      agent_config_source_hash: AgentConfig.hash(template.agent_config)
+    )
+    |> Repo.update()
   end
 
   defp put_instantiated_cells(cells, template_cells, layout, rows, columns) do
@@ -887,6 +904,117 @@ defmodule Psc.Canvas do
     canvas
     |> UnstrCanvas.changeset(attrs)
     |> Repo.update(stale_error_field: :base)
+  end
+
+  ## Canvas agent setup
+
+  @doc """
+  Saves a canvas's agent config and its reference files together.
+
+  The config is normalized by the schema; the files are replaced as a set. A
+  broadcast lets other open tabs refresh their copy without a reload.
+  """
+  def update_agent_config(%UnstrCanvas{} = canvas, config, drafts) do
+    changeset =
+      canvas
+      |> UnstrCanvas.changeset(%{"agent_config" => config})
+
+    Repo.transaction(fn ->
+      with {:ok, canvas} <- Repo.update(changeset, stale_error_field: :base),
+           {:ok, :ok} <- AgentFiles.replace(:canvas, canvas.id, drafts) do
+        broadcast_agent_config(canvas.id)
+        canvas
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  @doc """
+  Replaces a canvas's agent config and files with the current template's.
+
+  Only available while the source template exists. The canvas keeps its own
+  copy either way; this is an explicit one-way refresh, not a link.
+  """
+  def reset_agent_config(%UnstrCanvas{} = canvas) do
+    with template_id when is_binary(template_id) <- canvas.source_template_id,
+         %Layout{} = template <- get_canvas_layout(template_id) do
+      config = AgentConfig.normalize(template.agent_config)
+      drafts = AgentFiles.drafts(:template, template.id)
+
+      Repo.transaction(fn ->
+        with {:ok, canvas} <-
+               canvas
+               |> Ecto.Changeset.change(
+                 agent_config: config,
+                 agent_config_source_hash: AgentConfig.hash(config)
+               )
+               |> Repo.update(),
+             {:ok, :ok} <- AgentFiles.replace(:canvas, canvas.id, drafts) do
+          broadcast_agent_config(canvas.id)
+          canvas
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+    else
+      _other -> {:error, :no_template}
+    end
+  end
+
+  @doc "The template this canvas was made from, if it still exists."
+  def agent_source_template(%UnstrCanvas{source_template_id: nil}), do: nil
+
+  def agent_source_template(%UnstrCanvas{source_template_id: id}),
+    do: get_canvas_layout(id)
+
+  @doc "Whether the template's agent setup has moved on since this canvas copied it."
+  def agent_config_drift?(%UnstrCanvas{} = canvas, template \\ nil) do
+    template = template || agent_source_template(canvas)
+
+    case template do
+      %Layout{} = template ->
+        canvas.agent_config_source_hash != AgentConfig.hash(template.agent_config)
+
+      _other ->
+        false
+    end
+  end
+
+  @doc """
+  Creates or updates a template and replaces its agent files in one transaction.
+
+  The designer saves everything with one button, so a half-saved template would
+  leave the prompt and the files disagreeing.
+  """
+  def save_template_with_agent(nil, user_id, attrs, drafts) do
+    Repo.transaction(fn ->
+      with {:ok, template} <- create_template(user_id, attrs),
+           {:ok, :ok} <- AgentFiles.replace(:template, template.id, drafts) do
+        template
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  def save_template_with_agent(%Layout{} = template, _user_id, attrs, drafts) do
+    Repo.transaction(fn ->
+      with {:ok, template} <- update_template(template, attrs),
+           {:ok, :ok} <- AgentFiles.replace(:template, template.id, drafts) do
+        template
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp broadcast_agent_config(canvas_id) do
+    Phoenix.PubSub.broadcast(
+      Psc.PubSub,
+      pubsub_topic_unstr(canvas_id),
+      {:agent_config_updated, canvas_id}
+    )
   end
 
   @doc """

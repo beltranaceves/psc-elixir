@@ -68,7 +68,7 @@ defmodule PscWeb.Components.ShareDialog do
   def share_dialog(assigns) do
     ~H"""
     <UIDialog.dialog id={@id} open={@open} on-close={@on_close}>
-      <UIDialog.dialog_content open class="sm:max-w-md">
+      <UIDialog.dialog_content open={@open} class="sm:max-w-md">
         <UIDialog.dialog_header>
           <UIDialog.dialog_title>{@title}</UIDialog.dialog_title>
 

@@ -54,6 +54,12 @@ defmodule PscWeb.Components.MarkdownEditor do
   attr :html, :string, default: ""
   attr :current_user_id, :integer, default: nil
   attr :change_event, :string, required: true
+  attr :input_name, :string, default: "content"
+
+  attr :embedded, :boolean,
+    default: false,
+    doc: "render inside an existing form. The change_event is then handled by the outer form."
+
   attr :preview_event, :string, default: "render_document"
   attr :render_event, :string, default: "document_rendered"
   attr :update_event, :string, default: "content_updated"
@@ -88,28 +94,44 @@ defmodule PscWeb.Components.MarkdownEditor do
       }
     >
       <div class={not @auto_grow && "relative min-h-0 flex-1"}>
-        <.form
-          for={%{}}
-          id={@form_id}
-          phx-change={@change_event}
-          phx-debounce="300"
-          class={[not @auto_grow && "absolute inset-0 h-full", "hidden"]}
-          data-editor-form
-        >
-          <input :for={{name, value} <- @hidden_fields} type="hidden" name={name} value={value} /> <textarea
-            name="content"
-            id={@input_id}
-            data-editor-input
-            data-current-user-id={@current_user_id}
-            class={[
-              "w-full resize-none border-0 bg-base-100 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-0",
-              not @auto_grow && "h-full",
-              @body_class
-            ]}
-            placeholder={@placeholder}
-            value={@content}
-          ></textarea>
-        </.form>
+        <%= if @embedded do %>
+          <div
+            id={@form_id}
+            data-editor-form
+            class={[not @auto_grow && "absolute inset-0 h-full", "hidden"]}
+          >
+            <.editor_fields
+              input_id={@input_id}
+              input_name={@input_name}
+              content={@content}
+              current_user_id={@current_user_id}
+              hidden_fields={@hidden_fields}
+              body_class={@body_class}
+              placeholder={@placeholder}
+              fill={not @auto_grow}
+            />
+          </div>
+        <% else %>
+          <.form
+            for={%{}}
+            id={@form_id}
+            phx-change={@change_event}
+            phx-debounce="300"
+            class={[not @auto_grow && "absolute inset-0 h-full", "hidden"]}
+            data-editor-form
+          >
+            <.editor_fields
+              input_id={@input_id}
+              input_name={@input_name}
+              content={@content}
+              current_user_id={@current_user_id}
+              hidden_fields={@hidden_fields}
+              body_class={@body_class}
+              placeholder={@placeholder}
+              fill={not @auto_grow}
+            />
+          </.form>
+        <% end %>
 
         <div
           id={@preview_id}
@@ -132,6 +154,34 @@ defmodule PscWeb.Components.MarkdownEditor do
         </div>
       </div>
     </div>
+    """
+  end
+
+  attr :input_id, :string, required: true
+  attr :input_name, :string, required: true
+  attr :content, :string, default: ""
+  attr :current_user_id, :integer, default: nil
+  attr :hidden_fields, :list, default: []
+  attr :body_class, :string, required: true
+  attr :placeholder, :string, default: ""
+  attr :fill, :boolean, default: false
+
+  defp editor_fields(assigns) do
+    ~H"""
+    <input :for={{name, value} <- @hidden_fields} type="hidden" name={name} value={value} /> <textarea
+      name={@input_name}
+      id={@input_id}
+      data-editor-input
+      data-current-user-id={@current_user_id}
+      phx-debounce={if @fill, do: "300", else: nil}
+      class={[
+        "w-full resize-none border-0 bg-base-100 text-base-content placeholder-base-content/40 focus:outline-none focus:ring-0",
+        @fill && "h-full",
+        @body_class
+      ]}
+      placeholder={@placeholder}
+      value={@content}
+    ></textarea>
     """
   end
 end

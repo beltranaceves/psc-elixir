@@ -521,8 +521,10 @@ defmodule Psc.Canvas.Structure do
   A table derives one card per matrix position (`w` and `h` are 1, `x` and `y`
   are the matrix indices). A bento reads each cell's placement in grid units;
   an image board reads it in percent of the backdrop. Either way the list is
-  `%{key, label, x, y, w, h, accent, kind}`, sorted by `{y, x, key}`. `kind` is
-  `"card"` unless the cell is an image board's `text` cell.
+  `%{key, label, x, y, w, h, accent, background, kind}`, sorted by
+  `{y, x, key}`: `accent` is the outline token (a table card inherits it from
+  its column) and `background` the surface token, each `nil` when unset. `kind`
+  is `"card"` unless the cell is an image board's `text` cell.
   """
   def cards(map) when is_map(map) do
     map
@@ -547,6 +549,7 @@ defmodule Psc.Canvas.Structure do
             w: placement.w,
             h: placement.h,
             accent: cell["accent"],
+            background: background_at(cell),
             kind: "card"
           }
         end
@@ -563,6 +566,7 @@ defmodule Psc.Canvas.Structure do
             w: placement.w,
             h: placement.h,
             accent: cell["accent"],
+            background: background_at(cell),
             kind: kind(cell)
           }
         end
@@ -585,6 +589,7 @@ defmodule Psc.Canvas.Structure do
             w: 1,
             h: 1,
             accent: accent_at(columns, x),
+            background: background_at(cell),
             kind: "card"
           }
         end
@@ -594,6 +599,13 @@ defmodule Psc.Canvas.Structure do
   defp accent_at(columns, index) do
     case Enum.at(columns, index) do
       %{"accent" => accent} -> accent
+      _other -> nil
+    end
+  end
+
+  defp background_at(cell) do
+    case cell do
+      %{"background" => background} -> background
       _other -> nil
     end
   end

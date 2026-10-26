@@ -159,6 +159,30 @@ connection becomes the default. The interface only ever receives
 `Psc.Agent.Connection.summary/2`, which has no `api_key` key, and the key field
 is rendered with an empty `value` in the settings form.
 
+## Agent customization
+
+A template or canvas carries its agent setup in `agent_config` (JSONB):
+
+| Key | Meaning |
+|---|---|
+| `prompt` | Additional system prompt, layered under the fixed PSC policy |
+| `roles` | Named personas (`key`, `name`, `instructions`) |
+| `default_role` | Role key used when a chat does not pick one |
+| `tools` | Allowlist of tool names; `null` means every read-only tool, `[]` none |
+
+`agent_files` holds the reference documents (`path`, `name`, `description`, `content`,
+`byte_size`, `position`), scoped to exactly one template or canvas. `path` is the
+identity and preserves a directory upload's tree (`docs/spec/bento.md`); `name` is the
+basename. Uploads keep relative paths, are staged behind a removable
+README-style preview, and skip hidden/build folders and binaries; the caps are
+24 files, 128 KiB each and 768 KiB total. Instantiation and forking copy the
+config and the files; editing a template never changes an existing canvas. `unstr_canvases.source_template_id` and
+`agent_config_source_hash` record the source and let the Info tab detect drift
+and offer **Reset to template**. `agent_sessions.role` and
+`agent_sessions.profile` pin the composed prompt, tool allowlist and file
+manifest at the first message. The agent is always enabled for a canvas; there is
+no per-canvas on/off switch.
+
 ## Related diagrams
 
 - [architecture.md](architecture.md) — system-wide layering

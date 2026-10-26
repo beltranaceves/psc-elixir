@@ -30,6 +30,41 @@ defmodule Psc.AgentTest do
     assert session.last_message_at
   end
 
+  test "the first message pins the profile and role", %{user: user} do
+    {:ok, canvas} =
+      Psc.Canvas.create_unstr_canvas(user.id, %{
+        "name" => "Pinned",
+        "cells" => Psc.Canvas.blank_cells(),
+        "agent_config" => %{
+          "prompt" => "Pin me.",
+          "roles" => [
+            %{"key" => "critic", "name" => "Critic", "instructions" => "Challenge."}
+          ],
+          "default_role" => "critic"
+        }
+      })
+
+    {:ok, session} = Agent.create_session(user.id, %{canvas_id: canvas.id})
+    profile = Agent.Profile.for_canvas(canvas, "critic")
+
+    {:ok, _message} = Agent.append_user_message(session, "hello", profile: profile)
+
+    session = Psc.Repo.reload!(session)
+    assert session.role == "critic"
+    assert session.profile["system_prompt"] =~ "Pin me."
+    assert session.profile["tools"] == Agent.Tools.names()
+  end
+
+  test "a role can only change before the first message", %{user: user} do
+    {:ok, session} = Agent.create_session(user.id)
+
+    assert {:ok, session} = Agent.set_session_role(session, "critic")
+    assert session.role == "critic"
+
+    {:ok, _message} = Agent.append_user_message(session, "hello")
+    assert {:error, :started} = Agent.set_session_role(session, "other")
+  end
+
   test "a long first message is truncated, not wrapped", %{user: user} do
     {:ok, session} = Agent.create_session(user.id)
     {:ok, _} = Agent.append_user_message(session, String.duplicate("a", 200))

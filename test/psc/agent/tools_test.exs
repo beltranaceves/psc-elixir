@@ -3,6 +3,7 @@ defmodule Psc.Agent.ToolsTest do
 
   alias Psc.Accounts.Scope
   alias Psc.AccountsFixtures
+  alias Psc.Agent.Files
   alias Psc.Agent.Tools
   alias Psc.NotesFixtures
 
@@ -84,6 +85,35 @@ defmodule Psc.Agent.ToolsTest do
     assert same_canvas["url"] == canvas_ref["url"]
   end
 
+  test "read_agent_file returns a canvas file and a chip", %{user: user, context: context} do
+    canvas = NotesFixtures.canvas_fixture(%{:user => user, "name" => "Files"})
+
+    {:ok, :ok} =
+      Files.replace(:canvas, canvas.id, [%{"name" => "brief.md", "content" => "context"}])
+
+    assert {:ok, result} =
+             Tools.ReadFile.run(
+               %{path: "brief.md"},
+               Map.put(context, :canvas_id, canvas.id)
+             )
+
+    assert result.path == "brief.md"
+    assert result.name == "brief.md"
+    assert result.content == "context"
+    refute result.truncated
+    assert [%{"kind" => "file", "label" => "brief.md"}] = result.refs
+  end
+
+  test "read_agent_file refuses another user's canvas", %{context: context} do
+    canvas = NotesFixtures.canvas_fixture(%{"name" => "Private"})
+    {:ok, :ok} = Files.replace(:canvas, canvas.id, [%{"name" => "brief.md", "content" => "x"}])
+
+    assert {:error, message} =
+             Tools.ReadFile.run(%{canvas_id: canvas.id, path: "brief.md"}, context)
+
+    assert message =~ "that you can access"
+  end
+
   test "the MCP specs are derived from the action schemas" do
     specs = Tools.mcp_specs()
 
@@ -92,7 +122,8 @@ defmodule Psc.Agent.ToolsTest do
              "list_canvases",
              "get_canvas",
              "list_notes",
-             "get_note"
+             "get_note",
+             "read_agent_file"
            ]
 
     get_canvas = Enum.find(specs, &(&1["name"] == "get_canvas"))

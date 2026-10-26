@@ -25,6 +25,8 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
   attr :agent_menu_session, :any, default: nil
   attr :agent_phase, :any, default: nil
   attr :agent_enabled?, :boolean, required: true
+  attr :agent_roles, :list, default: []
+  attr :agent_role, :string, default: nil
   attr :agent_missing, :any, default: nil
   attr :agent_composer, :any, required: true
   attr :agent_connections, :list, required: true
@@ -103,6 +105,24 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
             </div>
 
             <div class="flex shrink-0 items-center gap-1.5">
+              <select
+                :if={@agent_roles != []}
+                id="canvas-agent-role"
+                name="role"
+                phx-change="agent_select_role"
+                disabled={@agent_session.message_count not in [nil, 0] or not is_nil(@agent_turn_pid)}
+                title="Agent role"
+                class="max-w-[10rem] rounded-lg border border-base-content/10 bg-base-100 px-2 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option
+                  :for={role <- @agent_roles}
+                  value={role["key"]}
+                  selected={role["key"] == @agent_role}
+                >
+                  {role["name"]}
+                </option>
+              </select>
+
               <div class="relative" phx-click-away="agent_close_lists">
                 <button
                   type="button"
@@ -573,6 +593,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
   defp ref_icon("note"), do: "hero-document-text"
   defp ref_icon("template"), do: "hero-rectangle-stack"
+  defp ref_icon("file"), do: "hero-folder-open"
   defp ref_icon(_kind), do: "hero-square-2-stack"
 
   defp tool_label(name) when is_binary(name),

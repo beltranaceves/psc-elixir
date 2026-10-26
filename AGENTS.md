@@ -164,6 +164,28 @@ results, not a summary of intentions.
   (`Psc.Agent.Turn`), streams events over `Psc.PubSub` on
   `agent_session:<id>`, writes the result and exits. Sessions hang off
   `agent_sessions.canvas_id`, so a canvas owns its own transcript.
+- **Agent customization is copied from the template.** `canvas_layouts.agent_config`
+  and `unstr_canvases.agent_config` hold `{prompt, roles, default_role, tools}`;
+  `agent_files` rows hold the text reference documents. Instantiation and forking
+  copy both, and editing a template never changes an existing canvas. The
+  designer's Agent section and the canvas Info tab share
+  `PscWeb.Components.AgentConfigEditor`.
+- **A chat pins its profile.** The first user message stores `agent_sessions.role` and
+  `.profile` (composed system prompt, tool allowlist, file manifest). Canvas edits apply
+  to new chats. `Psc.Agent.Profile` layers the immutable
+  `CanvasAgent.base_prompt/0`, the configured prompt, the selected role and the file
+  manifest. `Psc.Agent.Turn` applies it through the ReAct
+  `ai.react.set_system_prompt` command and passes `allowed_tools` per request.
+- **Reference files are text rows with nested paths.** `agent_files.path` is the
+  identity (`docs/spec/bento.md`); `name` is the basename. `Psc.Agent.Files` accepts
+  directory uploads through `PscWeb.AgentUploads`, preserves the relative paths, and
+  skips hidden/build folders and binary files. Uploads are staged: two pickers (files
+  and a folder) feed a README-style preview where files/directories can be removed
+  before "Add to references" merges them into the draft. Caps: 24 files, 128 KiB each,
+  768 KiB total. The designer and Info tab can also create and edit files by path.
+- `read_agent_file` takes a `path`; it is in the shared registry, so `/mcp` exposes it
+  too; canvas access is the gate. Files are sent to the viewer's own model provider and
+  are visible to everyone who can open the canvas.
 - Tools live in `Psc.Agent.Tools.*` as `Jido.Action` modules and call
   `Psc.Canvas` / `Psc.Notes` with the caller's `current_scope`. They are
   read-only by construction; the same modules back `/mcp`
@@ -193,6 +215,8 @@ results, not a summary of intentions.
 ## Where things live
 
 - `lib/psc/` — contexts and schemas (`canvas.ex`, `notes.ex`, `text_store.ex`, `admin.ex`).
+- `lib/psc/agent/` — the agent runtime (`turn.ex`, `canvas_agent.ex`), configuration and
+  profiles (`config.ex`, `profile.ex`, `files.ex`) and the tool registry under `tools/`.
 - `lib/psc_web/live/` — LiveViews: `unstr_canvas_live/` (canvas), `canvas_layout_live/`
   (designer), `catalog_live/`, `user_live/`, `admin/` (Backpex resources + dashboard).
 - `lib/psc_web/components/` — shared components, including SaladUI under `ui/`.

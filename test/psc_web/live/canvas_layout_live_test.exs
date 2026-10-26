@@ -631,7 +631,7 @@ defmodule PscWeb.CanvasLayoutLiveTest do
 
       {:ok, lv, html} = live(conn, ~p"/templates/#{template.id}")
 
-      refute html =~ "read-only"
+      refute html =~ "Built-in templates are read-only"
       assert html =~ "Save Template"
       assert has_element?(lv, "#template-public")
       # Sharing stays an owner action.

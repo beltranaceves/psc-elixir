@@ -17,6 +17,12 @@ defmodule Psc.Agent.Session do
     field :message_count, :integer, default: 0
     field :last_message_at, :utc_datetime_usec
 
+    # Pinned when the first message is sent. A chat keeps the agent set-up it
+    # started with, so editing the canvas cannot change an answer in flight and
+    # the provider's cacheable prefix stays byte-stable.
+    field :role, :string
+    field :profile, :map
+
     belongs_to :user, Psc.Accounts.User
     belongs_to :canvas, Psc.Canvas.UnstrCanvas, type: :binary_id
     belongs_to :connection, Psc.Agent.Connection, type: :binary_id

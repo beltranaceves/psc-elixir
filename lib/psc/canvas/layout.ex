@@ -11,6 +11,11 @@ defmodule Psc.Canvas.Layout do
     field :layout_map, :map, default: %{}
     field :shared_with, {:array, :string}, default: []
 
+    # The agent a canvas made from this template starts with. Copied into the
+    # canvas on instantiation; editing the template never changes canvases that
+    # already exist.
+    field :agent_config, :map, default: %{}
+
     # The catalog. `:public` is the owner's choice; the counts and the lineage
     # are set by the context, never by a request, so they stay out of the cast.
     field :public, :boolean, default: false
@@ -31,7 +36,8 @@ defmodule Psc.Canvas.Layout do
 
   def changeset(layout, attrs) do
     layout
-    |> cast(attrs, [:name, :description, :layout_map, :shared_with, :public])
+    |> cast(attrs, [:name, :description, :layout_map, :shared_with, :public, :agent_config])
+    |> update_change(:agent_config, &Psc.Agent.Config.normalize/1)
     |> validate_required([:name])
     |> unique_constraint(:name)
     |> validate_layout_map()
