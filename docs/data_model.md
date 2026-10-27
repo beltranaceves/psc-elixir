@@ -159,6 +159,12 @@ connection becomes the default. The interface only ever receives
 `Psc.Agent.Connection.summary/2`, which has no `api_key` key, and the key field
 is rendered with an empty `value` in the settings form.
 
+An admin can issue a key for any account from `/admin/api-keys`
+(`Psc.Admin.ApiKeyLive`): the row is still owned by that account, so the owner
+rotates or deletes it in their own settings. The admin table reads
+`Psc.Agent.Connections.admin_summaries/0`, which is `summary/2` plus the owner
+and likewise carries no key.
+
 ## Agent customization
 
 A template or canvas carries its agent setup in `agent_config` (JSONB):

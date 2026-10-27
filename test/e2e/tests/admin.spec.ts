@@ -24,8 +24,8 @@ test.describe('administration', () => {
     await expect(page.getByRole('heading', { name: 'Administration' })).toBeVisible();
     await expect(page.locator('#backpex-app-shell')).toBeVisible();
 
-    // The four resource cards navigate into Backpex.
-    for (const path of ['/admin/users', '/admin/templates', '/admin/canvases', '/admin/notes']) {
+    // The resource cards navigate into Backpex and the API key page.
+    for (const path of ['/admin/users', '/admin/templates', '/admin/canvases', '/admin/notes', '/admin/api-keys']) {
       await expect(page.locator(`a[href="${path}"]`).first()).toBeVisible();
     }
 
@@ -33,6 +33,11 @@ test.describe('administration', () => {
     await expect(page).toHaveURL(/\/admin\/users/);
     await expect(page.locator('#backpex-app-shell')).toBeVisible();
     await expect(page.getByText('e2e@example.com').first()).toBeVisible();
+
+    await page.goto('/admin/api-keys');
+    await expect(page.getByRole('heading', { name: 'API keys' })).toBeVisible();
+    await expect(page.locator('#api-key-form')).toBeVisible();
+    await expect(page.locator('#api-key-count')).toContainText('keys');
 
     await page.goto('/admin/templates');
     // The seeded built-in defaults are listed.

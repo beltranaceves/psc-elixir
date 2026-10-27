@@ -11,6 +11,7 @@ defmodule Psc.Admin do
 
   alias Psc.Repo
   alias Psc.Accounts.User
+  alias Psc.Agent.Connection
   alias Psc.Canvas.{Layout, UnstrCanvas, UnstrCanvasEvent}
   alias Psc.Notes.{Note, NoteEvent}
 
@@ -35,7 +36,8 @@ defmodule Psc.Admin do
       canvases: count(UnstrCanvas),
       notes: count(Note),
       canvas_events: count(UnstrCanvasEvent),
-      note_events: count(NoteEvent)
+      note_events: count(NoteEvent),
+      agent_connections: count(Connection)
     }
   end
 

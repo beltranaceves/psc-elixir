@@ -335,6 +335,9 @@ defmodule PscWeb.Layouts do
         <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/templates"}>
           <.icon name="hero-rectangle-group" class="size-5" /> Templates
         </BLayout.sidebar_item>
+        <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/api-keys"}>
+          <.icon name="hero-key" class="size-5" /> API keys
+        </BLayout.sidebar_item>
         <BLayout.sidebar_item current_url={@current_url} navigate={~p"/admin/canvases"}>
           <.icon name="hero-table-cells" class="size-5" /> Canvases
         </BLayout.sidebar_item>

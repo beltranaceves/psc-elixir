@@ -95,6 +95,8 @@ defmodule PscWeb.Router do
       ] do
       live "/", DashboardLive, :index
 
+      live "/api-keys", ApiKeyLive, :index
+
       live_resources("/users", UserLive, only: [:index, :show, :edit])
       live_resources("/templates", TemplateLive, only: [:index, :show, :edit])
       live_resources("/canvases", CanvasLive, only: [:index, :show])

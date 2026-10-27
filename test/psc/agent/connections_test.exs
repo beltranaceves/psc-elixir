@@ -199,4 +199,49 @@ defmodule Psc.Agent.ConnectionsTest do
     assert Connection.default_base_url("ollama") =~ "localhost"
     assert Connection.model_spec(%Connection{provider: "groq", model_id: "x"}) == "groq:x"
   end
+
+  describe "administration" do
+    test "admin_summaries/0 spans accounts and never carries the secret" do
+      one = user_fixture()
+      two = user_fixture()
+
+      {:ok, _first} =
+        create_connection(one, %{"name" => "Own", "api_key" => "sk-own-secret-1111"})
+
+      {:ok, _second} =
+        create_connection(two, %{"name" => "Shared", "api_key" => "sk-two-secret-2222"})
+
+      summaries = Connections.admin_summaries()
+
+      assert length(summaries) == 2
+      assert Enum.sort(Enum.map(summaries, & &1.user_email)) == Enum.sort([one.email, two.email])
+      assert Enum.all?(summaries, &(not Map.has_key?(&1, :api_key)))
+      assert Enum.sort(Enum.map(summaries, & &1.key_hint)) == ["…1111", "…2222"]
+
+      # The first key of each account becomes its default.
+      assert Enum.all?(summaries, & &1.default?)
+    end
+
+    test "admin_get/1 ignores the account boundary and rejects bad ids" do
+      user = user_fixture()
+      {:ok, connection} = create_connection(user)
+
+      assert %Connection{id: id, user: %Psc.Accounts.User{email: email}} =
+               Connections.admin_get(connection.id)
+
+      assert id == connection.id
+      assert email == user.email
+
+      assert Connections.admin_get(Ecto.UUID.generate()) == nil
+      assert Connections.admin_get("not-a-uuid") == nil
+    end
+
+    test "suggested_name/2 avoids a collision on the same account" do
+      user = user_fixture()
+      {:ok, _connection} = create_connection(user, %{"name" => "OpenAI key"})
+
+      assert Connections.suggested_name(user.id, "openai") == "OpenAI key 2"
+      assert Connections.suggested_name(user.id, "anthropic") == "Anthropic key"
+    end
+  end
 end

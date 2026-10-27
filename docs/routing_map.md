@@ -29,6 +29,7 @@ flowchart TD
     subgraph ADMIN["require_authenticated_user + require_admin — live_session :admin"]
         A1["/admin"] --> AV1["Admin.DashboardLive"]
         A2["/admin/users · /admin/templates<br/>/admin/canvases · /admin/notes"] --> AV2["Admin.*Live (Backpex)<br/>index · show · edit"]
+        A4["/admin/api-keys"] --> AV4["Admin.ApiKeyLive<br/>(agent keys, per account)"]
         A3["POST /admin/backpex_preferences"] --> AC3["Backpex.PreferencesController"]
     end
 

@@ -1502,8 +1502,10 @@ back.
 - **Backpex owns the CRUD.** Users, templates, canvases and notes are `LiveResource`s;
   canvases and notes are read-only because their content belongs to the event log. A plain
   LiveView renders the dashboard: counts and 14-day trends, the event-log budget, recent
-  activity and the links into the resources. Backpex is pinned (`~> 0.22.0`) and uses the
-  app's PubSub, layout and translators.
+  activity and the links into the resources. A second plain LiveView, `/admin/api-keys`,
+  issues agent provider keys per account (the rows stay owned by that account, and the key is
+  never rendered back). Backpex is pinned (`~> 0.22.0`) and uses the app's PubSub, layout and
+  translators.
 - **Defaults are rows.** `canvas_layouts` gained `built_in` and a unique `slug`. The PSC grid
   and a single-note scratchpad are seeded by `Psc.Release.setup/0` on every boot, *create if
   missing only* — an admin rename or unpublish survives a restart. Built-ins are readable by

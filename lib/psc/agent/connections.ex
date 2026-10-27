@@ -132,6 +132,68 @@ defmodule Psc.Agent.Connections do
 
   def default(_user), do: nil
 
+  ## Administration
+
+  @doc """
+  Every saved connection with its owner, for the admin surface.
+
+  `list/1` is deliberately per-account; this is the only cross-account read.
+  Like `summary/2`, the shape never carries the key — only the `key_hint`.
+  """
+  def admin_summaries do
+    defaults =
+      Repo.all(from u in User, select: {u.id, u.default_agent_connection_id})
+      |> Map.new()
+
+    from(c in Connection, order_by: [desc: c.inserted_at], preload: [:user])
+    |> Repo.all()
+    |> Enum.map(&admin_summary(&1, Map.get(defaults, &1.user_id) == &1.id))
+  end
+
+  @doc """
+  One connection by id, regardless of owner, with its user preloaded.
+  """
+  def admin_get(id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> Repo.one(from c in Connection, where: c.id == ^uuid, preload: [:user])
+      :error -> nil
+    end
+  end
+
+  def admin_get(_id), do: nil
+
+  @doc """
+  The display map an admin row renders from. Requires the `:user` preload.
+  """
+  def admin_summary(%Connection{user: %User{} = user} = connection, default? \\ false) do
+    connection
+    |> Connection.summary(default?: default?)
+    |> Map.merge(%{
+      user_id: connection.user_id,
+      user_email: user.email,
+      inserted_at: connection.inserted_at
+    })
+  end
+
+  @doc """
+  The name a new admin-issued key gets when the form leaves the name blank.
+
+  Names are unique per account, so an existing `"OpenAI key"` becomes
+  `"OpenAI key 2"` instead of failing an insert the admin never asked about.
+  """
+  def suggested_name(user_id, provider) do
+    names = Repo.all(from c in Connection, where: c.user_id == ^user_id, select: c.name)
+    first_free_name(names, "#{Connection.provider_label(provider)} key", 1)
+  end
+
+  defp first_free_name(names, base, counter) do
+    candidate = if counter == 1, do: base, else: "#{base} #{counter}"
+
+    if candidate in names,
+      do: first_free_name(names, base, counter + 1),
+      else: candidate
+  end
+
   @doc "The id of the user's default connection, if one is set."
   def default_id(user_id) do
     Repo.one(from u in User, where: u.id == ^user_id, select: u.default_agent_connection_id)

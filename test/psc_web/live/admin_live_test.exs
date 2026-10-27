@@ -5,6 +5,7 @@ defmodule PscWeb.AdminLiveTest do
 
   alias Psc.Accounts
   alias Psc.AccountsFixtures
+  alias Psc.Agent.Connections
   alias Psc.Canvas
 
   setup do
@@ -26,6 +27,7 @@ defmodule PscWeb.AdminLiveTest do
             ~p"/admin",
             ~p"/admin/users",
             ~p"/admin/templates",
+            ~p"/admin/api-keys",
             ~p"/admin/canvases",
             ~p"/admin/notes"
           ] do
@@ -49,6 +51,7 @@ defmodule PscWeb.AdminLiveTest do
       # The four resource cards are the navigation into the CRUD pages.
       assert has_element?(lv, ~s|a[href="/admin/users"]|)
       assert has_element?(lv, ~s|a[href="/admin/templates"]|)
+      assert has_element?(lv, ~s|a[href="/admin/api-keys"]|)
       assert has_element?(lv, ~s|a[href="/admin/canvases"]|)
       assert has_element?(lv, ~s|a[href="/admin/notes"]|)
 
@@ -198,6 +201,231 @@ defmodule PscWeb.AdminLiveTest do
 
       assert changeset.valid?
       assert Ecto.Changeset.get_change(changeset, :role) == :member
+    end
+  end
+
+  describe "api keys" do
+    setup :register_and_log_in_admin
+
+    test "the page lists issued keys without ever rendering the secret", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, _connection} =
+        Connections.create(member, %{
+          "name" => "Professor key",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1-mini",
+          "api_key" => "sk-prof-secret-9876"
+        })
+
+      {:ok, lv, html} = live(conn, ~p"/admin/api-keys")
+
+      assert html =~ "API keys"
+      assert html =~ member.email
+      assert html =~ "Professor key"
+      assert html =~ "…9876"
+      refute render(lv) =~ "sk-prof-secret-9876"
+    end
+
+    test "issuing a key turns the agent on for the selected account", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      html =
+        lv
+        |> form("#api-key-form",
+          key: %{
+            user_id: member.id,
+            provider: "openai",
+            model_id: "gpt-4.1-mini",
+            api_key: "sk-issued-secret-4321"
+          }
+        )
+        |> render_submit()
+
+      assert html =~ "Key issued for #{member.email}"
+      assert html =~ "…4321"
+      refute html =~ "sk-issued-secret-4321"
+
+      assert [connection] = Connections.list(member.id)
+      assert connection.api_key == "sk-issued-secret-4321"
+      assert connection.name == "OpenAI key"
+      assert Connections.default_id(member.id) == connection.id
+      assert Connections.enabled?(member)
+    end
+
+    test "a key without a model is refused and nothing is stored", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      html =
+        lv
+        |> form("#api-key-form",
+          key: %{
+            user_id: member.id,
+            provider: "openai",
+            model_id: "",
+            api_key: "sk-incomplete-1234"
+          }
+        )
+        |> render_submit()
+
+      assert html =~ "blank"
+      assert Connections.list(member.id) == []
+    end
+
+    test "a key without an account is refused", %{conn: conn} do
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      html =
+        lv
+        |> form("#api-key-form",
+          key: %{provider: "openai", model_id: "gpt-4.1-mini", api_key: "sk-orphan-1234"}
+        )
+        |> render_submit()
+
+      assert html =~ "Choose the account"
+      assert Connections.admin_summaries() == []
+    end
+
+    test "rotating replaces the stored key", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, connection} =
+        Connections.create(member, %{
+          "name" => "Professor key",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1-mini",
+          "api_key" => "sk-old-secret-1111"
+        })
+
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      lv
+      |> element("button[phx-click='rotate'][phx-value-id='#{connection.id}']")
+      |> render_click()
+
+      html =
+        lv
+        |> form("#rotate-key-form-#{connection.id}", rotate: %{api_key: "sk-new-secret-2222"})
+        |> render_submit()
+
+      assert html =~ "Key rotated for #{member.email}"
+      assert html =~ "…2222"
+      refute html =~ "sk-new-secret-2222"
+      assert Connections.get(connection.id, member.id).api_key == "sk-new-secret-2222"
+    end
+
+    test "making a key the default switches the account", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, first} =
+        Connections.create(member, %{
+          "name" => "First",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1-mini",
+          "api_key" => "sk-first-secret-1111"
+        })
+
+      {:ok, second} =
+        Connections.create(member, %{
+          "name" => "Second",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1",
+          "api_key" => "sk-second-secret-2222"
+        })
+
+      assert Connections.default_id(member.id) == first.id
+
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      html =
+        lv
+        |> element("button[phx-click='set_default'][phx-value-id='#{second.id}']")
+        |> render_click()
+
+      assert html =~ "is now the default for #{member.email}"
+      assert Connections.default_id(member.id) == second.id
+    end
+
+    test "deleting a key removes it for the account", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, connection} =
+        Connections.create(member, %{
+          "name" => "Professor key",
+          "provider" => "openai",
+          "model_id" => "gpt-4.1-mini",
+          "api_key" => "sk-delete-me-1234"
+        })
+
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      html =
+        lv
+        |> element("button[phx-click='delete'][phx-value-id='#{connection.id}']")
+        |> render_click()
+
+      assert html =~ "Key deleted for #{member.email}"
+      assert Connections.list(member.id) == []
+      refute Connections.enabled?(member)
+    end
+
+    test "the account sees the issued key in its own settings", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      {:ok, admin_lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      admin_lv
+      |> form("#api-key-form",
+        key: %{
+          user_id: member.id,
+          provider: "openai",
+          model_id: "gpt-4.1-mini",
+          api_key: "sk-handed-over-1234"
+        }
+      )
+      |> render_submit()
+
+      {:ok, member_lv, html} = conn |> log_in_user(member) |> live(~p"/users/settings")
+
+      assert has_element?(member_lv, "#agent-connections")
+      assert html =~ "OpenAI key"
+      assert html =~ "…1234"
+      refute html =~ "sk-handed-over-1234"
+    end
+
+    test "the per-account limit is reported instead of raising", %{conn: conn} do
+      member = AccountsFixtures.user_fixture()
+
+      for index <- 1..Connections.max_per_user() do
+        {:ok, _connection} =
+          Connections.create(member, %{
+            "name" => "Key #{index}",
+            "provider" => "openai",
+            "model_id" => "gpt-4.1-mini",
+            "api_key" => "sk-limit-#{index}000"
+          })
+      end
+
+      {:ok, lv, _html} = live(conn, ~p"/admin/api-keys")
+
+      html =
+        lv
+        |> form("#api-key-form",
+          key: %{
+            user_id: member.id,
+            provider: "openai",
+            model_id: "gpt-4.1-mini",
+            api_key: "sk-eleventh-1234"
+          }
+        )
+        |> render_submit()
+
+      assert html =~ "maximum of #{Connections.max_per_user()} keys"
+      assert length(Connections.list(member.id)) == Connections.max_per_user()
     end
   end
 end

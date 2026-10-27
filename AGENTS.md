@@ -63,14 +63,21 @@ SaladUI components (`lib/psc_web/components/ui/`), `Req` for HTTP.
   `Psc.Accounts` (`promote_admin/1`, `demote_admin/1`); the last admin cannot be demoted, and
   a role is never cast from a registration or profile form.
 - `/admin` is guarded by the `:require_admin` plug and `on_mount`. It hosts a Backpex 0.22
-  panel (`PscWeb.Admin.*Live`) plus a plain dashboard. Backpex owns CRUD chrome; canvases
-  and notes are read-only there because their content belongs to the event log.
+  panel (`PscWeb.Admin.*Live`) plus two plain LiveViews: the dashboard and `/admin/api-keys`.
+  Backpex owns CRUD chrome; canvases and notes are read-only there because their content
+  belongs to the event log.
+- **Agent keys can be issued by an admin.** `/admin/api-keys` creates, rotates, defaults and
+  deletes `agent_connections` rows for any account, so an admin can hand someone a provider
+  key instead of requiring them to bring their own. The row stays owned by that account and
+  the key stays write-only: the page renders only `key_hint`. Accounts must already exist —
+  an admin cannot create one.
 - **Built-in templates are rows** (`canvas_layouts.built_in` + unique `slug`), seeded
   create-if-missing by `Psc.Release.setup/0`. Everyone can use them; they cannot be deleted;
   admins can rename or unpublish them in `/admin/templates`.
 - Boot order is migrate → `ADMIN_EMAILS` bootstrap → built-in seed. `ADMIN_PASSWORD` is only
   needed for addresses that do not have an account yet; creating the account is what stops
-  someone else from registering the address first.
+  someone else from registering the address first. `mix phx.server` does not run that
+  sequence locally: `mix run priv/repo/bootstrap_admins.exs` runs the admin step on its own.
 
 ## Invariants that must not break
 

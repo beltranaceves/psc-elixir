@@ -118,6 +118,8 @@ to the browser steps until it is green.
 | `mix nif.fix` | Re-create Windows NIF `.dll` files (runs automatically in the aliases) |
 | `mix compile --warnings-as-errors` | Compile only, warnings are errors |
 | `mix ecto.gen.migration name` | Generate a migration |
+| `mix run priv/repo/bootstrap_admins.exs` | Promote (or create) the accounts in `ADMIN_EMAILS` |
+| `mix run priv/repo/seeds.exs` | Seed the built-in templates |
 
 ---
 

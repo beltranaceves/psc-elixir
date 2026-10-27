@@ -235,7 +235,7 @@ defmodule PscWeb.Admin.DashboardLive do
             Resources
           </h2>
 
-          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <.resource_link
               navigate={~p"/admin/users"}
               icon="hero-users"
@@ -247,21 +247,28 @@ defmodule PscWeb.Admin.DashboardLive do
               navigate={~p"/admin/templates"}
               icon="hero-rectangle-group"
               title="Templates"
-              body="Library and built-in defaults"
+              body="Library and defaults"
               count={@stats.templates}
+            />
+            <.resource_link
+              navigate={~p"/admin/api-keys"}
+              icon="hero-key"
+              title="API keys"
+              body="Per account"
+              count={@stats.agent_connections}
             />
             <.resource_link
               navigate={~p"/admin/canvases"}
               icon="hero-table-cells"
               title="Canvases"
-              body="Read-only, with owners"
+              body="Owners, read-only"
               count={@stats.canvases}
             />
             <.resource_link
               navigate={~p"/admin/notes"}
               icon="hero-document-text"
               title="Notes"
-              body="Read-only, titles and owners"
+              body="Authors, read-only"
               count={@stats.notes}
             />
           </div>
