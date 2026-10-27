@@ -59,6 +59,7 @@ export default {
       textarea.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" || event.shiftKey || event.isComposing) return
         if (textarea.disabled || !this.boundForm) return
+        // Enter and Ctrl/Cmd+Enter both send; Shift+Enter keeps its newline.
         event.preventDefault()
         if (textarea.value.trim() !== "") this.boundForm.requestSubmit()
       })

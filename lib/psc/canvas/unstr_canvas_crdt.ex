@@ -218,6 +218,7 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
           cell
           |> Map.put(field, "")
           |> Map.put("titles", Map.put(cell["titles"] || %{}, field, ""))
+          |> Map.put("field_order", Structure.field_names(cell) ++ [field])
       end
     end)
   end
@@ -237,6 +238,13 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
         |> then(
           &if titles == %{}, do: Map.delete(&1, "titles"), else: Map.put(&1, "titles", titles)
         )
+        |> then(fn updated ->
+          if Map.has_key?(updated, "field_order") do
+            Map.put(updated, "field_order", Structure.field_names(updated))
+          else
+            updated
+          end
+        end)
       end
     end)
   end

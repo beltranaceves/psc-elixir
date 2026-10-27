@@ -457,31 +457,33 @@ defmodule PscWeb.Components.AgentConfigEditor do
       id={"#{@id_prefix}-agent-upload"}
       class="rounded-lg border border-dashed border-base-content/20 bg-base-100 p-3"
     >
-      <div class="flex flex-wrap items-center gap-2">
-        <p class="mr-auto text-xs font-medium text-base-content/70">Add reference files</p>
+      <div class="flex flex-col gap-2">
+        <p class="text-xs font-medium text-base-content/70">Add reference files</p>
 
-        <label class="relative inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
-          <.live_file_input upload={@uploads.agent_files} class="sr-only" />
-          <.icon name="hero-document-plus" class="size-4" /> Choose files
-        </label>
+        <div class="grid gap-2 sm:grid-cols-3">
+          <label class="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-2 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
+            <.live_file_input upload={@uploads.agent_files} class="sr-only" />
+            <.icon name="hero-document-plus" class="size-4" /> Choose files
+          </label>
 
-        <label class="relative inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-1.5 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
-          <.live_file_input upload={@uploads.agent_folder} webkitdirectory class="sr-only" />
-          <.icon name="hero-folder-plus" class="size-4" /> Choose folder
-        </label>
+          <label class="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-2 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
+            <.live_file_input upload={@uploads.agent_folder} webkitdirectory class="sr-only" />
+            <.icon name="hero-folder-plus" class="size-4" /> Choose folder
+          </label>
 
-        <UIButton.button
-          type="button"
-          id={"#{@id_prefix}-agent-upload-submit"}
-          phx-click="agent_cfg_upload"
-          variant="outline"
-          size="sm"
-          class="gap-1.5"
-          disabled={@pending? or not @ready?}
-        >
-          <.icon name="hero-arrow-up-tray" class="size-4" />
-          {if @pending?, do: "Uploading…", else: "Add to references"}
-        </UIButton.button>
+          <UIButton.button
+            type="button"
+            id={"#{@id_prefix}-agent-upload-submit"}
+            phx-click="agent_cfg_upload"
+            variant="outline"
+            size="sm"
+            class="w-full justify-center gap-1.5"
+            disabled={@pending? or not @ready?}
+          >
+            <.icon name="hero-arrow-up-tray" class="size-4" />
+            {if @pending?, do: "Uploading…", else: "Add to references"}
+          </UIButton.button>
+        </div>
       </div>
 
       <p class="mt-2 text-[11px] leading-relaxed text-base-content/45">

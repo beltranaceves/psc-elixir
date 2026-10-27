@@ -47,6 +47,7 @@ defmodule Psc.CanvasBentoTest do
 
       assert placement == %{"x" => 0, "y" => 0, "w" => 8, "h" => 3}
       refute Map.has_key?(cells["big_picture"], "fields")
+      assert cells["big_picture"]["field_order"] == ["content"]
     end
 
     test "add, move, resize, accent and remove card are deterministic" do

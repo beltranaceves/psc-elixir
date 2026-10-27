@@ -81,20 +81,21 @@ any state.
 | `update_row_label` / `update_column_label` | `id`, `label` | Set the def's label |
 | `set_row_accent` / `set_column_accent` | `id`, `accent` (nil clears) | Set the def's accent token |
 | `update_cell_label` | `cell_key`, `label` | Set the cell's `label` |
-| `add_cell_field` | `cell_key`, `field` | Add `cells[key][field] = ""` and `titles[field] = ""` (untitled) |
-| `remove_cell_field` | `cell_key`, `field` | Delete the value key and its `titles` entry |
+| `add_cell_field` | `cell_key`, `field` | Add `cells[key][field] = ""`, `titles[field] = ""` (untitled), and append the name to `field_order` |
+| `remove_cell_field` | `cell_key`, `field` | Delete the value key, its `titles` entry and its name from `field_order` |
 | `update_cell_field_title` | `cell_key`, `field`, `title` | Set `titles[field]` |
 | `set_cell_background` | `cell_key`, `background` (nil clears) | Set the cell's surface token; applies in every mode |
 
 Notes on the shape:
 
-- **Field order is not a maintained property.** Canvas cells live in Postgres `jsonb`,
-  which does not preserve key order; the editor already renders a cell's fields in map
-  order. Adding a field adds a key — where it lands in the render is jsonb's business, the
-  same as today.
-- **The reserved keys** (`row`, `column`, `label`, `titles`, `background`, and the
-  canvas-level `$name`/`$description`) are never touchable as fields; `add_cell_field`
-  rejects them.
+- **Field order is a maintained property.** Canvas cells carry a reserved
+  `"field_order"` list: instantiation copies the template's authored `"fields"` order into
+  it, and `add_cell_field` / `remove_cell_field` keep it in step. Postgres `jsonb` does not
+  preserve key order — Elixir's small maps iterate sorted — so the list, not the map, is
+  what the editor renders. Canvases created before the key existed fall back to map order.
+- **The reserved keys** (`row`, `column`, `label`, `titles`, `kind`, `placement`, `accent`,
+  `background`, `field_order`, and the canvas-level `$name`/`$description`) are never
+  touchable as fields; `add_cell_field` rejects them.
 - **A removed cell's content is gone.** The confirm in decision 5 is the only guard.
 
 ## UI

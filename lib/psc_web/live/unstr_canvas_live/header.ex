@@ -45,9 +45,10 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   Presence, save state and Share.
 
   One instance is rendered at a time: the editor toolbar hosts it on the
-  Editor tab (from `sm` up), and the header row above the panels hosts it on
-  the other tabs. Both use the same ids, so the tests and the hooks do not
-  need to know where it lives.
+  Editor tab (from `sm` up), the Agent panel's own top bar hosts it from `sm`
+  up while a chat is open, and the header row above the panels hosts it on the
+  other tabs (and on the Agent start screen). Both use the same ids, so the
+  tests and the hooks do not need to know where it lives.
   """
   def canvas_status(assigns) do
     ~H"""
@@ -114,7 +115,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         title={@c_name}
         aria-label="Canvas name"
         placeholder="Untitled canvas"
-        class="field-sizing-content h-8 w-full min-w-0 border-b-2 border-transparent bg-transparent text-base font-semibold leading-8 text-base-content transition-colors hover:border-base-content/20 focus:border-primary focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[28rem]"
+        class="field-sizing-content h-8 w-full min-w-0 rounded-lg border border-base-content/10 bg-base-200 px-3 text-sm font-semibold leading-8 text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary/50 focus:ring-2 focus:ring-primary/35 focus:ring-inset focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[28rem]"
       />
     </.form>
     """

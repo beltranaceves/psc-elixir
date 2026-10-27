@@ -4,6 +4,7 @@ defmodule Psc.CanvasTest do
   import Ecto.Query
 
   alias Psc.Canvas
+  alias Psc.Canvas.Structure
   alias Psc.Canvas.UnstrCanvasEvent
   alias Psc.CanvasFixtures
 
@@ -462,6 +463,33 @@ defmodule Psc.CanvasTest do
 
       cells = Canvas.get_unstr_canvas_content(canvas.id)
       assert cells["r1_c1"]["content"] == ""
+      assert cells["r1_c1"]["field_order"] == ["content"]
+    end
+
+    test "preserves the template's field order in the canvas cell" do
+      user = Psc.AccountsFixtures.user_fixture()
+
+      lm = %{
+        "rows" => [%{"id" => "r1", "label" => "R"}],
+        "columns" => [%{"id" => "c1", "label" => "C"}],
+        "layout" => [["r1_c1"]],
+        "cells" => %{
+          "r1_c1" => %{
+            "label" => "Solo",
+            "fields" => ["summary", "risks", "actions"],
+            "defaults" => %{"summary" => "S", "risks" => "R", "actions" => "A"}
+          }
+        }
+      }
+
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, layout_map: lm})
+      assert {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      cell = Canvas.get_unstr_canvas_content(canvas.id)["r1_c1"]
+
+      # A map iterates sorted, so the explicit list is what the editor reads.
+      assert cell["field_order"] == ["summary", "risks", "actions"]
+      assert Structure.field_names(cell) == ["summary", "risks", "actions"]
     end
 
     test "instantiated canvas is accessible to its author" do
@@ -744,6 +772,23 @@ defmodule Psc.CanvasTest do
       assert cells["r1_c1"]["notes"] == ""
       assert cells["r1_c1"]["titles"]["notes"] == ""
       assert cells["r1_c1"]["content"] == "hello"
+    end
+
+    test "add_cell_field appends to field_order and remove_cell_field drops it" do
+      cells =
+        structured_cells()
+        |> apply_op(%{"type" => "add_cell_field", "cell_key" => "r1_c1", "field" => "notes"})
+
+      assert cells["r1_c1"]["field_order"] == ["content", "notes"]
+
+      cells =
+        apply_op(cells, %{
+          "type" => "remove_cell_field",
+          "cell_key" => "r1_c1",
+          "field" => "content"
+        })
+
+      assert cells["r1_c1"]["field_order"] == ["notes"]
     end
 
     test "add_cell_field rejects reserved keys and duplicates" do

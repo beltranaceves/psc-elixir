@@ -42,6 +42,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
       id={"cell-card-" <> @cell_key}
       phx-hook="CellFocus"
       data-cell-key={@cell_key}
+      data-cell-focused={to_string(@focus_cell == @cell_key)}
       data-cell-nav={@nav && Jason.encode!(@nav)}
       class={[
         "canvas-cell cursor-text transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
@@ -112,70 +113,67 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
           </div>
         <% end %>
 
-        <%= for {field, value} <- @cell_data do %>
-          <%!-- "semantics" is tolerated in older canvases but is
-                no longer authored or shown; "titles" holds labels. --%>
-          <%= if field not in Psc.Canvas.Structure.reserved_cell_keys() do %>
-            <% field_title = Psc.Canvas.field_title(@cell_data, field) %>
-            <div
-              id={"cell-field-" <> @cell_key <> "-" <> field}
-              class="mb-1 flex min-w-0 flex-col"
-            >
-              <%= if @edit_structure? do %>
-                <.form
-                  for={%{}}
-                  id={"cell-title-" <> @cell_key <> "-" <> field}
-                  phx-change="update_cell_field_title"
-                  class="mb-0.5 flex items-center gap-1"
-                >
-                  <input type="hidden" name="cell_key" value={@cell_key} />
-                  <input type="hidden" name="field" value={field} />
-                  <input
-                    type="text"
-                    id={"cell-" <> @cell_key <> "-field-" <> field <> "-title"}
-                    name="title"
-                    value={field_title}
-                    phx-debounce="300"
-                    placeholder={field}
-                    class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    phx-click="remove_cell_field"
-                    phx-value-cell_key={@cell_key}
-                    phx-value-field={field}
-                    class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
-                    title={"Remove field #{field}"}
-                    aria-label={"Remove field #{field}"}
-                  >
-                    <.icon name="hero-x-mark" class="size-2.5" />
-                  </button>
-                </.form>
-              <% else %>
-                <label
-                  :if={field_title != ""}
-                  class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
-                >
-                  {field_title}
-                </label>
-              <% end %>
-
+        <%= for field <- Psc.Canvas.Structure.field_names(@cell_data) do %>
+          <% value = Map.get(@cell_data, field, "") %>
+          <% field_title = Psc.Canvas.field_title(@cell_data, field) %>
+          <div
+            id={"cell-field-" <> @cell_key <> "-" <> field}
+            class="mb-1 flex min-w-0 flex-col"
+          >
+            <%= if @edit_structure? do %>
               <.form
                 for={%{}}
-                id={"cell-form-" <> @cell_key <> "-" <> field}
-                phx-change="update_cell"
+                id={"cell-title-" <> @cell_key <> "-" <> field}
+                phx-change="update_cell_field_title"
+                class="mb-0.5 flex items-center gap-1"
               >
                 <input type="hidden" name="cell_key" value={@cell_key} />
-                <.cell_field_editor
-                  cell_key={@cell_key}
-                  field={field}
-                  value={value}
-                  user_id={@user_id}
-                  surface={@surface}
+                <input type="hidden" name="field" value={field} />
+                <input
+                  type="text"
+                  id={"cell-" <> @cell_key <> "-field-" <> field <> "-title"}
+                  name="title"
+                  value={field_title}
+                  phx-debounce="300"
+                  placeholder={field}
+                  class="min-w-0 flex-1 rounded border border-base-content/10 bg-base-200 px-1.5 py-0.5 text-xs font-medium text-base-content placeholder-base-content/35 focus:border-primary focus:outline-none"
                 />
+                <button
+                  type="button"
+                  phx-click="remove_cell_field"
+                  phx-value-cell_key={@cell_key}
+                  phx-value-field={field}
+                  class="inline-flex size-4 shrink-0 items-center justify-center rounded border border-error/40 text-error/90 transition-colors hover:border-error hover:bg-error/10 hover:text-error"
+                  title={"Remove field #{field}"}
+                  aria-label={"Remove field #{field}"}
+                >
+                  <.icon name="hero-x-mark" class="size-2.5" />
+                </button>
               </.form>
-            </div>
-          <% end %>
+            <% else %>
+              <label
+                :if={field_title != ""}
+                class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-0.5 break-words"
+              >
+                {field_title}
+              </label>
+            <% end %>
+
+            <.form
+              for={%{}}
+              id={"cell-form-" <> @cell_key <> "-" <> field}
+              phx-change="update_cell"
+            >
+              <input type="hidden" name="cell_key" value={@cell_key} />
+              <.cell_field_editor
+                cell_key={@cell_key}
+                field={field}
+                value={value}
+                user_id={@user_id}
+                surface={@surface}
+              />
+            </.form>
+          </div>
         <% end %>
 
         <%= if @edit_structure? do %>

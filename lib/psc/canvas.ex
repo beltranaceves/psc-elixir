@@ -756,14 +756,16 @@ defmodule Psc.Canvas do
           meta = template_cells[key] || %{}
           row_id = Enum.at(rows, ri, %{"id" => "r#{ri}"})["id"]
           column_id = Enum.at(columns, ci, %{"id" => "c#{ci}"})["id"]
+          fields = template_fields(meta)
 
           data =
-            (meta["fields"] || ["content"])
+            fields
             |> Map.new(fn field -> {field, Map.get(meta["defaults"] || %{}, field, "")} end)
             |> Map.merge(%{
               "row" => row_id,
               "column" => column_id,
-              "label" => meta["label"] || key
+              "label" => meta["label"] || key,
+              "field_order" => fields
             })
             |> maybe_put_titles(meta["titles"])
 
@@ -775,6 +777,16 @@ defmodule Psc.Canvas do
   defp maybe_put_titles(data, titles) when titles in [nil, %{}], do: data
   defp maybe_put_titles(data, titles), do: Map.put(data, "titles", titles)
 
+  # A template's field list becomes the canvas cell's value keys and its
+  # render order. Reserved names are definition metadata, never values; a
+  # template saved before they were rejected must not turn one into a field.
+  defp template_fields(meta) do
+    case Enum.reject(meta["fields"] || ["content"], &(&1 in Structure.reserved_cell_keys())) do
+      [] -> ["content"]
+      fields -> fields
+    end
+  end
+
   # A bento template already has the canvas shape: flat cards with a
   # placement. Only the fields change from a definition to a value.
   defp instantiate_bento_cells(lm) do
@@ -782,12 +794,15 @@ defmodule Psc.Canvas do
       lm
       |> Structure.cells()
       |> Map.new(fn {key, meta} ->
+        fields = template_fields(meta)
+
         data =
-          (meta["fields"] || ["content"])
+          fields
           |> Map.new(fn field -> {field, Map.get(meta["defaults"] || %{}, field, "")} end)
           |> Map.merge(%{
             "label" => meta["label"] || key,
-            "placement" => meta["placement"]
+            "placement" => meta["placement"],
+            "field_order" => fields
           })
           |> maybe_put_titles(meta["titles"])
           |> maybe_put_accent(meta["accent"])
@@ -813,13 +828,16 @@ defmodule Psc.Canvas do
       |> Structure.cells()
       |> Enum.filter(fn {_key, meta} -> is_map(meta) end)
       |> Map.new(fn {key, meta} ->
+        fields = template_fields(meta)
+
         data =
-          (meta["fields"] || ["content"])
+          fields
           |> Map.new(fn field -> {field, Map.get(meta["defaults"] || %{}, field, "")} end)
           |> Map.merge(%{
             "label" => meta["label"] || key,
             "placement" => meta["placement"],
-            "kind" => Structure.kind(meta)
+            "kind" => Structure.kind(meta),
+            "field_order" => fields
           })
           |> maybe_put_titles(meta["titles"])
           |> maybe_put_accent(meta["accent"])

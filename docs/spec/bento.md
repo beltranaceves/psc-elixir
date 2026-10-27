@@ -41,6 +41,11 @@ canvas that is renamed and then reloaded must still render its board.
 `placement`, `accent` and `background` are reserved cell keys: they can never be added,
 removed or rendered as editable fields.
 
+A **canvas** cell (not a template card) also carries `field_order`, a reserved list of its
+editable field names in render order. It is copied from the template's `fields` list at
+instantiation and kept in step by `add_cell_field` / `remove_cell_field`; `jsonb` does not
+preserve key order, so this list is what the editor renders.
+
 ## Constraints
 
 - `bento_rows` is a floor: a card that reaches lower than the stored value grows the board,

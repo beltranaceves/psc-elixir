@@ -91,8 +91,8 @@ defmodule PscWeb.CanvasLayoutLive.ImageEditor do
               >
               </div>
 
-              <div class="absolute inset-x-0 top-0 z-10 flex min-h-full flex-col rounded-md border border-base-content/15 bg-base-100 p-1.5 shadow-md">
-                <div class="mb-1 flex shrink-0 items-center gap-1">
+              <div class="absolute inset-x-0 top-0 z-10 flex min-h-full flex-col overflow-hidden rounded-md border border-base-content/15 bg-base-100 p-1.5 shadow-md">
+                <div class="mb-1 flex shrink-0 flex-wrap items-center gap-1">
                   <span
                     id={"designer-image-size-" <> card.key}
                     class="shrink-0 px-0.5 text-[0.65rem] tabular-nums text-base-content/50"
@@ -120,7 +120,7 @@ defmodule PscWeb.CanvasLayoutLive.ImageEditor do
                   <form
                     id={"image-label-" <> card.key}
                     phx-change="update_cell_meta"
-                    class="min-w-0 flex-1"
+                    class="min-w-0 flex-1 basis-24"
                   >
                     <input type="hidden" name="cell_key" value={card.key} />
                     <input type="hidden" name="field" value="label" />

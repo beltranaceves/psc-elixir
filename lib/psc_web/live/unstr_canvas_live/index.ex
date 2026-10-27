@@ -249,10 +249,10 @@ defmodule PscWeb.UnstrCanvasLive.Index do
               the eyes — a layout is the one thing a dropdown cannot show. The
               selected id rides to the submit in the hidden input below, the way
               a select's value would. --%>
-              <%!-- On a phone the strip is wider than the screen and the
-              scrollbar is hidden, so the arrows make the panning explicit. The
-              buttons live outside `#template-picker`: that element's children
-              are the cards, in order (the catalog spec relies on it). --%>
+              <%!-- When the strip is wider than its container the scrollbar is
+              hidden, so the arrows make the panning explicit. The buttons live
+              outside `#template-picker`: that element's children are the cards,
+              in order (the catalog spec relies on it). --%>
               <div id="template-carousel" class="relative" phx-hook=".TemplateCarousel">
                 <div
                   id="template-picker"
@@ -320,7 +320,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                   type="button"
                   data-carousel-prev
                   aria-label="Scroll templates left"
-                  class="absolute left-1 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-base-content/15 bg-base-100/95 text-base-content/70 shadow-lg backdrop-blur transition hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary invisible opacity-0 lg:hidden"
+                  class="absolute left-1 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-base-content/15 bg-base-100/95 text-base-content/70 shadow-lg backdrop-blur transition hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary invisible opacity-0"
                 >
                   <.icon name="hero-chevron-left" class="size-5" />
                 </button>
@@ -329,7 +329,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
                   type="button"
                   data-carousel-next
                   aria-label="Scroll templates right"
-                  class="absolute right-1 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-base-content/15 bg-base-100/95 text-base-content/70 shadow-lg backdrop-blur transition hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary invisible opacity-0 lg:hidden"
+                  class="absolute right-1 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-base-content/15 bg-base-100/95 text-base-content/70 shadow-lg backdrop-blur transition hover:text-base-content focus:outline-none focus-visible:ring-2 focus-visible:ring-primary invisible opacity-0"
                 >
                   <.icon name="hero-chevron-right" class="size-5" />
                 </button>

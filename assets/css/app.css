@@ -756,7 +756,14 @@
   /* Dense cells: trim prose margins so text fills the cell instead of
      leaving gaps at the top, bottom and between blocks. */
   .canvas-cell .md-render {
+    font-size: 0.8125rem;
     line-height: 1.3;
+  }
+
+  /* The shared rendered-Markdown surface (notes, reference files, catalog
+     previews) reads a step smaller than the prose default. */
+  .markdown-preview {
+    font-size: 0.875rem;
   }
 
   .canvas-cell .md-render :is(p, ul, ol, blockquote, pre) {

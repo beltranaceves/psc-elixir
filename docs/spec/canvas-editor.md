@@ -231,8 +231,9 @@ opens a confirmation dialog; an empty one goes straight away.
 
 The **row-label column hugs its content**: it is as wide as the longest row label, measured per
 glyph in the 14px the label uses (capitals and wide letters take more room than lowercase, a
-space less) plus the cell padding. A short label therefore leaves almost all of a phone's
-width to the data columns. While Edit structure is on, the column never shrinks below 8 rem:
+space less) plus the cell padding. The label is centred in that column — the Edit-structure
+input shares the alignment — so a short label leaves almost all of a phone's width to the data
+columns. While Edit structure is on, the column never shrinks below 8 rem:
 it also holds the accent swatch and the remove button beside the label input, and a tighter
 column would leave the input a few pixels wide. The width is recomputed when the debounced
 label reaches the server, not on every keystroke. If the estimate is a little short (very

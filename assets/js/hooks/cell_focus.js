@@ -106,12 +106,38 @@ export default {
     if (window.location.hash === cellHash(this.cellKey)) {
       this.expand({ history: "none" })
     }
+
+    // A snippet chip can mark a cell before the page renders (?cell=r1_c1);
+    // bring it into view so the ring is not left off-screen.
+    this.focused = this.el.dataset.cellFocused === "true"
+    if (this.focused) this.scrollIntoView()
   },
 
   updated() {
+    const focused = this.el.dataset.cellFocused === "true"
+    if (focused && !this.focused) this.scrollIntoView()
+    this.focused = focused
+
     // LiveView patches can rewrite the class attribute; keep the fullscreen
     // state while the user is inside the cell.
     if (this.expandedByPatch && !this.isExpanded()) this.expand({ history: "none" })
+  },
+
+  // Bring a cell marked by a snippet link (or a deep link) into view. A
+  // hidden tab panel has no offsetParent; when it becomes visible LiveView
+  // patches the cell and `updated` runs again.
+  scrollIntoView() {
+    if (this.el.offsetParent === null) return
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    requestAnimationFrame(() => {
+      this.el.scrollIntoView({
+        block: "center",
+        inline: "nearest",
+        behavior: reduceMotion ? "auto" : "smooth"
+      })
+    })
   },
 
   destroyed() {

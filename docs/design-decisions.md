@@ -1773,9 +1773,10 @@ card.
   (`Table · 3 × 4`, `Bento · 12 × 5`, `Image · 3 cells`), and a meta line carries the created
   date and a relative "Edited 3h ago". The actions are one primary **Edit** and an icon-only
   delete that keeps its confirmation.
-- **The template picker has arrows below `lg`.** Two round buttons outside `#template-picker`
-  (its children stay the cards, in order) page the strip; a colocated hook hides each arrow
-  when the strip cannot move in that direction and respects `prefers-reduced-motion`.
+- **The template picker has arrows at every width.** Two round buttons outside
+  `#template-picker` (its children stay the cards, in order) page the strip whenever it can
+  scroll; a colocated hook hides each arrow when the strip cannot move in that direction
+  and respects `prefers-reduced-motion`.
 
 **Consequences.** The Agent tab is usable one-handed: the title is readable, both selectors
 open on screen and the answer owns the width. The library reads as an inventory rather than a

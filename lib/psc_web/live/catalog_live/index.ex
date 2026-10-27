@@ -156,6 +156,11 @@ defmodule PscWeb.CatalogLive.Index do
             class="flex min-w-0 flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200 p-4 text-left transition-colors hover:border-base-content/25 hover:bg-base-content/5"
             aria-label={"Details for #{template.name}"}
           >
+            <.mini_preview
+              layout_map={template.layout_map}
+              class="rounded-lg bg-base-300/30 p-2"
+            />
+
             <span class="flex items-start justify-between gap-2">
               <span class="min-w-0 break-words font-medium text-base-content">
                 {template.name}

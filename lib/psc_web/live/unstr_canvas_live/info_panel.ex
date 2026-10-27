@@ -35,7 +35,7 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
   def panel(assigns) do
     ~H"""
     <div id="canvas-info" class="w-full">
-      <div class="mx-auto w-full max-w-2xl space-y-3 pb-2">
+      <div class="mx-auto w-full max-w-2xl space-y-3 pb-2 md:max-w-3xl lg:max-w-4xl 2xl:max-w-5xl">
         <.section id="canvas-info-details" title="Details" hint="Name and description">
           <div class="space-y-4">
             <.form for={%{}} id="canvas-info-name-form" phx-change="update_name">
@@ -53,7 +53,7 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
                 value={@c_name}
                 phx-debounce="1000"
                 placeholder="Untitled canvas"
-                class="w-full rounded-lg border border-base-content/15 bg-base-100 px-3 py-2 text-sm text-base-content transition-colors placeholder-base-content/35 focus:border-primary focus:outline-none"
+                class="w-full rounded-lg border border-base-content/10 bg-base-200 px-3.5 py-2.5 text-sm text-base-content transition-colors placeholder-base-content/40 focus:border-primary/50 focus:ring-2 focus:ring-primary/35 focus:ring-inset focus:outline-none"
               />
             </.form>
 
@@ -70,7 +70,7 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
                 rows="4"
                 phx-debounce="1000"
                 placeholder="What is this canvas for?"
-                class="w-full resize-y rounded-lg border border-base-content/15 bg-base-100 px-3 py-2 text-sm leading-6 text-base-content transition-colors placeholder-base-content/35 focus:border-primary focus:outline-none"
+                class="w-full resize-y rounded-lg border border-base-content/10 bg-base-200 px-3.5 py-2.5 text-sm leading-6 text-base-content transition-colors placeholder-base-content/40 focus:border-primary/50 focus:ring-2 focus:ring-primary/35 focus:ring-inset focus:outline-none"
               ><%= @c_desc %></textarea>
             </.form>
           </div>

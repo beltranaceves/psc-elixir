@@ -55,7 +55,8 @@ plus `"layout_mode"` and a `"backdrop"`.
 `"$name"` and `"$description"` are the canvas header, written by the name/description
 operations. They are metadata, never cells.
 
-`placement`, `accent`, `background` and `kind` are reserved cell keys: they can never be
+`placement`, `accent`, `background`, `kind` and `field_order` (a canvas-only list of the
+cell's editable field names in render order) are reserved cell keys: they can never be
 added, removed or rendered as editable fields.
 
 ## Geometry

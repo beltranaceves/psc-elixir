@@ -95,7 +95,8 @@ defmodule Psc.Canvas.Structure do
     "placement",
     "accent",
     "background",
-    "kind"
+    "kind",
+    "field_order"
   ]
 
   @doc "The metadata keys of a structure map: never cells."
@@ -103,6 +104,31 @@ defmodule Psc.Canvas.Structure do
 
   @doc "The cell keys that can never be added, removed or rendered as fields."
   def reserved_cell_keys, do: @reserved_cell_keys
+
+  @doc """
+  A cell's editable field names, in the order it renders them.
+
+  Canvas cells carry a `"field_order"` list — copied from the template's
+  `"fields"` at instantiation and kept in step by `add_cell_field` /
+  `remove_cell_field`. Canvases created before the key existed fall back to
+  map order; a stored name that no longer has a value is ignored, and any
+  value missing from the list is appended so no field disappears.
+  """
+  def field_names(cell) when is_map(cell) do
+    known =
+      cell
+      |> Map.keys()
+      |> Enum.reject(&(&1 in @reserved_cell_keys))
+
+    case Map.get(cell, "field_order") do
+      order when is_list(order) ->
+        ordered = Enum.filter(order, &(&1 in known))
+        ordered ++ Enum.reject(known, &(&1 in ordered))
+
+      _other ->
+        known
+    end
+  end
 
   @doc "The layout mode of a cells map (or a template layout map)."
   def mode(map) when is_map(map) do

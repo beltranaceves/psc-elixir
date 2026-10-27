@@ -265,7 +265,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                               name="label"
                               value={row["label"]}
                               phx-debounce="300"
-                              class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1.5 text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none sm:py-0.5"
+                              class="w-full min-w-0 rounded border border-transparent bg-transparent px-1.5 py-1.5 text-center text-inherit hover:border-base-content/10 focus:border-primary focus:outline-none sm:py-0.5"
                             />
                           </.form>
 
@@ -331,7 +331,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                         </div>
                       <% else %>
                         <div
-                          class="truncate font-medium text-base-content/70 text-sm"
+                          class="truncate text-center font-medium text-base-content/70 text-sm"
                           title={row["label"]}
                         >
                           {row["label"]}

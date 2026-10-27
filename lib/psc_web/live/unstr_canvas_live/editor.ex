@@ -2187,7 +2187,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
-          controls?={@active_tab != "editor"}
+          controls?={@active_tab != "editor" and (@active_tab != "agent" or is_nil(@agent_session))}
         />
         <Header.share_dialog
           canvas={@canvas}
@@ -2351,6 +2351,9 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               agent_connections={@agent_connections}
               agent_connection={@agent_connection}
               agent_connection_list_open={@agent_connection_list_open}
+              presence={@presence}
+              status={if @active_tab == "agent", do: @status, else: nil}
+              can_share?={@canvas.author_id == @user_id}
             />
           </div>
 

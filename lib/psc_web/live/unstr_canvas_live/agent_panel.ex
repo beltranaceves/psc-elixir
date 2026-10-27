@@ -6,6 +6,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
   import Phoenix.HTML, only: [raw: 1]
   import PscWeb.CoreComponents, only: [icon: 1, input: 1]
+  import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1]
 
   alias PscWeb.Markdown
 
@@ -32,6 +33,9 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
   attr :agent_connections, :list, required: true
   attr :agent_connection, :map, default: nil
   attr :agent_connection_list_open, :boolean, default: false
+  attr :presence, :map, default: %{}
+  attr :status, :map, default: nil
+  attr :can_share?, :boolean, default: false
 
   def panel(assigns) do
     assigns = assign(assigns, :suggestions, @suggestions)
@@ -87,7 +91,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
       <div :if={@agent_session} class="flex min-h-0 flex-1 flex-col">
         <div class="shrink-0 border-b border-base-content/10">
-          <div class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:px-4">
+          <div class="mx-auto flex w-full max-w-5xl flex-col gap-2 px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
             <div class="flex min-w-0 items-center gap-2 sm:flex-1">
               <span class="hidden size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:flex">
                 <.icon name="hero-sparkles" class="size-4" />
@@ -107,6 +111,12 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                   )}
                 </p>
               </div>
+            </div>
+
+            <%!-- The canvas's presence, save state and Share live in this bar on
+            a desktop; on a phone the app header carries the compact cluster. --%>
+            <div :if={@status} class="hidden min-w-0 sm:flex sm:shrink-0">
+              <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
             </div>
 
             <%!-- On a phone the controls get their own line and share its width;
@@ -361,7 +371,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
         >
           <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col">
             <div
-              :if={@agent_messages == [] and is_nil(@agent_phase)}
+              :if={@agent_messages == []}
               class="my-auto py-6 text-center"
             >
               <span class="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -395,7 +405,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
               </div>
             </div>
 
-            <div :if={@agent_messages != [] or @agent_phase} class="flex flex-col gap-4">
+            <div :if={@agent_messages != []} class="flex flex-col gap-4">
               <div :for={message <- @agent_messages} id={"agent-message-#{message.id}"}>
                 <div :if={message.role == :user} class="flex justify-end">
                   <div
@@ -448,6 +458,30 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                             class="max-h-64 overflow-auto border-t border-base-content/10 bg-base-200/40 px-2.5 py-2 text-[11px] leading-relaxed text-base-content/60"
                           >{pretty_json(call)}</pre>
                         </details>
+                      </div>
+
+                      <div
+                        :if={agent_file_refs(message) != []}
+                        id={"agent-files-#{message.id}"}
+                        class="mb-2 rounded-lg border border-base-content/10 bg-base-100/60 px-2.5 py-2"
+                      >
+                        <p class="text-[10px] font-medium uppercase tracking-wide text-base-content/45">
+                          Read files
+                        </p>
+
+                        <div class="mt-1 flex flex-col gap-0.5">
+                          <.link
+                            :for={ref <- agent_file_refs(message)}
+                            navigate={ref["url"]}
+                            class="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] text-base-content/70 transition-colors hover:bg-base-200 hover:text-base-content"
+                          >
+                            <.icon
+                              name="hero-document-text"
+                              class="size-3.5 shrink-0 text-base-content/40"
+                            />
+                            <span class="truncate font-mono">{ref["label"]}</span>
+                          </.link>
+                        </div>
                       </div>
 
                       <div
@@ -526,21 +560,6 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                   </div>
                 </div>
               </div>
-
-              <div :if={@agent_phase} id="canvas-agent-status" class="flex gap-2.5">
-                <span class="mt-1 hidden size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/25 to-accent/20 text-primary ring-1 ring-primary/20 ring-inset sm:flex">
-                  <.icon name="hero-sparkles" class="size-4" />
-                </span>
-
-                <div class="flex items-center gap-2.5 rounded-2xl rounded-tl-md border border-base-content/10 bg-base-200/40 px-3.5 py-2.5">
-                  <span class="flex gap-1">
-                    <span class="size-1.5 animate-bounce rounded-full bg-primary/70"></span>
-                    <span class="size-1.5 animate-bounce rounded-full bg-primary/70 [animation-delay:150ms]"></span>
-                    <span class="size-1.5 animate-bounce rounded-full bg-primary/70 [animation-delay:300ms]"></span>
-                  </span>
-                  <span class="text-xs text-base-content/60">{@agent_phase}</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -552,6 +571,15 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
           class="shrink-0 border-t border-base-content/10 px-3 py-3 sm:px-4"
         >
           <div class="mx-auto w-full max-w-3xl">
+            <p
+              :if={@agent_phase}
+              id="canvas-agent-status"
+              class="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] leading-4 text-base-content/45"
+            >
+              <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-primary/70"></span>
+              <span class="truncate">{@agent_phase}</span>
+            </p>
+
             <div class="flex items-end gap-2 rounded-2xl border border-base-content/15 bg-base-200/40 p-1.5 transition focus-within:border-primary/50 focus-within:bg-base-100 focus-within:ring-4 focus-within:ring-primary/10 [&>div]:mb-0 [&>div]:min-w-0 [&>div]:flex-1">
               <.input
                 field={@agent_composer[:content]}
@@ -559,7 +587,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 rows="1"
                 placeholder="Ask about this canvas…"
                 disabled={not @agent_enabled? or @agent_turn_pid != nil}
-                class="max-h-48 min-h-9 w-full resize-none border-0 bg-transparent px-2 py-1.5 text-sm leading-relaxed text-base-content placeholder:text-base-content/35 focus:outline-none focus:ring-0"
+                class="max-h-48 min-h-9 w-full resize-none rounded-xl border-0 bg-transparent px-2 py-1.5 text-sm leading-relaxed text-base-content placeholder:text-base-content/35 focus:outline-none focus:ring-0"
               />
               <button
                 :if={is_nil(@agent_turn_pid)}
@@ -567,7 +595,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 disabled={not @agent_enabled?}
                 aria-label="Send"
                 title="Send"
-                class="mb-1 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-content shadow-sm transition hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-content shadow-sm transition hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <.icon name="hero-arrow-up" class="size-4" />
               </button>
@@ -578,7 +606,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 phx-click="agent_stop"
                 aria-label="Stop"
                 title="Stop"
-                class="mb-1 flex size-9 shrink-0 items-center justify-center rounded-xl border border-base-content/15 bg-base-100 text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-base-content/15 bg-base-100 text-base-content/70 transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 <.icon name="hero-stop" class="size-4" />
               </button>
@@ -594,13 +622,6 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
             >
               Add a connection in settings
             </.link>
-
-            <p
-              :if={@agent_enabled? and is_nil(@agent_turn_pid)}
-              class="mt-2 hidden px-1 text-right text-[11px] text-base-content/45 sm:block"
-            >
-              Enter to send · Shift+Enter for a new line
-            </p>
           </div>
         </.form>
       </div>
@@ -659,8 +680,10 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
   defp agent_cell_refs(message), do: Enum.filter(agent_refs(message), &(&1["kind"] == "cell"))
 
+  defp agent_file_refs(message), do: Enum.filter(agent_refs(message), &(&1["kind"] == "file"))
+
   defp agent_other_refs(message),
-    do: Enum.reject(agent_refs(message), &(&1["kind"] == "cell"))
+    do: Enum.reject(agent_refs(message), &(&1["kind"] in ["cell", "file"]))
 
   defp agent_session_selected?(current, session), do: current.id == session.id
 
