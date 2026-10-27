@@ -1194,27 +1194,63 @@ defmodule Psc.Canvas do
             canvas.snapshot_seq || 0
           )
 
-        result =
+        # The per-cell edit times are folded from the same events this save is
+        # about to prune. They live outside `cells` so the CRDT state and the
+        # templates keep their shape; the insights stale detector reads them.
+        changeset =
           canvas
           |> UnstrCanvas.changeset(%{cells: cells, snapshot_seq: max_seq})
-          |> Repo.update(stale_error_field: :base)
+          |> Ecto.Changeset.put_change(:touch_map, merged_touch_map(canvas))
 
-        # Prune events already folded into the snapshot. The snapshot fully
-        # captures state through max_seq and loading replays only seq >
-        # snapshot_seq, so pruned rows are dead weight. This keeps the event
-        # table small (free-tier Postgres is limited to 10k rows per table). Only
-        # prune once the marker is durably stored, so a failed update can never
-        # drop events that are not yet represented in the saved snapshot.
-        with {:ok, _canvas} <- result do
-          Repo.delete_all(
-            from(e in Psc.Canvas.UnstrCanvasEvent,
-              where: e.unstr_canvas_id == ^canvas_id and e.seq <= ^max_seq
-            )
-          )
-        end
+        # The snapshot, the touch map and the prune commit together: a failed
+        # update must never drop events the saved snapshot does not represent.
+        Repo.transaction(fn ->
+          case Repo.update(changeset, stale_error_field: :base) do
+            {:ok, canvas} ->
+              Repo.delete_all(
+                from(e in Psc.Canvas.UnstrCanvasEvent,
+                  where: e.unstr_canvas_id == ^canvas_id and e.seq <= ^max_seq
+                )
+              )
 
-        result
+              canvas
+
+            {:error, changeset} ->
+              Repo.rollback(changeset)
+          end
+        end)
     end
+  end
+
+  defp merged_touch_map(canvas) do
+    events =
+      from(e in Psc.Canvas.UnstrCanvasEvent,
+        where: e.unstr_canvas_id == ^canvas.id and e.seq > ^(canvas.snapshot_seq || 0),
+        select: {e.operation, e.inserted_at}
+      )
+      |> Repo.all()
+
+    touches =
+      Enum.reduce(events, %{}, fn {operation, at}, acc ->
+        case operation do
+          %{"type" => "update_cell", "cell_key" => key} when is_binary(key) ->
+            stamp = iso8601(at)
+            Map.update(acc, key, stamp, &max(stamp, &1))
+
+          _other ->
+            acc
+        end
+      end)
+
+    Map.merge(canvas.touch_map || %{}, touches)
+  end
+
+  defp iso8601(%DateTime{} = at), do: DateTime.to_iso8601(at)
+
+  defp iso8601(%NaiveDateTime{} = at) do
+    at
+    |> DateTime.from_naive!("Etc/UTC")
+    |> DateTime.to_iso8601()
   end
 
   @doc """

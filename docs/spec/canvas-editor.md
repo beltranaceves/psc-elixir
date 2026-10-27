@@ -352,7 +352,8 @@ The **Start a canvas** card at the top of the index page holds the creation form
 - Drag-and-drop cell reordering or resizing
 - Export or import of canvas content
 - User-facing version history or undo UI (CRDT log is internal only)
-- Telemetry or analytics instrumentation
+- Telemetry or analytics instrumentation (content analysis is a separate
+  feature: [`insights.md`](insights.md))
 - Conflict resolution UI (CRDTs converge automatically; no manual merge)
 
 ## Verification Methods

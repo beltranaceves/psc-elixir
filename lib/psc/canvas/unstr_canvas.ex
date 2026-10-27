@@ -22,6 +22,11 @@ defmodule Psc.Canvas.UnstrCanvas do
     field :agent_config_source_hash, :string
 
     field :snapshot_seq, :integer, default: 0
+
+    # Per-cell last-edit timestamps folded from the events being pruned. It is
+    # written by the context during a save, never cast from a request.
+    field :touch_map, :map, default: %{}
+
     has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
 
     # A note belongs to a canvas and inherits its access rules.

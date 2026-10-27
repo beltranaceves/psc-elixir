@@ -13,10 +13,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias Psc.Canvas
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
+  alias Psc.Insights
   alias Psc.Notes
   alias PscWeb.AgentUploads
   alias PscWeb.Markdown
   alias PscWeb.Presence
+  alias PscWeb.UnstrCanvasLive.AnalysisPanel
   alias PscWeb.UnstrCanvasLive.AgentPanel
   alias PscWeb.UnstrCanvasLive.Bento
   alias PscWeb.UnstrCanvasLive.Grid
@@ -75,6 +77,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:share_open, false)
         |> assign(:active_tab, "editor")
         |> assign(:tabs, Tabs.tabs())
+        |> assign(:insight_report, nil)
+        |> assign(:insight_filter, "all")
+        |> assign(:insight_ai?, false)
+        |> assign(:insight_ai_enabled?, Insights.ai_available?(socket.assigns.current_scope.user))
+        |> assign(
+          :insight_ai_label,
+          Insights.ai_connection_label(socket.assigns.current_scope.user)
+        )
+        |> assign(:insight_ai_running?, false)
+        |> assign(:insight_include_notes?, false)
+        |> assign(:insight_stale?, false)
+        |> assign(:insight_touch_map, canvas.touch_map || %{})
         |> assign(:agent_session, nil)
         |> assign(:agent_messages, [])
         |> assign(:agent_turn_pid, nil)
@@ -184,6 +198,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       |> assign(:c_desc, c_desc)
       |> assign(:idle_timer_ref, idle_timer_ref)
       |> assign(:save_state, :unsaved)
+      |> track_insight_change(operation)
     end
   end
 
@@ -676,6 +691,81 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   def handle_event("select_tab", %{"tab" => tab}, socket) do
     {:noreply,
      push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}", replace: true)}
+  end
+
+  # ─── Analysis tab ───
+
+  def handle_event("run_analysis", _params, %{assigns: %{insight_ai_running?: true}} = socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("run_analysis", _params, socket) do
+    opts = [touch_map: socket.assigns.insight_touch_map]
+
+    case Insights.run(
+           socket.assigns.current_scope,
+           socket.assigns.canvas,
+           socket.assigns.cells,
+           opts
+         ) do
+      {:ok, report} ->
+        socket =
+          socket
+          |> assign(:insight_report, report)
+          |> assign(:insight_stale?, false)
+          |> assign(:insight_filter, "all")
+
+        socket =
+          if socket.assigns.insight_ai? and socket.assigns.insight_ai_enabled? do
+            start_ai_review(socket)
+          else
+            socket
+          end
+
+        {:noreply, socket}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "Could not run the analysis")}
+    end
+  end
+
+  def handle_event("toggle_analysis_ai", _params, socket) do
+    if socket.assigns.insight_ai_enabled? do
+      {:noreply, assign(socket, :insight_ai?, not socket.assigns.insight_ai?)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("toggle_analysis_notes", _params, socket) do
+    if socket.assigns.insight_ai_enabled? do
+      {:noreply,
+       assign(socket, :insight_include_notes?, not socket.assigns.insight_include_notes?)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("analysis_filter", %{"filter" => filter}, socket) do
+    if filter in ["all", "dismissed" | Psc.Insights.Finding.kinds()] do
+      {:noreply, assign(socket, :insight_filter, filter)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("dismiss_insight", %{"id" => id}, socket) do
+    case Insights.dismiss(socket.assigns.current_scope, socket.assigns.canvas_id, id) do
+      {:ok, report} -> {:noreply, assign(socket, :insight_report, report)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Could not dismiss the finding")}
+    end
+  end
+
+  def handle_event("restore_insight", %{"id" => id}, socket) do
+    case Insights.restore(socket.assigns.current_scope, socket.assigns.canvas_id, id) do
+      {:ok, report} -> {:noreply, assign(socket, :insight_report, report)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Could not restore the finding")}
+    end
   end
 
   @impl true
@@ -1671,11 +1761,25 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         tab == "agent" ->
           load_agent(socket)
 
+        tab == "analysis" ->
+          load_insights(socket)
+
         true ->
           socket
       end
 
     {:noreply, socket}
+  end
+
+  # The Analysis view reads the cached report when it is opened; it never runs
+  # on its own, because a run costs user attention (and, with AI, money).
+  defp load_insights(socket) do
+    report = Insights.get_report(socket.assigns.current_scope, socket.assigns.canvas_id)
+
+    assign(socket,
+      insight_report: report,
+      insight_stale?: Insights.stale?(report, socket.assigns.cells)
+    )
   end
 
   # The notes of the canvas, most recently touched first. The snippet is
@@ -1883,6 +1987,48 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     end
   end
 
+  # ─── Analysis: the AI pass runs asynchronously ───
+
+  defp start_ai_review(socket) do
+    scope = socket.assigns.current_scope
+    canvas = socket.assigns.canvas
+    cells = socket.assigns.cells
+    report = socket.assigns.insight_report
+    include_notes = socket.assigns.insight_include_notes?
+
+    socket
+    |> assign(:insight_ai_running?, true)
+    |> start_async(:insights_ai, fn ->
+      Insights.enhance(scope, canvas, cells, report, include_notes: include_notes)
+    end)
+  end
+
+  @impl true
+  def handle_async(:insights_ai, {:ok, {:ok, report}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:insight_report, report)
+     |> assign(:insight_ai_running?, false)}
+  end
+
+  def handle_async(:insights_ai, {:ok, {:error, reason}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:insight_ai_running?, false)
+     |> put_flash(:error, ai_error(reason))}
+  end
+
+  def handle_async(:insights_ai, {:exit, _reason}, socket) do
+    {:noreply,
+     socket
+     |> assign(:insight_ai_running?, false)
+     |> put_flash(:error, "The AI review did not finish")}
+  end
+
+  defp ai_error(:no_connection), do: "Add a provider connection to use the AI review"
+  defp ai_error(reason) when is_binary(reason), do: "AI review failed: #{reason}"
+  defp ai_error(_reason), do: "AI review failed"
+
   @impl true
   def handle_info({:status, _message_id, phase}, socket) do
     {:noreply, assign(socket, :agent_phase, phase)}
@@ -2089,8 +2235,34 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
        socket
        |> assign(:cells, cells)
        |> assign(:c_name, c_name)
-       |> assign(:c_desc, c_desc)}
+       |> assign(:c_desc, c_desc)
+       |> track_insight_change(operation)}
     end
+  end
+
+  # Keep the Analysis tab honest while the canvas is being edited: the stored
+  # report is a snapshot, so every real change either invalidates it or makes a
+  # cell look freshly touched. The fingerprint check runs only when a report
+  # exists; the touch map is cheap and always kept in step.
+  defp track_insight_change(socket, %{"type" => "update_cell", "cell_key" => key}) do
+    socket
+    |> assign(
+      :insight_touch_map,
+      Map.put(socket.assigns.insight_touch_map, key, DateTime.to_iso8601(DateTime.utc_now()))
+    )
+    |> mark_insight_stale()
+  end
+
+  defp track_insight_change(socket, _operation), do: mark_insight_stale(socket)
+
+  defp mark_insight_stale(%{assigns: %{insight_report: nil}} = socket), do: socket
+
+  defp mark_insight_stale(socket) do
+    assign(
+      socket,
+      :insight_stale?,
+      Insights.stale?(socket.assigns.insight_report, socket.assigns.cells)
+    )
   end
 
   # Persist the cells through the context. `Save.commit/3` advances the dirty
@@ -2303,6 +2475,29 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           </div>
 
           <div
+            id="canvas-panel-analysis"
+            role="tabpanel"
+            aria-labelledby="canvas-tab-analysis"
+            class={[
+              "flex min-h-0 w-full flex-1 flex-col",
+              @active_tab != "analysis" && "hidden"
+            ]}
+          >
+            <AnalysisPanel.panel
+              canvas_id={@canvas_id}
+              cells={@cells}
+              report={@insight_report}
+              filter={@insight_filter}
+              stale?={@insight_stale?}
+              ai_enabled?={@insight_ai_enabled?}
+              ai?={@insight_ai?}
+              ai_label={@insight_ai_label}
+              include_notes?={@insight_include_notes?}
+              ai_running?={@insight_ai_running?}
+            />
+          </div>
+
+          <div
             id="canvas-panel-notes"
             role="tabpanel"
             aria-labelledby="canvas-tab-notes"
@@ -2386,39 +2581,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               agent_dirty?={@agent_config_dirty?}
             />
           </div>
-
-          <%= for {tab_id, label, icon, blurb} <- @tabs do %>
-            <%= if tab_id not in ["editor", "notes", "agent", "info"] do %>
-              <div
-                id={"canvas-panel-" <> tab_id}
-                role="tabpanel"
-                aria-labelledby={"canvas-tab-" <> tab_id}
-                class={[
-                  "flex min-h-0 w-full flex-1 flex-col",
-                  @active_tab != tab_id && "hidden"
-                ]}
-              >
-                <div
-                  id={"canvas-placeholder-" <> tab_id}
-                  class="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/20 bg-base-200/40 p-8 text-center"
-                >
-                  <span class="flex size-12 items-center justify-center rounded-full bg-base-content/5 text-base-content/40">
-                    <.icon name={icon} class="size-6" />
-                  </span>
-
-                  <h2 class="text-lg font-medium text-base-content">
-                    {label}
-                  </h2>
-
-                  <p class="max-w-sm text-sm text-base-content/60">
-                    {blurb}
-                  </p>
-
-                  <p class="text-xs text-base-content/40">Coming soon.</p>
-                </div>
-              </div>
-            <% end %>
-          <% end %>
         </div>
       </div>
 

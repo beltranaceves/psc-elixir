@@ -224,6 +224,8 @@ results, not a summary of intentions.
 - `lib/psc/` — contexts and schemas (`canvas.ex`, `notes.ex`, `text_store.ex`, `admin.ex`).
 - `lib/psc/agent/` — the agent runtime (`turn.ex`, `canvas_agent.ex`), configuration and
   profiles (`config.ex`, `profile.ex`, `files.ex`) and the tool registry under `tools/`.
+- `lib/psc/insights/` — the Analysis tab: deterministic detectors, the cached
+  `canvas_insights` report and the optional one-shot AI review.
 - `lib/psc_web/live/` — LiveViews: `unstr_canvas_live/` (canvas), `canvas_layout_live/`
   (designer), `catalog_live/`, `user_live/`, `admin/` (Backpex resources + dashboard).
 - `lib/psc_web/components/` — shared components, including SaladUI under `ui/`.

@@ -2,7 +2,8 @@ defmodule PscWeb.UnstrCanvasLive.Tabs do
   @moduledoc false
 
   # The canvas editor is a tabbed surface: the grid is one of several views on
-  # the same canvas. Everything but the editor is a placeholder for now.
+  # the same canvas. Each tab has its own panel module; `analysis` reads the
+  # cached `Psc.Insights` report, the rest are live views on the canvas itself.
   @tabs [
     {"analysis", "Analysis", "hero-chart-bar",
      "Insights over the canvas: relevance, staleness and content coverage."},
