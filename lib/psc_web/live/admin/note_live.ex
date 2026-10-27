@@ -19,6 +19,8 @@ defmodule PscWeb.Admin.NoteLive do
 
   alias Psc.Accounts
 
+  import Ecto.Query
+
   @impl Backpex.LiveResource
   def singular_name, do: "Note"
 
@@ -27,6 +29,18 @@ defmodule PscWeb.Admin.NoteLive do
 
   @impl Backpex.LiveResource
   def layout(_assigns), do: {PscWeb.Layouts, :admin}
+
+  @impl Backpex.LiveResource
+  def metrics do
+    [
+      notes: %{
+        module: Backpex.Metrics.Value,
+        label: "Notes",
+        select: dynamic([note], count(note.id)),
+        format: &Integer.to_string/1
+      }
+    ]
+  end
 
   @impl Backpex.LiveResource
   def fields do
@@ -42,6 +56,12 @@ defmodule PscWeb.Admin.NoteLive do
         module: Backpex.Fields.BelongsTo,
         label: "Canvas",
         display_field: :name,
+        readonly: true
+      },
+      created_by: %{
+        module: Backpex.Fields.BelongsTo,
+        label: "Author",
+        display_field: :email,
         readonly: true
       },
       snapshot_seq: %{

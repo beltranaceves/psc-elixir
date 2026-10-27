@@ -19,6 +19,8 @@ defmodule PscWeb.Admin.CanvasLive do
 
   alias Psc.Accounts
 
+  import Ecto.Query
+
   @impl Backpex.LiveResource
   def singular_name, do: "Canvas"
 
@@ -29,6 +31,23 @@ defmodule PscWeb.Admin.CanvasLive do
   def layout(_assigns), do: {PscWeb.Layouts, :admin}
 
   @impl Backpex.LiveResource
+  def filters do
+    [notes_mode: %{module: PscWeb.Admin.Filters.CanvasNotesMode}]
+  end
+
+  @impl Backpex.LiveResource
+  def metrics do
+    [
+      canvases: %{
+        module: Backpex.Metrics.Value,
+        label: "Canvases",
+        select: dynamic([canvas], count(canvas.id)),
+        format: &Integer.to_string/1
+      }
+    ]
+  end
+
+  @impl Backpex.LiveResource
   def fields do
     [
       name: %{
@@ -37,6 +56,13 @@ defmodule PscWeb.Admin.CanvasLive do
         searchable: true,
         orderable: true,
         readonly: true
+      },
+      author: %{
+        module: Backpex.Fields.BelongsTo,
+        label: "Owner",
+        display_field: :email,
+        readonly: true,
+        except: [:new, :edit]
       },
       description: %{
         module: Backpex.Fields.Textarea,
@@ -56,6 +82,11 @@ defmodule PscWeb.Admin.CanvasLive do
         label: "Snapshot",
         readonly: true,
         except: [:index]
+      },
+      inserted_at: %{
+        module: Backpex.Fields.DateTime,
+        label: "Created",
+        readonly: true
       },
       updated_at: %{
         module: Backpex.Fields.DateTime,

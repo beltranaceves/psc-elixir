@@ -52,6 +52,29 @@ defmodule PscWeb.CatalogLiveTest do
       assert html =~ "Used 1"
     end
 
+    test "a card states the canvas type next to its size", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id, name: "Typed Tpl"})
+      {:ok, _} = Canvas.publish_template(template)
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      assert has_element?(
+               lv,
+               "button[phx-value-id='#{template.id}'] [data-canvas-type='Table']",
+               "Table"
+             )
+    end
+
+    test "every layout mode is labelled on its card", %{conn: conn} do
+      Canvas.seed_builtin_templates()
+
+      {:ok, lv, _html} = live(conn, ~p"/catalog")
+
+      assert has_element?(lv, "#catalog-grid [data-canvas-type='Table']")
+      assert has_element?(lv, "#catalog-grid [data-canvas-type='Bento']")
+      assert has_element?(lv, "#catalog-grid [data-canvas-type='Image']")
+    end
+
     test "shows the empty state when nothing is public", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/catalog")
 

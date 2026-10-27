@@ -23,6 +23,8 @@ defmodule PscWeb.Admin.TemplateLive do
   alias Psc.Accounts
   alias Psc.Canvas.Layout
 
+  import Ecto.Query
+
   @impl Backpex.LiveResource
   def singular_name, do: "Template"
 
@@ -31,6 +33,32 @@ defmodule PscWeb.Admin.TemplateLive do
 
   @impl Backpex.LiveResource
   def layout(_assigns), do: {PscWeb.Layouts, :admin}
+
+  @impl Backpex.LiveResource
+  def filters do
+    [
+      public: %{module: PscWeb.Admin.Filters.TemplateVisibility},
+      built_in: %{module: PscWeb.Admin.Filters.TemplateOrigin}
+    ]
+  end
+
+  @impl Backpex.LiveResource
+  def metrics do
+    [
+      templates: %{
+        module: Backpex.Metrics.Value,
+        label: "Templates",
+        select: dynamic([template], count(template.id)),
+        format: &Integer.to_string/1
+      },
+      instantiations: %{
+        module: Backpex.Metrics.Value,
+        label: "Instantiations",
+        select: dynamic([template], sum(template.use_count)),
+        format: &Integer.to_string/1
+      }
+    ]
+  end
 
   @impl Backpex.LiveResource
   def fields do
@@ -53,6 +81,13 @@ defmodule PscWeb.Admin.TemplateLive do
       built_in: %{
         module: Backpex.Fields.Boolean,
         label: "Built-in",
+        readonly: true,
+        except: [:new, :edit]
+      },
+      author: %{
+        module: Backpex.Fields.BelongsTo,
+        label: "Author",
+        display_field: :email,
         readonly: true,
         except: [:new, :edit]
       },

@@ -156,7 +156,18 @@ defmodule PscWeb.CatalogLive.Index do
             class="flex min-w-0 flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200 p-4 text-left transition-colors hover:border-base-content/25 hover:bg-base-content/5"
             aria-label={"Details for #{template.name}"}
           >
-            <span class="break-words font-medium text-base-content">{template.name}</span>
+            <span class="flex items-start justify-between gap-2">
+              <span class="min-w-0 break-words font-medium text-base-content">
+                {template.name}
+              </span>
+
+              <span
+                data-canvas-type={canvas_type(template.layout_map)}
+                class="shrink-0 rounded-full border border-base-content/15 bg-base-content/5 px-2 py-0.5 text-[11px] text-base-content/60"
+              >
+                {canvas_type(template.layout_map)}
+              </span>
+            </span>
             <span
               :if={template.description not in [nil, ""]}
               class="break-words line-clamp-2 text-sm text-base-content/60"
@@ -349,6 +360,16 @@ defmodule PscWeb.CatalogLive.Index do
   end
 
   defp date(_datetime), do: "—"
+
+  # The card says what kind of canvas the template produces before the modal
+  # opens: the catalog offers all three layout modes side by side.
+  defp canvas_type(layout_map) do
+    case Structure.mode(layout_map) do
+      :bento -> "Bento"
+      :image -> "Image"
+      _ -> "Table"
+    end
+  end
 
   defp cell_count(template) do
     lm = template.layout_map || %{}

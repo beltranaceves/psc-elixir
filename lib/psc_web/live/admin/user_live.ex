@@ -19,6 +19,7 @@ defmodule PscWeb.Admin.UserLive do
     fluid?: true
 
   import Ecto.Changeset
+  import Ecto.Query
 
   alias Psc.Accounts
   alias Psc.Accounts.User
@@ -31,6 +32,23 @@ defmodule PscWeb.Admin.UserLive do
 
   @impl Backpex.LiveResource
   def layout(_assigns), do: {PscWeb.Layouts, :admin}
+
+  @impl Backpex.LiveResource
+  def filters do
+    [role: %{module: PscWeb.Admin.Filters.UserRole}]
+  end
+
+  @impl Backpex.LiveResource
+  def metrics do
+    [
+      accounts: %{
+        module: Backpex.Metrics.Value,
+        label: "Accounts",
+        select: dynamic([user], count(user.id)),
+        format: &Integer.to_string/1
+      }
+    ]
+  end
 
   @impl Backpex.LiveResource
   def fields do
