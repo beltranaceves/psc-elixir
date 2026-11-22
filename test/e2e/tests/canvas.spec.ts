@@ -358,7 +358,7 @@ test.describe('canvas editor tabs', () => {
     await createCanvasAndOpen(page, uniqueName('Tabbed Canvas'));
 
     const tabs = page.locator('#canvas-tabs [role="tab"]');
-    await expect(tabs).toHaveCount(5);
+    await expect(tabs).toHaveCount(6);
     await expect(page.locator('#canvas-tab-editor')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('#canvas-grid')).toBeVisible();
 

@@ -171,6 +171,10 @@ test.describe('bento board', () => {
       timeout: 15_000,
     });
 
+    // The first save of an edit asks for the new version's name; not now.
+    await page.locator('#pivot-later').click();
+    await expect(page.locator('#pivot-dialog')).toBeHidden();
+
     // Reading mode shows the same grid as a badge, and it survives a reload.
     await page.locator('#edit-layout-toggle').click();
     await expect(page.locator('#bento-size')).toContainText('8 × 9');
@@ -194,11 +198,11 @@ test.describe('bento board', () => {
     });
 
     // The board is not its own scroll box on a wide screen: the page is.
-    await expect(page.locator('.canvas-bento-scroll')).toHaveCSS('overflow-y', 'visible');
+    await expect(page.locator('#canvas-panel-editor .canvas-bento-scroll')).toHaveCSS('overflow-y', 'visible');
 
     const metrics = await page.evaluate(() => {
       const main = document.querySelector('main')!;
-      const board = document.querySelector('.canvas-bento-scroll')!;
+      const board = document.querySelector('#canvas-panel-editor .canvas-bento-scroll')!;
       return {
         mainScroll: main.scrollHeight,
         mainClient: main.clientHeight,
@@ -351,7 +355,7 @@ test.describe('bento board on a phone', () => {
     expect(scroll.width).toBeGreaterThan(scroll.viewport + 40);
 
     // And it actually pans: scrolling the board sideways moves it.
-    const scrolled = await page.locator('.canvas-bento-scroll').evaluate(el => {
+    const scrolled = await page.locator('#canvas-panel-editor .canvas-bento-scroll').evaluate(el => {
       el.scrollLeft = 240;
       return el.scrollLeft;
     });
@@ -383,11 +387,11 @@ test.describe('bento board on a phone', () => {
 
     // On a phone the board keeps its inner scroll: the page shell itself does
     // not scroll.
-    await expect(page.locator('.canvas-bento-scroll')).toHaveCSS('overflow-y', 'auto');
+    await expect(page.locator('#canvas-panel-editor .canvas-bento-scroll')).toHaveCSS('overflow-y', 'auto');
 
     const metrics = await page.evaluate(() => {
       const main = document.querySelector('main')!;
-      const board = document.querySelector('.canvas-bento-scroll')!;
+      const board = document.querySelector('#canvas-panel-editor .canvas-bento-scroll')!;
       return { mainOverflow: main.scrollHeight - main.clientHeight, boardOverflow: board.scrollHeight - board.clientHeight };
     });
 
