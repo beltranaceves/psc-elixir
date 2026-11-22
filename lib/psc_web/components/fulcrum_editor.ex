@@ -3,12 +3,11 @@ defmodule PscWeb.Components.FulcrumEditor do
   Edits a list of fulcrums (`Psc.Canvas.Fulcrums`): a name, a colour and the
   cells each one highlights.
 
-  Shared by the template designer (on the template's list) and the canvas's
-  Fulcrums dialog (on a draft it saves as one operation), like
-  `AgentConfigEditor`. It emits `fulcrum_add`, `fulcrum_remove`,
-  `fulcrum_rename` (`fulcrum_id`, `name`), `fulcrum_color` and
-  `fulcrum_toggle_cell`; the caller
-  applies them with the functions in `Psc.Canvas.Fulcrums`.
+  Used by the template designer, which edits the list through `editor/1`
+  (it emits `fulcrum_add`, `fulcrum_remove`, `fulcrum_rename` (`fulcrum_id`,
+  `name`), `fulcrum_color` and `fulcrum_toggle_cell`; the caller applies them
+  with the functions in `Psc.Canvas.Fulcrums`). The canvas only picks from the
+  list, through `selector/1` and `picker/1`, which emit `toggle_fulcrum`.
   """
 
   use Phoenix.Component
@@ -173,7 +172,10 @@ defmodule PscWeb.Components.FulcrumEditor do
           "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
           fulcrum["id"] in @active_ids &&
-            "border-base-content/30 bg-base-content/10 text-base-content",
+            [
+              "border-transparent text-base-content",
+              selected_class(fulcrum["color"])
+            ],
           fulcrum["id"] not in @active_ids &&
             "border-base-content/10 text-base-content/60 hover:border-base-content/25 hover:text-base-content"
         ]}
@@ -182,6 +184,64 @@ defmodule PscWeb.Components.FulcrumEditor do
         {fulcrum["name"]}
       </button>
     </div>
+    """
+  end
+
+  @doc """
+  The canvas's fulcrum dialog: one row per fulcrum to pick from. Choosing a row
+  sends `toggle_fulcrum`, the same event as its picker chip. Nothing is edited
+  here; the fulcrums themselves are defined in the template designer.
+  """
+  attr :fulcrums, :list, required: true
+  attr :active_ids, :list, required: true
+
+  def selector(assigns) do
+    ~H"""
+    <p :if={@fulcrums == []} class="text-sm text-base-content/60">
+      This template has no fulcrums.
+    </p>
+
+    <ul
+      :if={@fulcrums != []}
+      id="fulcrum-selector"
+      class="space-y-2"
+      role="group"
+      aria-label="Fulcrums"
+    >
+      <li :for={fulcrum <- @fulcrums}>
+        <button
+          type="button"
+          id={"fulcrum-select-" <> fulcrum["id"]}
+          phx-click="toggle_fulcrum"
+          phx-value-id={fulcrum["id"]}
+          aria-pressed={to_string(fulcrum["id"] in @active_ids)}
+          class={[
+            "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+            fulcrum["id"] in @active_ids && ["border-transparent", selected_class(fulcrum["color"])],
+            fulcrum["id"] not in @active_ids &&
+              "border-base-content/10 hover:border-base-content/25"
+          ]}
+        >
+          <span class={["size-3 shrink-0 rounded-full", swatch_class(fulcrum["color"])]}></span>
+          <span class="min-w-0 flex-1 truncate text-sm font-medium text-base-content">
+            {fulcrum["name"]}
+          </span>
+          <span class="shrink-0 text-xs text-base-content/50">
+            {length(fulcrum["cells"] || [])} {if length(fulcrum["cells"] || []) == 1,
+              do: "cell",
+              else: "cells"}
+          </span>
+          <.icon
+            name="hero-check"
+            class={[
+              "size-4 shrink-0 text-primary",
+              fulcrum["id"] not in @active_ids && "invisible"
+            ]}
+          />
+        </button>
+      </li>
+    </ul>
     """
   end
 end

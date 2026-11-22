@@ -3,18 +3,76 @@ defmodule PscWeb.UnstrCanvasLive.Header do
 
   use Phoenix.Component
 
+  import PscWeb.Components.Accent, only: [swatch_class: 1]
   import PscWeb.Components.ShareDialog, only: [share_button: 1]
   import PscWeb.Components.StatusPill
   import PscWeb.CoreComponents, only: [icon: 1]
 
+  alias Psc.Canvas.Fulcrums
+  alias PscWeb.Components.FulcrumEditor
   alias PscWeb.Components.ShareDialog
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.Components.UI.Tooltip, as: UITooltip
 
+  # The Fulcrums button shows the active fulcrums as colour dots. Hovering it (or
+  # tabbing to it) opens the picker pills; a tap opens the selector dialog.
+  # Hover only exists on pointer devices, so a phone never shows the pills.
+  attr :cells, :map, required: true
+  # The phone cluster has the button but no picker: a tap opens the dialog.
+  attr :compact?, :boolean, default: false
+
+  defp fulcrum_menu(assigns) do
+    fulcrums = Fulcrums.list(assigns.cells)
+    active = Fulcrums.active_ids(assigns.cells)
+
+    assigns =
+      assign(assigns,
+        fulcrums: fulcrums,
+        active: active,
+        active_fulcrums: Enum.filter(fulcrums, &(&1["id"] in active)),
+        mode: Fulcrums.mode(assigns.cells)
+      )
+
+    ~H"""
+    <div class="group/fulcrums relative shrink-0">
+      <UIButton.button
+        type="button"
+        id={if @compact?, do: "fulcrums-canvas-button-compact", else: "fulcrums-canvas-button"}
+        phx-click="open_fulcrums"
+        variant="outline"
+        size="sm"
+        class="gap-1.5"
+        title="Fulcrums: pick which ones to highlight"
+      >
+        <.icon name="hero-swatch" class="size-4" /> <span class="hidden sm:inline">Fulcrums</span>
+        <span
+          :for={fulcrum <- @active_fulcrums}
+          class={["size-2.5 rounded-full", swatch_class(fulcrum["color"])]}
+          aria-hidden="true"
+        ></span>
+      </UIButton.button>
+
+      <div
+        :if={not @compact? and @fulcrums != [] and @mode != "off"}
+        class={[
+          "invisible absolute right-0 top-full z-50 w-max pt-1.5 opacity-0 transition-opacity",
+          "group-hover/fulcrums:visible group-hover/fulcrums:opacity-100",
+          "group-has-[:focus-visible]/fulcrums:visible group-has-[:focus-visible]/fulcrums:opacity-100"
+        ]}
+      >
+        <div class="max-w-[min(90vw,28rem)] rounded-xl border border-base-content/10 bg-base-200 p-2 shadow-lg">
+          <FulcrumEditor.picker fulcrums={@fulcrums} active_ids={@active} mode={@mode} />
+        </div>
+      </div>
+    </div>
+    """
+  end
+
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
-  attr :fulcrums?, :boolean, default: true
+  # The canvas's cells: the fulcrum button reads its mode and active fulcrums.
+  attr :cells, :map, default: nil
   attr :controls?, :boolean, default: true
 
   def header(assigns) do
@@ -32,7 +90,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         presence={@presence}
         status={@status}
         can_share?={@can_share?}
-        fulcrums?={@fulcrums?}
+        cells={@cells}
       />
     </div>
     """
@@ -41,7 +99,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
-  attr :fulcrums?, :boolean, default: true
+  attr :cells, :map, default: nil
   attr :class, :any, default: nil
 
   @doc """
@@ -102,19 +160,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         </UIButton.button>
       </div>
 
-      <div :if={@fulcrums?} class="shrink-0">
-        <UIButton.button
-          type="button"
-          id="fulcrums-canvas-button"
-          phx-click="open_fulcrums"
-          variant="outline"
-          size="sm"
-          class="gap-1.5"
-          title="Named sets of cells that can be highlighted together"
-        >
-          <.icon name="hero-swatch" class="size-4" /> <span>Fulcrums</span>
-        </UIButton.button>
-      </div>
+      <.fulcrum_menu :if={@cells && Fulcrums.enabled?(@cells)} cells={@cells} />
 
       <%= if @can_share? do %>
         <div class="shrink-0">
@@ -155,6 +201,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
+  attr :cells, :map, default: nil
 
   def actions(assigns) do
     ~H"""
@@ -177,6 +224,8 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         </UITooltip.tooltip_trigger>
         <.active_users_list presence={@presence} />
       </UITooltip.tooltip>
+
+      <.fulcrum_menu :if={@cells && Fulcrums.enabled?(@cells)} cells={@cells} compact? />
 
       <.status_pill
         id="canvas-save-state-compact"

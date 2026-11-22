@@ -142,6 +142,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:pending_load, nil)
         |> assign(:pending_fork, nil)
         |> assign(:fork_form, nil)
+        |> assign(:fulcrums_open, false)
         |> assign(:fulcrum_draft, nil)
         |> load_head()
         |> subscribe_to_canvas(id)
@@ -852,12 +853,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # ─── Fulcrums ───
   #
   # Highlighting is a shared view choice (`set_active_fulcrums`, never a new
-  # version). Editing the definitions is content: the dialog works on a draft
-  # and saves it as one `set_fulcrums` operation, which starts a version like
-  # any edit.
+  # version). The canvas only picks from the fulcrums its template defined;
+  # defining them is the template designer's job, so nothing here edits them.
 
   # With fulcrums off (a template setting) the canvas neither highlights nor
-  # edits them; the controls are hidden and these events are ignored.
+  # opens the picker; the controls are hidden and these events are ignored.
   def handle_event("toggle_fulcrum", %{"id" => id}, socket) do
     if Fulcrums.enabled?(socket.assigns.cells) do
       ids = Fulcrums.toggle_active(socket.assigns.cells, id)
@@ -869,7 +869,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   def handle_event("open_fulcrums", _params, socket) do
     if Fulcrums.enabled?(socket.assigns.cells),
-      do: {:noreply, assign(socket, :fulcrum_draft, Fulcrums.list(socket.assigns.cells))},
+      do: {:noreply, assign(socket, :fulcrums_open, true)},
       else: {:noreply, socket}
   end
 
@@ -882,6 +882,18 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   def handle_event("close_fulcrums", _params, socket) do
+    {:noreply, assign(socket, :fulcrums_open, false)}
+  end
+
+  # The Info tab edits the definitions. The edit works on a draft and is saved
+  # as one `set_fulcrums` operation, which starts a version like any edit.
+  def handle_event("edit_fulcrums", _params, socket) do
+    if Fulcrums.enabled?(socket.assigns.cells),
+      do: {:noreply, assign(socket, :fulcrum_draft, Fulcrums.list(socket.assigns.cells))},
+      else: {:noreply, socket}
+  end
+
+  def handle_event("cancel_edit_fulcrums", _params, socket) do
     {:noreply, assign(socket, :fulcrum_draft, nil)}
   end
 
@@ -2664,6 +2676,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
+          cells={@cells}
         />
       </:header_actions>
 
@@ -2679,7 +2692,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
-          fulcrums?={Fulcrums.enabled?(@cells)}
+          cells={@cells}
           controls?={@active_tab != "editor" and (@active_tab != "agent" or is_nil(@agent_session))}
         />
         <Header.share_dialog
@@ -2690,7 +2703,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <PivotPanel.pivot_dialog form={@pivot_form} />
         <PivotPanel.load_dialog pivot={@pending_load} />
         <PivotPanel.fork_dialog pivot={@pending_fork} form={@fork_form} />
-        <.fulcrums_dialog draft={@fulcrum_draft} cells={@cells} />
+        <.fulcrums_dialog open={@fulcrums_open} cells={@cells} />
+        <.fulcrums_edit_dialog draft={@fulcrum_draft} cells={@cells} />
         <%!-- Removing a row or column that holds content asks first: the
         operation is destructive, and the event log keeps the old values only
         until pruning folds them. --%>
@@ -2740,6 +2754,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           later and owns the URL. --%>
           <div
             id="canvas-panel-editor"
+            data-fulcrums-active={to_string(Fulcrums.active_ids(@cells) != [])}
             role="tabpanel"
             aria-labelledby="canvas-tab-editor"
             class={
@@ -2753,11 +2768,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               ]
             }
           >
-            <FulcrumEditor.picker
-              fulcrums={Fulcrums.list(@cells)}
-              active_ids={Fulcrums.active_ids(@cells)}
-              mode={Fulcrums.mode(@cells)}
-            />
             <.canvas_board
               cells={@cells}
               c_name={@c_name}
@@ -2848,7 +2858,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               presence={@presence}
               status={if @active_tab == "agent", do: @status, else: nil}
               can_share?={@canvas.author_id == @user_id}
-              fulcrums?={Fulcrums.enabled?(@cells)}
+              cells={@cells}
             />
           </div>
 
@@ -2922,17 +2932,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     """
   end
 
-  # Editing the canvas's fulcrums. The mode (one or several at once) is the
-  # template's setting, shown here for reference.
+  # Editing the canvas's fulcrums, from the Info tab: names, colours and cells.
+  # Works on a draft; Save applies it as one versioned operation.
   attr :draft, :any, required: true
   attr :cells, :map, required: true
 
-  defp fulcrums_dialog(assigns) do
+  defp fulcrums_edit_dialog(assigns) do
     ~H"""
-    <UIDialog.dialog :if={@draft} id="fulcrums-dialog" open on-close="close_fulcrums">
+    <UIDialog.dialog :if={@draft} id="fulcrums-edit-dialog" open on-close="cancel_edit_fulcrums">
       <UIDialog.dialog_content open class="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <UIDialog.dialog_header>
-          <UIDialog.dialog_title>Fulcrums</UIDialog.dialog_title>
+          <UIDialog.dialog_title>Edit fulcrums</UIDialog.dialog_title>
           <UIDialog.dialog_description>
             Named sets of cells that can be highlighted together. {Fulcrums.blurb(
               Fulcrums.mode(@cells)
@@ -2943,11 +2953,45 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <FulcrumEditor.editor id="canvas-fulcrums" fulcrums={@draft} cells={@cells} />
 
         <UIDialog.dialog_footer class="flex flex-row justify-end gap-2 pt-2">
-          <UIButton.button type="button" variant="outline" phx-click="close_fulcrums">
+          <UIButton.button type="button" variant="outline" phx-click="cancel_edit_fulcrums">
             Cancel
           </UIButton.button>
           <UIButton.button type="button" id="fulcrums-save" phx-click="save_fulcrums">
             Save fulcrums
+          </UIButton.button>
+        </UIDialog.dialog_footer>
+      </UIDialog.dialog_content>
+    </UIDialog.dialog>
+    """
+  end
+
+  # Picking the fulcrums to highlight. Choosing one is the same toggle as the
+  # picker chips, so it applies at once and needs no save. Defining them is
+  # the template designer's job.
+  attr :open, :boolean, required: true
+  attr :cells, :map, required: true
+
+  defp fulcrums_dialog(assigns) do
+    ~H"""
+    <UIDialog.dialog :if={@open} id="fulcrums-dialog" open on-close="close_fulcrums">
+      <UIDialog.dialog_content open class="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <UIDialog.dialog_header>
+          <UIDialog.dialog_title>Fulcrums</UIDialog.dialog_title>
+          <UIDialog.dialog_description>
+            Pick a fulcrum to highlight its cells for everyone on this canvas. {Fulcrums.blurb(
+              Fulcrums.mode(@cells)
+            )}
+          </UIDialog.dialog_description>
+        </UIDialog.dialog_header>
+
+        <FulcrumEditor.selector
+          fulcrums={Fulcrums.list(@cells)}
+          active_ids={Fulcrums.active_ids(@cells)}
+        />
+
+        <UIDialog.dialog_footer class="flex flex-row justify-end gap-2 pt-2">
+          <UIButton.button type="button" id="fulcrums-done" phx-click="close_fulcrums">
+            Done
           </UIButton.button>
         </UIDialog.dialog_footer>
       </UIDialog.dialog_content>

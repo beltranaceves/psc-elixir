@@ -19,7 +19,6 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   import PscWeb.UnstrCanvasLive.CellColors, only: [colors_button: 1, colors_panel: 1]
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
-  alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.Structure
   alias PscWeb.Components.ImageBoard, as: ImageFrame
   alias PscWeb.Components.UI.Button, as: UIButton
@@ -62,7 +61,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
             presence={@presence}
             status={@status}
             can_share?={@can_share?}
-            fulcrums?={Fulcrums.enabled?(@cells)}
+            cells={@cells}
           />
         </div>
 
@@ -138,6 +137,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                 <Cell.card
                   cell_key={card.key}
                   highlight={@highlights[card.key]}
+                  joins={Structure.joined_sides(@cells, @highlights, card.key)}
                   cell_data={Map.get(@cells, card.key, %{})}
                   edit_structure?={@edit_structure?}
                   user_id={@user_id}

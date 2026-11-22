@@ -175,10 +175,10 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
               id="canvas-info-edit-fulcrums"
               variant="outline"
               size="sm"
-              phx-click="open_fulcrums"
+              phx-click="edit_fulcrums"
               class="ml-auto gap-1.5"
             >
-              <.icon name="hero-swatch" class="size-4" /> Edit fulcrums
+              <.icon name="hero-pencil-square" class="size-4" /> Edit fulcrums
             </UIButton.button>
           </div>
         </.section>

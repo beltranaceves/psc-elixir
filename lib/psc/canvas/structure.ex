@@ -1170,6 +1170,55 @@ defmodule Psc.Canvas.Structure do
 
   # A table never wraps: the last cell of a row has nothing to its right, the
   # way the DOM-based swipe always behaved.
+  # How close two edges must be to count as touching, in the card's own units
+  # (table cells are 1 apart; bento and image placements are fractional).
+  @join_tolerance 0.05
+
+  @doc """
+  The sides on which the card `key` touches a card of the same highlight: those
+  edges are drawn as one shape with the neighbour, so no border runs between
+  them. `highlights` maps a card key to the colours highlighting it (the first
+  colour decides the group). Works for every layout, by geometry.
+  """
+  def joined_sides(map, highlights, key) do
+    case Map.get(highlights, key) do
+      [token | _] ->
+        cards = cards(map)
+
+        case Enum.find(cards, &(&1.key == key)) do
+          nil ->
+            []
+
+          card ->
+            cards
+            |> Enum.filter(fn other ->
+              other.key != key and match?([^token | _], Map.get(highlights, other.key))
+            end)
+            |> Enum.flat_map(&touching_sides(card, &1))
+            |> Enum.uniq()
+        end
+
+      _ ->
+        []
+    end
+  end
+
+  # The sides of `a` on which `b` shares an edge of positive length.
+  defp touching_sides(a, b) do
+    v_overlap = min(a.y + a.h, b.y + b.h) - max(a.y, b.y) > @join_tolerance
+    h_overlap = min(a.x + a.w, b.x + b.w) - max(a.x, b.x) > @join_tolerance
+
+    [
+      v_overlap && touches?(a.x + a.w, b.x) && :right,
+      v_overlap && touches?(b.x + b.w, a.x) && :left,
+      h_overlap && touches?(a.y + a.h, b.y) && :bottom,
+      h_overlap && touches?(b.y + b.h, a.y) && :top
+    ]
+    |> Enum.filter(& &1)
+  end
+
+  defp touches?(p, q), do: abs(p - q) < @join_tolerance
+
   defp table_neighbours(map, key) do
     at =
       map

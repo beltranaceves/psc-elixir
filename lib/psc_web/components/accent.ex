@@ -81,21 +81,70 @@ defmodule PscWeb.Components.Accent do
   def outline_class(token), do: Map.get(@outline, token)
 
   # A highlighted fulcrum cell: a heavier ring than an accent outline, in the
-  # stronger shade, so it reads as a selection rather than a decoration.
+  # stronger shade, plus a soft wash of the same colour (`fulcrum-wash-*` in
+  # app.css), so it reads as a selection rather than a decoration.
+  # Muted on purpose: a 400 shade at partial opacity, with a rounded outer
+  # corner, so a highlight tints the board instead of shouting over it.
   @highlight %{
-    "sky" => "ring-[3px] ring-inset ring-sky-500",
-    "violet" => "ring-[3px] ring-inset ring-violet-500",
-    "emerald" => "ring-[3px] ring-inset ring-emerald-500",
-    "amber" => "ring-[3px] ring-inset ring-amber-500",
-    "rose" => "ring-[3px] ring-inset ring-rose-500",
-    "teal" => "ring-[3px] ring-inset ring-teal-500",
-    "indigo" => "ring-[3px] ring-inset ring-indigo-500",
-    "slate" => "ring-[3px] ring-inset ring-slate-500"
+    "sky" => "ring-2 ring-inset ring-sky-400/60 rounded-md fulcrum-wash-sky",
+    "violet" => "ring-2 ring-inset ring-violet-400/60 rounded-md fulcrum-wash-violet",
+    "emerald" => "ring-2 ring-inset ring-emerald-400/60 rounded-md fulcrum-wash-emerald",
+    "amber" => "ring-2 ring-inset ring-amber-400/60 rounded-md fulcrum-wash-amber",
+    "rose" => "ring-2 ring-inset ring-rose-400/60 rounded-md fulcrum-wash-rose",
+    "teal" => "ring-2 ring-inset ring-teal-400/60 rounded-md fulcrum-wash-teal",
+    "indigo" => "ring-2 ring-inset ring-indigo-400/60 rounded-md fulcrum-wash-indigo",
+    "slate" => "ring-2 ring-inset ring-slate-400/60 rounded-md fulcrum-wash-slate"
   }
 
-  @doc "The ring a cell takes while a fulcrum that includes it is highlighted."
+  @doc """
+  The ring a cell takes while a fulcrum that includes it is highlighted. It
+  also carries the fulcrum's wash, so the same class styles the chips and rows
+  that select it.
+  """
   def highlight_class(nil), do: nil
   def highlight_class(token), do: Map.get(@highlight, token)
+
+  # A card's highlight is split: the wash on the card itself, and a frame drawn
+  # on an overlay, so the frame can lose the sides that join a neighbour.
+  @wash %{
+    "sky" => "fulcrum-wash-sky",
+    "violet" => "fulcrum-wash-violet",
+    "emerald" => "fulcrum-wash-emerald",
+    "amber" => "fulcrum-wash-amber",
+    "rose" => "fulcrum-wash-rose",
+    "teal" => "fulcrum-wash-teal",
+    "indigo" => "fulcrum-wash-indigo",
+    "slate" => "fulcrum-wash-slate"
+  }
+
+  @frame %{
+    "sky" => "border-sky-400/60",
+    "violet" => "border-violet-400/60",
+    "emerald" => "border-emerald-400/60",
+    "amber" => "border-amber-400/60",
+    "rose" => "border-rose-400/60",
+    "teal" => "border-teal-400/60",
+    "indigo" => "border-indigo-400/60",
+    "slate" => "border-slate-400/60"
+  }
+
+  @doc "The wash of a highlighted card (see app.css)."
+  def highlight_wash(nil), do: nil
+  def highlight_wash(token), do: Map.get(@wash, token)
+
+  @doc "The frame colour of a highlighted card."
+  def highlight_frame(nil), do: nil
+  def highlight_frame(token), do: Map.get(@frame, token)
+
+  # A selected fulcrum's chip or row: the cell's colour and wash, with a thinner
+  # ring so it stays a control rather than a cell.
+  @selected Map.new(@highlight, fn {token, classes} ->
+              {token, String.replace(classes, "ring-2 ", "ring-1 ")}
+            end)
+
+  @doc "The ring and wash of a selected fulcrum's chip or row."
+  def selected_class(nil), do: nil
+  def selected_class(token), do: Map.get(@selected, token)
 
   @doc """
   A thin bar carrying the accent color.

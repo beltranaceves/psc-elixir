@@ -143,4 +143,57 @@ defmodule Psc.CanvasFulcrumsTest do
       assert root.cells["fulcrums"] == canvas.cells["fulcrums"]
     end
   end
+
+  describe "joined_sides/3" do
+    # The PSC table: problem, leverage, solution_cluster on the first row;
+    # outer_environment, inner_environment, evolvability_cluster below.
+    setup do
+      %{cells: Canvas.psc_cells()}
+    end
+
+    test "neighbours of the same colour join on the shared edge", %{cells: cells} do
+      highlights = %{"problem" => ["rose"], "leverage" => ["rose"]}
+
+      assert Structure.joined_sides(cells, highlights, "problem") == [:right]
+      assert Structure.joined_sides(cells, highlights, "leverage") == [:left]
+    end
+
+    test "vertical neighbours join too", %{cells: cells} do
+      highlights = %{"problem" => ["rose"], "outer_environment" => ["rose"]}
+
+      assert Structure.joined_sides(cells, highlights, "problem") == [:bottom]
+      assert Structure.joined_sides(cells, highlights, "outer_environment") == [:top]
+    end
+
+    test "a cell joins every highlighted neighbour, on each side", %{cells: cells} do
+      highlights = %{
+        "leverage" => ["rose"],
+        "problem" => ["rose"],
+        "solution_cluster" => ["rose"],
+        "inner_environment" => ["rose"]
+      }
+
+      assert Enum.sort(Structure.joined_sides(cells, highlights, "leverage")) ==
+               [:bottom, :left, :right]
+    end
+
+    test "different colours do not join", %{cells: cells} do
+      highlights = %{"problem" => ["rose"], "leverage" => ["sky"]}
+
+      assert Structure.joined_sides(cells, highlights, "problem") == []
+      assert Structure.joined_sides(cells, highlights, "leverage") == []
+    end
+
+    test "diagonal cells do not join", %{cells: cells} do
+      highlights = %{"problem" => ["rose"], "inner_environment" => ["rose"]}
+
+      assert Structure.joined_sides(cells, highlights, "problem") == []
+    end
+
+    test "an unhighlighted cell has no joins", %{cells: cells} do
+      highlights = %{"leverage" => ["rose"]}
+
+      assert Structure.joined_sides(cells, highlights, "problem") == []
+    end
+  end
 end

@@ -33,6 +33,9 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   attr :read_only?, :boolean, default: false
   # The colours of the highlighted fulcrums that include this cell, or nil.
   attr :highlight, :list, default: nil
+  # The sides shared with a neighbour in the same highlight (see
+  # `Structure.joined_sides/3`): the frame is not drawn there.
+  attr :joins, :list, default: []
 
   def card(assigns) do
     background = normalize_background(Map.get(assigns.cell_data, "background"))
@@ -55,13 +58,29 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
           "canvas-cell transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
           background_class(@background) || "bg-base-300",
           # A fulcrum highlight takes the place of the accent outline.
-          if(@highlight, do: highlight_class(hd(@highlight)), else: outline_class(@outline)),
+          if(@highlight,
+            do: [highlight_wash(hd(@highlight)), joint_corners(@joins)],
+            else: outline_class(@outline)
+          ),
           !@read_only? && "cursor-text",
           @focus_cell == @cell_key && "ring-2 ring-primary ring-inset",
           @class
         ]
       }
     >
+      <%!-- The frame of a highlighted card. It is an overlay, so it sits above the
+      body, and it drops the sides that join a neighbour in the same highlight:
+      the two cards then read as one shape. --%>
+      <span
+        :if={@highlight}
+        aria-hidden="true"
+        class={[
+          "pointer-events-none absolute inset-0 z-10 border-2",
+          highlight_frame(hd(@highlight)),
+          joint_borders(@joins),
+          joint_corners(@joins)
+        ]}
+      ></span>
       <%!-- One dot per highlighted fulcrum, so overlapping fulcrums stay
       readable when only one ring colour can be drawn. --%>
       <span
@@ -344,6 +363,29 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
     </.form>
     """
   end
+
+  # The corners next to a joined side stay square, so two joined cards meet
+  # without a notch in the wash or the frame. Explicit classes, so they win over
+  # a caller's own radius.
+  defp joint_corners(joins) do
+    [
+      if(joined?(joins, [:top, :left]), do: "rounded-tl-none", else: "rounded-tl-md"),
+      if(joined?(joins, [:top, :right]), do: "rounded-tr-none", else: "rounded-tr-md"),
+      if(joined?(joins, [:bottom, :right]), do: "rounded-br-none", else: "rounded-br-md"),
+      if(joined?(joins, [:bottom, :left]), do: "rounded-bl-none", else: "rounded-bl-md")
+    ]
+  end
+
+  defp joint_borders(joins) do
+    Enum.map(joins, fn
+      :top -> "border-t-0"
+      :right -> "border-r-0"
+      :bottom -> "border-b-0"
+      :left -> "border-l-0"
+    end)
+  end
+
+  defp joined?(joins, sides), do: Enum.any?(sides, &(&1 in joins))
 
   # A fulcrum highlight takes the place of the accent outline.
   defp text_outline([token | _], _cell_data), do: highlight_class(token)

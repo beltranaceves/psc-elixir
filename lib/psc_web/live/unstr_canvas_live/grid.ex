@@ -7,7 +7,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   import PscWeb.CoreComponents, only: [icon: 1]
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
-  alias Psc.Canvas.Fulcrums
+  alias Psc.Canvas.Structure
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
 
@@ -65,7 +65,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
             presence={@presence}
             status={@status}
             can_share?={@can_share?}
-            fulcrums?={Fulcrums.enabled?(@cells)}
+            cells={@cells}
           />
         </div>
 
@@ -356,13 +356,22 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                   <%= for {column, col_index} <- Enum.with_index(@cells["columns"] || []) do %>
                     <% layout = @cells["layout"] || [] %> <% cell_key =
                       Enum.at(Enum.at(layout, row_index, []), col_index) %>
-                    <td class="relative border border-base-content/20 align-top">
+                    <% joins =
+                      if(cell_key,
+                        do: Structure.joined_sides(@cells, @highlights, cell_key),
+                        else: []
+                      ) %>
+                    <td class={[
+                      "relative border border-base-content/20 align-top",
+                      joined_borders(joins)
+                    ]}>
                       <%= if cell_key do %>
                         <% cell_data =
                           get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
                         <Cell.card
                           cell_key={cell_key}
                           highlight={@highlights[cell_key]}
+                          joins={joins}
                           cell_data={cell_data}
                           edit_structure?={@edit_structure?}
                           user_id={@user_id}
@@ -423,6 +432,17 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
 
   # A canvas with no rows or no columns has nothing to render as a table: the
   # empty state takes over, and anyone with access builds the structure in place.
+  # A table cell's own border is the grid line; where it joins a neighbour in the
+  # same highlight the line is hidden, so the two highlighted cells read as one.
+  defp joined_borders(joins) do
+    Enum.map(joins, fn
+      :top -> "border-t-transparent"
+      :right -> "border-r-transparent"
+      :bottom -> "border-b-transparent"
+      :left -> "border-l-transparent"
+    end)
+  end
+
   defp structure_empty?(cells) do
     Map.get(cells, "rows", []) == [] or Map.get(cells, "columns", []) == []
   end

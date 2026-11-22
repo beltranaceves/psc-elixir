@@ -90,18 +90,23 @@ defmodule PscWeb.CanvasFulcrumsLiveTest do
       # A stray event changes nothing.
       render_click(lv, "toggle_fulcrum", %{"id" => "f1"})
       render_click(lv, "open_fulcrums", %{})
+      render_click(lv, "edit_fulcrums", %{})
       refute has_element?(lv, "[data-fulcrum-highlight]")
       refute has_element?(lv, "#fulcrums-dialog")
+      refute has_element?(lv, "#fulcrums-edit-dialog")
     end
 
-    test "editing the fulcrums is a versioned change", %{conn: conn, user: user} do
+    test "the Info tab edits the fulcrums, and saving is a versioned change",
+         %{conn: conn, user: user} do
       {:ok, canvas} =
         Canvas.create_unstr_canvas(user.id, %{"name" => "Plan", "cells" => Canvas.psc_cells()})
 
-      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=info")
       refute has_element?(lv, "#fulcrum-picker")
 
-      lv |> element("#fulcrums-canvas-button") |> render_click()
+      lv |> element("#canvas-info-edit-fulcrums") |> render_click()
+      assert has_element?(lv, "#fulcrums-edit-dialog")
+
       lv |> element("#canvas-fulcrums-add") |> render_click()
 
       lv
@@ -109,10 +114,39 @@ defmodule PscWeb.CanvasFulcrumsLiveTest do
       |> render_click()
 
       lv |> element("#fulcrums-save") |> render_click()
+      refute has_element?(lv, "#fulcrums-edit-dialog")
 
-      assert has_element?(lv, "#fulcrum-chip-f1")
       assert [%{"cells" => ["problem"]}] = Canvas.get_unstr_canvas_content(canvas.id)["fulcrums"]
       assert [_root, %{kind: "draft"}] = Canvas.list_pivots(canvas.id)
+    end
+
+    test "the Fulcrums dialog picks a fulcrum without a version and has no editing",
+         %{conn: conn, user: user} do
+      canvas = canvas_with_fulcrums(user, "single")
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+
+      lv |> element("#fulcrums-canvas-button") |> render_click()
+
+      assert has_element?(lv, "#fulcrums-dialog")
+      assert has_element?(lv, "#fulcrum-select-f1", "Risk")
+      assert has_element?(lv, "#fulcrum-select-f2", "Bet")
+
+      # Nothing to rename, recolour or re-cell from here.
+      refute has_element?(lv, "#fulcrums-dialog input")
+      refute has_element?(lv, "#fulcrums-dialog [phx-click='fulcrum_add']")
+      refute has_element?(lv, "#fulcrums-dialog [phx-click='fulcrum_toggle_cell']")
+      refute has_element?(lv, "#fulcrums-save")
+
+      lv |> element("#fulcrum-select-f1") |> render_click()
+
+      assert has_element?(lv, "#fulcrum-select-f1[aria-pressed='true']")
+      assert has_element?(lv, "#cell-card-problem[data-fulcrum-highlight]")
+      assert has_element?(lv, "#fulcrum-chip-f1[aria-pressed='true']")
+      assert length(Canvas.list_pivots(canvas.id)) == 1
+
+      lv |> element("#fulcrums-done") |> render_click()
+      refute has_element?(lv, "#fulcrums-dialog")
+      assert has_element?(lv, "#cell-card-problem[data-fulcrum-highlight]")
     end
   end
 

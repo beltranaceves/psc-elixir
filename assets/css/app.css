@@ -439,6 +439,47 @@
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
   }
 
+  /* A highlighted fulcrum cell gets a soft wash of its colour under the text
+     (the colour classes are set by PscWeb.Components.Accent). */
+  .canvas-cell[data-fulcrum-highlight] {
+    background-image: linear-gradient(var(--fulcrum-wash), var(--fulcrum-wash));
+    transition:
+      background-color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .fulcrum-wash-sky {
+    --fulcrum-wash: color-mix(in oklab, var(--color-sky-500) 8%, transparent);
+  }
+  .fulcrum-wash-violet {
+    --fulcrum-wash: color-mix(in oklab, var(--color-violet-500) 8%, transparent);
+  }
+  .fulcrum-wash-emerald {
+    --fulcrum-wash: color-mix(in oklab, var(--color-emerald-500) 8%, transparent);
+  }
+  .fulcrum-wash-amber {
+    --fulcrum-wash: color-mix(in oklab, var(--color-amber-500) 8%, transparent);
+  }
+  .fulcrum-wash-rose {
+    --fulcrum-wash: color-mix(in oklab, var(--color-rose-500) 8%, transparent);
+  }
+  .fulcrum-wash-teal {
+    --fulcrum-wash: color-mix(in oklab, var(--color-teal-500) 8%, transparent);
+  }
+  .fulcrum-wash-indigo {
+    --fulcrum-wash: color-mix(in oklab, var(--color-indigo-500) 8%, transparent);
+  }
+  .fulcrum-wash-slate {
+    --fulcrum-wash: color-mix(in oklab, var(--color-slate-500) 8%, transparent);
+  }
+
+  /* While fulcrums are highlighted, the cells outside them recede so the
+     highlighted ones read at a glance. A cell being edited stays put. */
+  #canvas-panel-editor[data-fulcrums-active="true"]
+    .canvas-cell:not([data-fulcrum-highlight]):not(:focus-within) {
+    opacity: 0.4;
+  }
+
   .canvas-cell:focus-within {
     position: absolute;
     top: 0;

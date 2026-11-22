@@ -36,7 +36,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
   attr :presence, :map, default: %{}
   attr :status, :map, default: nil
   attr :can_share?, :boolean, default: false
-  attr :fulcrums?, :boolean, default: true
+  attr :cells, :map, default: nil
 
   def panel(assigns) do
     assigns = assign(assigns, :suggestions, @suggestions)
@@ -121,7 +121,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                 presence={@presence}
                 status={@status}
                 can_share?={@can_share?}
-                fulcrums?={@fulcrums?}
+                cells={@cells}
               />
             </div>
 
