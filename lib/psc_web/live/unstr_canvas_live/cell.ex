@@ -28,6 +28,11 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   attr :colors_control?, :boolean, default: true
   attr :body_class, :any, default: nil
   attr :outline, :string, default: nil
+  # A read-only card (a pivot preview in the History tab) renders the same
+  # markup without ids, hooks or forms, so it can sit beside the live editor.
+  attr :read_only?, :boolean, default: false
+  # The colours of the highlighted fulcrums that include this cell, or nil.
+  attr :highlight, :list, default: nil
 
   def card(assigns) do
     background = normalize_background(Map.get(assigns.cell_data, "background"))
@@ -39,29 +44,43 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
 
     ~H"""
     <div
-      id={"cell-card-" <> @cell_key}
-      phx-hook="CellFocus"
+      id={!@read_only? && "cell-card-" <> @cell_key}
+      phx-hook={!@read_only? && "CellFocus"}
       data-cell-key={@cell_key}
       data-cell-focused={to_string(@focus_cell == @cell_key)}
       data-cell-nav={@nav && Jason.encode!(@nav)}
-      class={[
-        "canvas-cell cursor-text transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
-        background_class(@background) || "bg-base-300",
-        outline_class(@outline),
-        @focus_cell == @cell_key && "ring-2 ring-primary ring-inset",
-        @class
-      ]}
+      data-fulcrum-highlight={@highlight && "true"}
+      class={
+        [
+          "canvas-cell transition-shadow focus-within:ring-2 focus-within:ring-primary/35 focus-within:ring-inset",
+          background_class(@background) || "bg-base-300",
+          # A fulcrum highlight takes the place of the accent outline.
+          if(@highlight, do: highlight_class(hd(@highlight)), else: outline_class(@outline)),
+          !@read_only? && "cursor-text",
+          @focus_cell == @cell_key && "ring-2 ring-primary ring-inset",
+          @class
+        ]
+      }
     >
+      <%!-- One dot per highlighted fulcrum, so overlapping fulcrums stay
+      readable when only one ring colour can be drawn. --%>
+      <span
+        :if={@highlight && length(@highlight) > 1}
+        class="absolute right-1.5 top-1.5 z-20 flex gap-0.5"
+        aria-hidden="true"
+      >
+        <span :for={token <- @highlight} class={["size-2 rounded-full", swatch_class(token)]}></span>
+      </span>
       <%!-- The colour combination of this cell (column on top,
         row on the left) is only shown in the mobile fullscreen
         view, where there is room for it. --%>
       <.accent_bar
-        id={"accent-bar-cell-#{@cell_key}-column"}
+        id={!@read_only? && "accent-bar-cell-#{@cell_key}-column"}
         token={@accent_top}
         class="cell-accent absolute inset-x-0 top-0 h-1 z-10"
       />
       <.accent_bar
-        id={"accent-bar-cell-#{@cell_key}-row"}
+        id={!@read_only? && "accent-bar-cell-#{@cell_key}-row"}
         token={@accent_left}
         orientation={:left}
         class="cell-accent z-10"
@@ -117,7 +136,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
           <% value = Map.get(@cell_data, field, "") %>
           <% field_title = Psc.Canvas.field_title(@cell_data, field) %>
           <div
-            id={"cell-field-" <> @cell_key <> "-" <> field}
+            id={!@read_only? && "cell-field-" <> @cell_key <> "-" <> field}
             class="mb-1 flex min-w-0 flex-col"
           >
             <%= if @edit_structure? do %>
@@ -159,7 +178,17 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
               </label>
             <% end %>
 
+            <div
+              :if={@read_only?}
+              class={[
+                "md-render prose prose-sm dark:prose-invert break-words mb-0.5 text-base-content p-1",
+                @surface
+              ]}
+            >
+              {Phoenix.HTML.raw(PscWeb.Markdown.render(value, empty_message: "Empty"))}
+            </div>
             <.form
+              :if={!@read_only?}
               for={%{}}
               id={"cell-form-" <> @cell_key <> "-" <> field}
               phx-change="update_cell"
@@ -202,6 +231,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
       </div>
 
       <button
+        :if={!@read_only?}
         type="button"
         data-cell-exit="true"
         class="cell-exit fixed bottom-5 right-5 z-[70] size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-content shadow-lg transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-base-300"
@@ -270,6 +300,21 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   attr :edit_structure?, :boolean, default: false
   attr :class, :any, default: nil
   attr :placeholder, :string, default: "Type a label…"
+  attr :read_only?, :boolean, default: false
+  attr :highlight, :list, default: nil
+
+  def text(%{read_only?: true} = assigns) do
+    ~H"""
+    <div class={[
+      "flex h-full w-full items-center justify-center rounded-md border border-base-content/10 px-2 text-center text-sm font-semibold text-base-content shadow-sm",
+      background_class(Map.get(@cell_data, "background")) || "bg-base-100/90",
+      text_outline(@highlight, @cell_data),
+      @class
+    ]}>
+      <span class="truncate">{Map.get(@cell_data, "content", "")}</span>
+    </div>
+    """
+  end
 
   def text(assigns) do
     ~H"""
@@ -291,7 +336,7 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
         class={[
           "h-full w-full rounded-md border px-2 text-center text-sm font-semibold text-base-content shadow-sm outline-none transition placeholder:font-normal placeholder:text-base-content/40 focus:border-primary",
           background_class(Map.get(@cell_data, "background")) || "bg-base-100/90 focus:bg-base-100",
-          outline_class(Map.get(@cell_data, "accent")),
+          text_outline(@highlight, @cell_data),
           @edit_structure? && "border-primary/40",
           not @edit_structure? && "border-base-content/10 hover:border-base-content/25"
         ]}
@@ -299,6 +344,10 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
     </.form>
     """
   end
+
+  # A fulcrum highlight takes the place of the accent outline.
+  defp text_outline([token | _], _cell_data), do: highlight_class(token)
+  defp text_outline(_highlight, cell_data), do: outline_class(Map.get(cell_data, "accent"))
 
   defp normalize_background(""), do: nil
   defp normalize_background(token), do: token

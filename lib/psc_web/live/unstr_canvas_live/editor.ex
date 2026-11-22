@@ -11,11 +11,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias Psc.Agent.Config, as: AgentConfig
   alias Psc.Agent.Files, as: AgentFiles
   alias Psc.Canvas
+  alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
   alias Psc.Insights
   alias Psc.Notes
   alias PscWeb.AgentUploads
+  alias PscWeb.Components.FulcrumEditor
   alias PscWeb.Markdown
   alias PscWeb.Presence
   alias PscWeb.UnstrCanvasLive.AnalysisPanel
@@ -26,6 +28,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias PscWeb.UnstrCanvasLive.ImageCanvas
   alias PscWeb.UnstrCanvasLive.InfoPanel
   alias PscWeb.UnstrCanvasLive.NotesPanel
+  alias PscWeb.UnstrCanvasLive.PivotPanel
   alias PscWeb.UnstrCanvasLive.Save
   alias PscWeb.UnstrCanvasLive.Tabs
   require Logger
@@ -131,6 +134,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:structure_accent_picker, nil)
         |> assign(:structure_colors_picker, nil)
         |> assign(:structure_remove_confirm, nil)
+        |> assign(:pivots, [])
+        |> assign(:selected_pivot_id, nil)
+        |> assign(:pivot_form, nil)
+        |> assign(:pivot_target, nil)
+        |> assign(:pivot_prompt, nil)
+        |> assign(:pending_load, nil)
+        |> assign(:pending_fork, nil)
+        |> assign(:fork_form, nil)
+        |> assign(:fulcrum_draft, nil)
+        |> load_head()
         |> subscribe_to_canvas(id)
 
       if connected?(socket) do
@@ -173,7 +186,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     if cells == socket.assigns.cells do
       socket
     else
-      socket = record_operation(socket, operation)
+      socket = socket |> record_operation(operation) |> maybe_start_draft(operation)
 
       Logger.debug(fn ->
         "[UnstrCanvasLive] applied operation: canvas_id=#{socket.assigns.canvas_id} user_id=#{socket.assigns.user_id} op=#{inspect(operation)} resulting_cells_sample=#{inspect(Map.take(cells, ["cells", "layout", "columns", "rows"]))}"
@@ -692,6 +705,205 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply,
      push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}", replace: true)}
   end
+
+  # ─── History tab (versions) ───
+  #
+  # The canvas holds one version at a time (ADR-043). Editing a named version
+  # starts a draft (`maybe_start_draft/2`); the person whose edit started it is
+  # asked to name it after the first save. Naming can wait: the draft stays in
+  # the tree.
+
+  # The Pivot button names the draft the canvas holds.
+  def handle_event("open_pivot", _params, socket) do
+    if socket.assigns.head_draft? do
+      {:noreply, open_pivot_dialog(socket, socket.assigns.head_id)}
+    else
+      {:noreply,
+       put_flash(
+         socket,
+         :info,
+         "No changes since the current version. Edit the canvas to start one."
+       )}
+    end
+  end
+
+  # A draft that was left behind can be named from History.
+  def handle_event("name_pivot", %{"id" => id}, socket) do
+    {:noreply, open_pivot_dialog(socket, id)}
+  end
+
+  def handle_event("close_pivot", _params, socket) do
+    {:noreply, assign(socket, pivot_form: nil, pivot_target: nil)}
+  end
+
+  def handle_event("save_pivot", %{"pivot" => params}, socket) do
+    case Canvas.name_pivot(socket.assigns.canvas_id, socket.assigns.pivot_target, params) do
+      {:ok, pivot} ->
+        {:noreply,
+         socket
+         |> assign(pivot_form: nil, pivot_target: nil, selected_pivot_id: pivot.id)
+         |> load_head()
+         |> load_pivots()
+         |> put_flash(:info, "Version \"#{pivot.name}\" saved")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :pivot_form, to_form(changeset, as: :pivot))}
+
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(pivot_form: nil, pivot_target: nil)
+         |> put_flash(:error, "That version already has a name")}
+    end
+  end
+
+  def handle_event("select_pivot", %{"id" => id}, socket) do
+    {:noreply, assign(socket, :selected_pivot_id, id)}
+  end
+
+  def handle_event("request_load", _params, socket) do
+    {:noreply, assign(socket, :pending_load, selected_pivot(socket))}
+  end
+
+  def handle_event("dismiss_load", _params, socket) do
+    {:noreply, assign(socket, :pending_load, nil)}
+  end
+
+  # Loading travels as a `replace_cells` operation, so every open editor
+  # converges and the save path folds it like any other edit. It is not an
+  # edit: it never starts a draft.
+  def handle_event("confirm_load", _params, socket) do
+    pivot = socket.assigns.pending_load
+    socket = assign(socket, :pending_load, nil)
+
+    case pivot && Canvas.load_pivot(socket.assigns.canvas_id, pivot) do
+      {:ok, operation} ->
+        {:noreply,
+         socket
+         |> process_operation(operation)
+         |> push_cells_resync()
+         |> load_head()
+         |> load_pivots()
+         |> put_flash(:info, "Loaded \"#{pivot_label(pivot)}\"")}
+
+      _error ->
+        {:noreply, put_flash(socket, :error, "Could not load this version")}
+    end
+  end
+
+  # Fork asks where: a new canvas (with or without the history), or a new
+  # version right under this one, in this canvas.
+  def handle_event("fork_pivot", _params, socket) do
+    {:noreply,
+     assign(socket,
+       pending_fork: selected_pivot(socket),
+       fork_form: to_form(%{"mode" => "canvas", "keep_history" => "false"}, as: :fork)
+     )}
+  end
+
+  def handle_event("fork_change", %{"fork" => params}, socket) do
+    {:noreply, assign(socket, :fork_form, to_form(params, as: :fork))}
+  end
+
+  def handle_event("dismiss_fork", _params, socket) do
+    {:noreply, assign(socket, pending_fork: nil, fork_form: nil)}
+  end
+
+  def handle_event("confirm_fork", %{"fork" => %{"mode" => "here"}}, socket) do
+    pivot = socket.assigns.pending_fork
+    socket = assign(socket, pending_fork: nil, fork_form: nil)
+
+    case pivot && Canvas.fork_in_place(socket.assigns.canvas_id, pivot, socket.assigns.user_id) do
+      {:ok, {draft, operation}} ->
+        {:noreply,
+         socket
+         |> process_operation(operation)
+         |> push_cells_resync()
+         |> load_head()
+         |> assign(:selected_pivot_id, draft.id)
+         |> load_pivots()
+         |> open_pivot_dialog(draft.id)}
+
+      _error ->
+        {:noreply, put_flash(socket, :error, "Could not fork this version")}
+    end
+  end
+
+  def handle_event("confirm_fork", %{"fork" => params}, socket) do
+    pivot = socket.assigns.pending_fork
+    socket = assign(socket, pending_fork: nil, fork_form: nil)
+    keep_history = params["keep_history"] == "true"
+
+    case pivot &&
+           Canvas.fork_pivot(socket.assigns.canvas, pivot, socket.assigns.user_id,
+             keep_history: keep_history
+           ) do
+      {:ok, fork} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Forked into \"#{fork.name}\"")
+         |> push_navigate(to: ~p"/canvas/#{fork.id}?tab=history")}
+
+      _error ->
+        {:noreply, put_flash(socket, :error, "Could not fork this version")}
+    end
+  end
+
+  # ─── Fulcrums ───
+  #
+  # Highlighting is a shared view choice (`set_active_fulcrums`, never a new
+  # version). Editing the definitions is content: the dialog works on a draft
+  # and saves it as one `set_fulcrums` operation, which starts a version like
+  # any edit.
+
+  # With fulcrums off (a template setting) the canvas neither highlights nor
+  # edits them; the controls are hidden and these events are ignored.
+  def handle_event("toggle_fulcrum", %{"id" => id}, socket) do
+    if Fulcrums.enabled?(socket.assigns.cells) do
+      ids = Fulcrums.toggle_active(socket.assigns.cells, id)
+      {:noreply, process_operation(socket, %{"type" => "set_active_fulcrums", "ids" => ids})}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("open_fulcrums", _params, socket) do
+    if Fulcrums.enabled?(socket.assigns.cells),
+      do: {:noreply, assign(socket, :fulcrum_draft, Fulcrums.list(socket.assigns.cells))},
+      else: {:noreply, socket}
+  end
+
+  # The canvas's own setting (Info tab): off, one at a time or several. It
+  # starts as the template's; changing it is not a versioned edit.
+  def handle_event("set_fulcrum_mode", %{"mode" => mode}, socket) do
+    if mode in Fulcrums.modes(),
+      do: {:noreply, process_operation(socket, %{"type" => "set_fulcrum_mode", "mode" => mode})},
+      else: {:noreply, socket}
+  end
+
+  def handle_event("close_fulcrums", _params, socket) do
+    {:noreply, assign(socket, :fulcrum_draft, nil)}
+  end
+
+  def handle_event("save_fulcrums", _params, socket) do
+    op = %{"type" => "set_fulcrums", "fulcrums" => socket.assigns.fulcrum_draft || []}
+    {:noreply, socket |> assign(:fulcrum_draft, nil) |> process_operation(op)}
+  end
+
+  def handle_event("fulcrum_add", _params, socket),
+    do: {:noreply, update_fulcrum_draft(socket, &Fulcrums.add/1)}
+
+  def handle_event("fulcrum_remove", %{"id" => id}, socket),
+    do: {:noreply, update_fulcrum_draft(socket, &Fulcrums.remove(&1, id))}
+
+  def handle_event("fulcrum_rename", %{"fulcrum_id" => id, "name" => name}, socket),
+    do: {:noreply, update_fulcrum_draft(socket, &Fulcrums.rename(&1, id, name))}
+
+  def handle_event("fulcrum_color", %{"id" => id, "color" => color}, socket),
+    do: {:noreply, update_fulcrum_draft(socket, &Fulcrums.set_color(&1, id, color))}
+
+  def handle_event("fulcrum_toggle_cell", %{"id" => id, "key" => key}, socket),
+    do: {:noreply, update_fulcrum_draft(socket, &Fulcrums.toggle_cell(&1, id, key))}
 
   # ─── Analysis tab ───
 
@@ -1764,12 +1976,84 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         tab == "analysis" ->
           load_insights(socket)
 
+        tab == "history" ->
+          load_pivots(socket)
+
         true ->
           socket
       end
 
     {:noreply, socket}
   end
+
+  # The versions are read when the History view opens and whenever one changes,
+  # here or in another tab. The current version is selected by default.
+  defp load_pivots(socket) do
+    pivots = Canvas.list_pivots(socket.assigns.canvas_id)
+    selected = socket.assigns.selected_pivot_id
+
+    selected =
+      if Enum.any?(pivots, &(&1.id == selected)),
+        do: selected,
+        else: socket.assigns.head_id
+
+    assign(socket, pivots: pivots, selected_pivot_id: selected)
+  end
+
+  defp selected_pivot(socket) do
+    Enum.find(socket.assigns.pivots, &(&1.id == socket.assigns.selected_pivot_id))
+  end
+
+  defp update_fulcrum_draft(%{assigns: %{fulcrum_draft: nil}} = socket, _fun), do: socket
+
+  defp update_fulcrum_draft(socket, fun),
+    do: assign(socket, :fulcrum_draft, fun.(socket.assigns.fulcrum_draft))
+
+  # Which version the canvas holds, and whether it is a draft: an edit on a
+  # named version starts a draft, an edit on a draft does not.
+  defp load_head(socket) do
+    head = Canvas.head_pivot(socket.assigns.canvas_id)
+    assign(socket, head_id: head && head.id, head_draft?: head != nil and head.kind == "draft")
+  end
+
+  # Called for every edit this editor makes. The context locks the canvas, so
+  # when two people start editing a named version at once, one draft starts;
+  # the person whose edit started it is asked to name it after the next save.
+  defp maybe_start_draft(socket, operation) do
+    if socket.assigns.head_draft? or not Canvas.versioned_operation?(operation) do
+      socket
+    else
+      case Canvas.start_draft(socket.assigns.canvas_id, socket.assigns.user_id) do
+        {:ok, {:created, draft}} ->
+          assign(socket, head_id: draft.id, head_draft?: true, pivot_prompt: draft.id)
+
+        _exists_or_error ->
+          load_head(socket)
+      end
+    end
+  end
+
+  # The prompt waits for the first save, so the edit that started the draft
+  # can be finished before the dialog appears.
+  defp maybe_prompt_pivot(%{assigns: %{pivot_prompt: nil}} = socket), do: socket
+
+  defp maybe_prompt_pivot(%{assigns: %{save_state: :saved, pivot_form: nil}} = socket) do
+    socket
+    |> open_pivot_dialog(socket.assigns.pivot_prompt)
+    |> assign(:pivot_prompt, nil)
+  end
+
+  defp maybe_prompt_pivot(socket), do: socket
+
+  defp open_pivot_dialog(socket, pivot_id) do
+    assign(socket,
+      pivot_form: to_form(Canvas.change_pivot(), as: :pivot),
+      pivot_target: pivot_id
+    )
+  end
+
+  defp pivot_label(%{name: nil}), do: "Unnamed changes"
+  defp pivot_label(%{name: name}), do: name
 
   # The Analysis view reads the cached report when it is opened; it never runs
   # on its own, because a run costs user attention (and, with AI, money).
@@ -1950,6 +2234,25 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # what is pushed. A `-1` marks a resync rather than somebody's edit. Without
   # it, a note opened after an edit (or between its static render and its
   # socket connecting) showed stale text until the next keystroke elsewhere.
+  # The same holds for the cell fields: a restore replaces every value at once,
+  # so each field is pushed as a resync.
+  defp push_cells_resync(socket) do
+    cells = socket.assigns.cells
+
+    for key <- Structure.cell_keys(cells),
+        cell = Structure.cell(cells, key),
+        field <- Structure.field_names(cell),
+        reduce: socket do
+      socket ->
+        push_event(socket, "cell_updated", %{
+          cell_key: key,
+          field: field,
+          new_value: cell[field] || "",
+          from_user_id: -1
+        })
+    end
+  end
+
   defp push_note_resync(socket) do
     if connected?(socket) and socket.assigns.note do
       push_event(socket, "note_content_updated", %{
@@ -2082,6 +2385,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       true ->
         {:noreply, reload_agent_config(socket)}
     end
+  end
+
+  def handle_info({:pivots_changed}, socket) do
+    {:noreply, socket |> load_head() |> load_pivots()}
   end
 
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
@@ -2231,12 +2538,17 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             socket
         end
 
-      {:noreply,
-       socket
-       |> assign(:cells, cells)
-       |> assign(:c_name, c_name)
-       |> assign(:c_desc, c_desc)
-       |> track_insight_change(operation)}
+      socket =
+        socket
+        |> assign(:cells, cells)
+        |> assign(:c_name, c_name)
+        |> assign(:c_desc, c_desc)
+        |> track_insight_change(operation)
+
+      # A restore by another editor replaces every field at once.
+      if operation["type"] == "replace_cells",
+        do: {:noreply, push_cells_resync(socket)},
+        else: {:noreply, socket}
     end
   end
 
@@ -2278,7 +2590,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       Logger.error("[UnstrCanvasLive] save failed: canvas_id=#{socket.assigns.canvas_id}")
     end
 
-    socket
+    maybe_prompt_pivot(socket)
   end
 
   defp save_note_content(socket, note) do
@@ -2359,6 +2671,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
+          fulcrums?={Fulcrums.enabled?(@cells)}
           controls?={@active_tab != "editor" and (@active_tab != "agent" or is_nil(@agent_session))}
         />
         <Header.share_dialog
@@ -2366,6 +2679,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           share_open={@share_open}
           can_share?={@canvas.author_id == @user_id}
         />
+        <PivotPanel.pivot_dialog form={@pivot_form} />
+        <PivotPanel.load_dialog pivot={@pending_load} />
+        <PivotPanel.fork_dialog pivot={@pending_fork} form={@fork_form} />
+        <.fulcrums_dialog draft={@fulcrum_draft} cells={@cells} />
         <%!-- Removing a row or column that holds content asks first: the
         operation is destructive, and the event log keeps the old values only
         until pruning folds them. --%>
@@ -2428,50 +2745,24 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               ]
             }
           >
-            <%= cond do %>
-              <% Structure.image?(@cells) -> %>
-                <ImageCanvas.board
-                  cells={@cells}
-                  c_name={@c_name}
-                  edit_structure?={@edit_structure?}
-                  structure_accent_picker={@structure_accent_picker}
-                  colors_picker={@structure_colors_picker}
-                  presence={@presence}
-                  status={@status}
-                  can_share?={@canvas.author_id == @user_id}
-                  status_row?={@active_tab == "editor"}
-                  focus_cell={@focus_cell}
-                  user_id={@user_id}
-                />
-              <% Structure.bento?(@cells) -> %>
-                <Bento.board
-                  cells={@cells}
-                  c_name={@c_name}
-                  edit_structure?={@edit_structure?}
-                  structure_accent_picker={@structure_accent_picker}
-                  colors_picker={@structure_colors_picker}
-                  presence={@presence}
-                  status={@status}
-                  can_share?={@canvas.author_id == @user_id}
-                  status_row?={@active_tab == "editor"}
-                  focus_cell={@focus_cell}
-                  user_id={@user_id}
-                />
-              <% true -> %>
-                <Grid.grid
-                  cells={@cells}
-                  c_name={@c_name}
-                  edit_structure?={@edit_structure?}
-                  structure_accent_picker={@structure_accent_picker}
-                  colors_picker={@structure_colors_picker}
-                  presence={@presence}
-                  status={@status}
-                  can_share?={@canvas.author_id == @user_id}
-                  status_row?={@active_tab == "editor"}
-                  focus_cell={@focus_cell}
-                  user_id={@user_id}
-                />
-            <% end %>
+            <FulcrumEditor.picker
+              fulcrums={Fulcrums.list(@cells)}
+              active_ids={Fulcrums.active_ids(@cells)}
+              mode={Fulcrums.mode(@cells)}
+            />
+            <.canvas_board
+              cells={@cells}
+              c_name={@c_name}
+              edit_structure?={@edit_structure?}
+              structure_accent_picker={@structure_accent_picker}
+              colors_picker={@structure_colors_picker}
+              presence={@presence}
+              status={@status}
+              can_share?={@canvas.author_id == @user_id}
+              status_row?={@active_tab == "editor"}
+              focus_cell={@focus_cell}
+              user_id={@user_id}
+            />
           </div>
 
           <div
@@ -2549,7 +2840,39 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               presence={@presence}
               status={if @active_tab == "agent", do: @status, else: nil}
               can_share?={@canvas.author_id == @user_id}
+              fulcrums?={Fulcrums.enabled?(@cells)}
             />
+          </div>
+
+          <div
+            id="canvas-panel-history"
+            role="tabpanel"
+            aria-labelledby="canvas-tab-history"
+            class={[
+              "flex min-h-0 w-full flex-1 flex-col",
+              @active_tab != "history" && "hidden"
+            ]}
+          >
+            <PivotPanel.panel
+              pivots={@pivots}
+              selected_id={@selected_pivot_id}
+              head_id={@head_id}
+            >
+              <%!-- The current version is the live canvas; any other version
+              is its stored snapshot. --%>
+              <:preview :let={pivot}>
+                <.canvas_board
+                  cells={if pivot.id == @head_id, do: @cells, else: pivot.cells}
+                  c_name={@c_name}
+                  edit_structure?={false}
+                  presence={@presence}
+                  status={@status}
+                  can_share?={false}
+                  user_id={@user_id}
+                  read_only?
+                />
+              </:preview>
+            </PivotPanel.panel>
           </div>
 
           <%!-- The Info view scrolls inside its panel, like Notes and Agent. Its
@@ -2588,6 +2911,71 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       screen, like a native app. --%>
       <Tabs.bar tabs={@tabs} active_tab={@active_tab} />
     </Layouts.app>
+    """
+  end
+
+  # Editing the canvas's fulcrums. The mode (one or several at once) is the
+  # template's setting, shown here for reference.
+  attr :draft, :any, required: true
+  attr :cells, :map, required: true
+
+  defp fulcrums_dialog(assigns) do
+    ~H"""
+    <UIDialog.dialog :if={@draft} id="fulcrums-dialog" open on-close="close_fulcrums">
+      <UIDialog.dialog_content open class="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <UIDialog.dialog_header>
+          <UIDialog.dialog_title>Fulcrums</UIDialog.dialog_title>
+          <UIDialog.dialog_description>
+            Named sets of cells that can be highlighted together. {Fulcrums.blurb(
+              Fulcrums.mode(@cells)
+            )}
+          </UIDialog.dialog_description>
+        </UIDialog.dialog_header>
+
+        <FulcrumEditor.editor id="canvas-fulcrums" fulcrums={@draft} cells={@cells} />
+
+        <UIDialog.dialog_footer class="flex flex-row justify-end gap-2 pt-2">
+          <UIButton.button type="button" variant="outline" phx-click="close_fulcrums">
+            Cancel
+          </UIButton.button>
+          <UIButton.button type="button" id="fulcrums-save" phx-click="save_fulcrums">
+            Save fulcrums
+          </UIButton.button>
+        </UIDialog.dialog_footer>
+      </UIDialog.dialog_content>
+    </UIDialog.dialog>
+    """
+  end
+
+  # The canvas in its layout mode. The Editor tab renders the live cells; the
+  # History tab renders a pivot's snapshot with `read_only?`.
+  attr :cells, :map, required: true
+  attr :c_name, :string, required: true
+  attr :edit_structure?, :boolean, required: true
+  attr :structure_accent_picker, :any, default: nil
+  attr :colors_picker, :string, default: nil
+  attr :presence, :map, required: true
+  attr :status, :map, required: true
+  attr :can_share?, :boolean, required: true
+  attr :status_row?, :boolean, default: false
+  attr :focus_cell, :string, default: nil
+  attr :user_id, :integer, required: true
+  attr :read_only?, :boolean, default: false
+
+  defp canvas_board(assigns) do
+    # Every version carries its fulcrums, so a preview highlights what was
+    # highlighted then.
+    assigns = assign(assigns, :highlights, Fulcrums.highlights(assigns.cells))
+
+    ~H"""
+    <%= cond do %>
+      <% Structure.image?(@cells) -> %>
+        <ImageCanvas.board {assigns_to_attributes(assigns)} />
+      <% Structure.bento?(@cells) -> %>
+        <Bento.board {assigns_to_attributes(assigns)} />
+      <% true -> %>
+        <Grid.grid {assigns_to_attributes(assigns)} />
+    <% end %>
     """
   end
 

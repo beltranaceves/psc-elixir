@@ -71,7 +71,9 @@ defmodule Psc.Canvas.Structure do
   # template is flat, so they sit beside the cells there.
   # `$name` and `$description` are the canvas header, stored in the cells map
   # by the CRDT. They are not cells, and a table template never writes them.
-  @table_metadata ["rows", "columns", "layout", "$name", "$description"]
+  # The fulcrum keys (`Psc.Canvas.Fulcrums`) sit beside the cells in every mode.
+  @table_metadata ["rows", "columns", "layout", "$name", "$description"] ++
+                    ["fulcrums", "fulcrum_mode", "$active_fulcrums"]
 
   @bento_metadata @table_metadata ++
                     ["layout_mode", "bento_columns", "bento_rows", "cells", "notes_mode", "notes"]

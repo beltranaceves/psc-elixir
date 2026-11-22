@@ -26,6 +26,9 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     * `%{"type" => "set_bento_columns" | "set_bento_rows", ...}` — bento boards
     * `%{"type" => "set_backdrop", "backdrop" => %{"url" => ..., "fit" => ..., "alt" => ..., "aspect" => ...}}` — image boards
     * `%{"type" => "set_cell_kind", "cell_key" => key, "kind" => "card" | "text"}` — image cells
+    * `%{"type" => "replace_cells", "cells" => cells}` — loading a version (keeps `$name`, `$description`, `$active_fulcrums`)
+    * `%{"type" => "set_fulcrums", "fulcrums" => list}`, `%{"type" => "set_active_fulcrums", "ids" => ids}`
+      and `%{"type" => "set_fulcrum_mode", "mode" => mode}`
 
   State shape notes (kept consistent across editor, templates and replay):
 
@@ -337,6 +340,35 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
         cells
       ) do
     Structure.set_kind(cells, key, kind)
+  end
+
+  # Loading a version swaps the whole content for its snapshot. The canvas
+  # keeps its current name, description, highlighted fulcrums and fulcrum
+  # setting: those are settings and view choices, not content.
+  @kept_on_replace ["$name", "$description", "$active_fulcrums", "fulcrum_mode"]
+
+  def apply_operation(%{"type" => "replace_cells", "cells" => new_cells}, cells)
+      when is_map(new_cells) do
+    new_cells
+    |> Map.drop(@kept_on_replace)
+    |> Map.merge(Map.take(cells, @kept_on_replace))
+  end
+
+  # Fulcrums (`Psc.Canvas.Fulcrums`): the definitions are content and are
+  # replaced as a whole list; the highlighted ids are a shared view choice.
+  def apply_operation(%{"type" => "set_fulcrums", "fulcrums" => fulcrums}, cells)
+      when is_list(fulcrums) do
+    Map.put(cells, "fulcrums", Psc.Canvas.Fulcrums.normalize(fulcrums, cells))
+  end
+
+  def apply_operation(%{"type" => "set_active_fulcrums", "ids" => ids}, cells)
+      when is_list(ids) do
+    Map.put(cells, "$active_fulcrums", Enum.filter(ids, &is_binary/1))
+  end
+
+  # The canvas's own fulcrum setting (off, one, several), from the Info tab.
+  def apply_operation(%{"type" => "set_fulcrum_mode", "mode" => mode}, cells) do
+    Map.put(cells, "fulcrum_mode", Psc.Canvas.Fulcrums.normalize_mode(mode))
   end
 
   def apply_operation(_op, cells), do: cells
