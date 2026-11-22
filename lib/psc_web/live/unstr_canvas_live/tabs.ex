@@ -10,6 +10,7 @@ defmodule PscWeb.UnstrCanvasLive.Tabs do
     {"notes", "Notes", "hero-document-text", "Shared notes attached to this canvas."},
     {"editor", "Editor", "hero-pencil-square", "The canvas grid."},
     {"agent", "Agent", "hero-sparkles", "Talk to a read-only agent about this canvas."},
+    {"history", "History", "hero-clock", "Pivots: saved versions and why they changed."},
     {"info", "Info", "hero-information-circle", "Canvas details, sharing and settings."}
   ]
 

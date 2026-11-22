@@ -18,12 +18,14 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   alias Psc.Canvas
   alias Psc.Canvas.Accent
+  alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
   alias Psc.Agent.Config, as: AgentConfig
   alias Psc.Agent.Files, as: AgentFiles
   alias PscWeb.AgentUploads
   alias PscWeb.Components.AgentConfigEditor
+  alias PscWeb.Components.FulcrumEditor
   alias PscWeb.Markdown
   alias PscWeb.CanvasLayoutLive.BentoEditor
   alias PscWeb.CanvasLayoutLive.ImageEditor
@@ -126,6 +128,29 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
       {:noreply, socket}
     end
   end
+
+  # Fulcrums are a template setting too: the list and whether one or several
+  # can be highlighted at once. The events are `FulcrumEditor`'s.
+  def handle_event("set_fulcrum_mode", %{"mode" => mode}, socket) do
+    if mode in Fulcrums.modes(),
+      do: {:noreply, update_fulcrums(socket, &Map.put(&1, "fulcrum_mode", mode))},
+      else: {:noreply, socket}
+  end
+
+  def handle_event("fulcrum_add", _params, socket),
+    do: {:noreply, update_fulcrum_list(socket, &Fulcrums.add/1)}
+
+  def handle_event("fulcrum_remove", %{"id" => id}, socket),
+    do: {:noreply, update_fulcrum_list(socket, &Fulcrums.remove(&1, id))}
+
+  def handle_event("fulcrum_rename", %{"fulcrum_id" => id, "name" => name}, socket),
+    do: {:noreply, update_fulcrum_list(socket, &Fulcrums.rename(&1, id, name))}
+
+  def handle_event("fulcrum_color", %{"id" => id, "color" => color}, socket),
+    do: {:noreply, update_fulcrum_list(socket, &Fulcrums.set_color(&1, id, color))}
+
+  def handle_event("fulcrum_toggle_cell", %{"id" => id, "key" => key}, socket),
+    do: {:noreply, update_fulcrum_list(socket, &Fulcrums.toggle_cell(&1, id, key))}
 
   # A note the template carries. A canvas made from it starts with a copy.
   def handle_event("add_note", _params, socket) do
@@ -825,6 +850,26 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   defp notes_hint(_layout_map), do: "No notes yet"
 
+  defp fulcrums_hint(lm) do
+    if Fulcrums.enabled?(lm), do: fulcrums_count_hint(lm), else: "Off"
+  end
+
+  defp fulcrums_count_hint(lm) do
+    case length(Fulcrums.list(lm)) do
+      0 -> "No fulcrums yet"
+      1 -> "1 fulcrum · #{Fulcrums.label(Fulcrums.mode(lm))}"
+      n -> "#{n} fulcrums · #{Fulcrums.label(Fulcrums.mode(lm))}"
+    end
+  end
+
+  defp update_fulcrums(socket, fun) do
+    if socket.assigns.can_edit?, do: update_layout(socket, fun), else: socket
+  end
+
+  defp update_fulcrum_list(socket, fun) do
+    update_fulcrums(socket, &Map.put(&1, "fulcrums", fun.(Fulcrums.list(&1))))
+  end
+
   defp notes_count_hint(0), do: "No notes yet"
   defp notes_count_hint(1), do: "1 note"
   defp notes_count_hint(count), do: "#{count} notes"
@@ -1279,6 +1324,52 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                   </div>
                 <% end %>
               </div>
+            </div>
+          </.section>
+
+          <%!-- Fulcrums: named sets of cells a canvas can highlight. The
+          canvases made from this template get a copy, and the mode decides
+          whether one or several can be highlighted at once. --%>
+          <.section
+            id="template-fulcrums"
+            title="Fulcrums"
+            hint={fulcrums_hint(@layout_map)}
+          >
+            <p class="max-w-lg text-sm text-base-content/60">
+              {Fulcrums.blurb(Fulcrums.mode(@layout_map))}
+            </p>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button
+                :for={mode <- Fulcrums.modes()}
+                type="button"
+                id={"fulcrum-mode-" <> mode}
+                phx-click="set_fulcrum_mode"
+                phx-value-mode={mode}
+                disabled={not @can_edit?}
+                aria-pressed={to_string(Fulcrums.mode(@layout_map) == mode)}
+                class={[
+                  "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50",
+                  Fulcrums.mode(@layout_map) == mode &&
+                    "border-primary/50 bg-primary/10 text-base-content",
+                  Fulcrums.mode(@layout_map) != mode &&
+                    "border-base-content/15 bg-base-200 text-base-content/60 hover:border-base-content/30 hover:text-base-content"
+                ]}
+              >
+                {Fulcrums.label(mode)}
+              </button>
+            </div>
+
+            <div
+              :if={Fulcrums.enabled?(@layout_map)}
+              class="mt-4 border-t border-base-content/10 pt-4"
+            >
+              <FulcrumEditor.editor
+                id="template-fulcrum-editor"
+                fulcrums={Fulcrums.list(@layout_map)}
+                cells={@layout_map}
+                can_edit?={@can_edit?}
+              />
             </div>
           </.section>
 

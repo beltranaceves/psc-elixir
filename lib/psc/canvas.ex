@@ -8,6 +8,7 @@ defmodule Psc.Canvas do
   require Logger
   alias Psc.Repo
   alias Psc.Canvas.UnstrCanvas
+  alias Psc.Canvas.UnstrCanvasPivot
   alias Psc.Canvas.Layout
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
@@ -708,6 +709,9 @@ defmodule Psc.Canvas do
           |> put_instantiated_cells(template_cells, layout, rows, columns)
       end
 
+    # The template's fulcrums are a copy too, like the cells.
+    cells = Map.merge(cells, Psc.Canvas.Fulcrums.template_attrs(lm))
+
     attrs =
       %{
         "name" => template.name,
@@ -721,7 +725,10 @@ defmodule Psc.Canvas do
       |> Map.merge(Map.reject(overrides || %{}, fn {_k, v} -> is_nil(v) or v == "" end))
 
     Repo.transaction(fn ->
-      with {:ok, canvas} <- create_unstr_canvas(user_id, attrs),
+      with {:ok, canvas} <-
+             create_unstr_canvas(user_id, attrs, %{
+               rationale: "Created from \"#{template.name}\"."
+             }),
            {:ok, canvas} <- record_agent_source(canvas, template),
            {:ok, _template} <- bump_count(template, :use_count) do
         Psc.Notes.seed_notes(canvas, lm["notes"] || [])
@@ -904,15 +911,35 @@ defmodule Psc.Canvas do
   template builds them from the template. With no `cells` in the attrs the
   schema's empty-structure default applies.
   """
-  def create_unstr_canvas(user_id, attrs \\ %{}) do
+  def create_unstr_canvas(user_id, attrs \\ %{}, root \\ %{}) do
     # Ensure params use string keys (avoid mixing atom and string keys)
     all_attrs =
       attrs
       |> Map.put("author_id", user_id)
 
-    %UnstrCanvas{}
-    |> UnstrCanvas.changeset(all_attrs)
-    |> Repo.insert()
+    # Every canvas starts at a named root version, so the first edit already
+    # has a version to branch from (ADR-043). `root` overrides its name and
+    # reason (instantiation and forks say where the canvas came from).
+    root =
+      Map.merge(%{name: "Initial version", rationale: "The canvas as it was created."}, root)
+
+    Repo.transaction(fn ->
+      with {:ok, canvas} <- %UnstrCanvas{} |> UnstrCanvas.changeset(all_attrs) |> Repo.insert(),
+           {:ok, pivot} <-
+             %UnstrCanvasPivot{
+               unstr_canvas_id: canvas.id,
+               author_id: user_id,
+               cells: canvas.cells
+             }
+             |> UnstrCanvasPivot.changeset(root)
+             |> Repo.insert(),
+           {:ok, canvas} <-
+             canvas |> Ecto.Changeset.change(head_pivot_id: pivot.id) |> Repo.update() do
+        canvas
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   @doc """
@@ -1271,5 +1298,295 @@ defmodule Psc.Canvas do
       )
 
     deleted
+  end
+
+  ## Pivots (versions)
+  #
+  # The canvas is the working copy; its versions form a tree (ADR-043). The
+  # canvas points at the version it holds (`head_pivot_id`). Editing a named
+  # version starts a draft under it, which collects the edits until someone
+  # names it. Loading a version swaps the working copy and moves the pointer,
+  # like a git checkout: it never creates a version.
+
+  @doc "The versions of a canvas, oldest first, with their authors."
+  def list_pivots(canvas_id) do
+    from(p in UnstrCanvasPivot,
+      where: p.unstr_canvas_id == ^canvas_id,
+      order_by: [asc: p.inserted_at],
+      preload: :author
+    )
+    |> Repo.all()
+  end
+
+  @doc "The id of the version the canvas currently holds."
+  def head_pivot_id(canvas_id) do
+    Repo.one(from(c in UnstrCanvas, where: c.id == ^canvas_id, select: c.head_pivot_id))
+  end
+
+  @doc "The version the canvas currently holds, or nil."
+  def head_pivot(canvas_id) do
+    Repo.one(
+      from(p in UnstrCanvasPivot,
+        join: c in UnstrCanvas,
+        on: c.head_pivot_id == p.id,
+        where: c.id == ^canvas_id
+      )
+    )
+  end
+
+  @doc "A changeset for the form that names a version."
+  def change_pivot(pivot \\ %UnstrCanvasPivot{}, attrs \\ %{}) do
+    UnstrCanvasPivot.changeset(pivot, attrs)
+  end
+
+  @doc """
+  Edits that change a version. Renaming the canvas is not versioned, and a
+  `replace_cells` is a load, not an edit.
+  """
+  def versioned_operation?(%{"type" => type})
+      when type in [
+             "update_name",
+             "update_description",
+             "replace_cells",
+             "set_active_fulcrums",
+             "set_fulcrum_mode"
+           ],
+      do: false
+
+  def versioned_operation?(_operation), do: true
+
+  @doc """
+  Called on an edit. When the canvas holds a named version, starts a draft
+  under it and returns `{:ok, {:created, draft}}`; when it already holds a
+  draft, `{:ok, :exists}`. The canvas row is locked, so two editors typing at
+  once start one draft.
+  """
+  def start_draft(canvas_id, user_id) do
+    Repo.transaction(fn ->
+      canvas = lock_canvas!(canvas_id)
+      head = canvas.head_pivot_id && Repo.get(UnstrCanvasPivot, canvas.head_pivot_id)
+
+      if head && UnstrCanvasPivot.draft?(head) do
+        :exists
+      else
+        draft =
+          Repo.insert!(%UnstrCanvasPivot{
+            unstr_canvas_id: canvas_id,
+            author_id: user_id,
+            parent_id: head && head.id,
+            kind: "draft",
+            cells: get_unstr_canvas_content(canvas_id)
+          })
+
+        canvas |> Ecto.Changeset.change(head_pivot_id: draft.id) |> Repo.update!()
+        {:created, draft}
+      end
+    end)
+    |> tap(fn
+      {:ok, {:created, _draft}} -> broadcast_pivots(canvas_id)
+      _other -> :ok
+    end)
+  end
+
+  @doc """
+  Names a draft. The draft the canvas holds takes the current content as its
+  snapshot; an earlier draft keeps the one it was left with.
+  """
+  def name_pivot(canvas_id, pivot_id, attrs) when is_binary(pivot_id) do
+    case Repo.get_by(UnstrCanvasPivot, id: pivot_id, unstr_canvas_id: canvas_id) do
+      nil -> {:error, :not_found}
+      pivot -> name_pivot(canvas_id, pivot, attrs)
+    end
+  end
+
+  def name_pivot(
+        canvas_id,
+        %UnstrCanvasPivot{unstr_canvas_id: canvas_id, kind: "draft"} = pivot,
+        attrs
+      ) do
+    cells =
+      if head_pivot_id(canvas_id) == pivot.id,
+        do: get_unstr_canvas_content(canvas_id),
+        else: pivot.cells
+
+    pivot
+    |> UnstrCanvasPivot.changeset(attrs)
+    |> Ecto.Changeset.put_change(:kind, "pivot")
+    |> Ecto.Changeset.put_change(:cells, cells)
+    |> Repo.update()
+    |> tap(fn
+      {:ok, _pivot} -> broadcast_pivots(canvas_id)
+      _error -> :ok
+    end)
+  end
+
+  def name_pivot(_canvas_id, _pivot, _attrs), do: {:error, :not_a_draft}
+
+  @doc """
+  Loads a version into the canvas. Freezes the draft being left (so nothing is
+  lost), moves the pointer, and returns the `replace_cells` operation for the
+  caller to apply, so every open editor converges through the event path.
+  """
+  def load_pivot(canvas_id, %UnstrCanvasPivot{unstr_canvas_id: canvas_id} = pivot) do
+    Repo.transaction(fn ->
+      canvas = lock_canvas!(canvas_id)
+
+      if canvas.head_pivot_id != pivot.id do
+        freeze_head_draft(canvas)
+        canvas |> Ecto.Changeset.change(head_pivot_id: pivot.id) |> Repo.update!()
+      end
+
+      %{"type" => "replace_cells", "cells" => pivot.cells}
+    end)
+    |> tap(fn _result -> broadcast_pivots(canvas_id) end)
+  end
+
+  def load_pivot(_canvas_id, _pivot), do: {:error, :not_found}
+
+  @doc """
+  Creates a new canvas, owned by `user_id`, from a version.
+
+  Without history (the default) the fork starts with one root version that
+  names where it came from. With `keep_history: true` it gets a copy of the
+  version's lineage, root to version, and holds the copied version.
+  """
+  def fork_pivot(canvas, pivot, user_id, opts \\ [])
+
+  def fork_pivot(
+        %UnstrCanvas{id: canvas_id} = canvas,
+        %UnstrCanvasPivot{unstr_canvas_id: canvas_id} = pivot,
+        user_id,
+        opts
+      ) do
+    head_id = head_pivot_id(canvas_id)
+    source = version_cells(canvas_id, pivot, head_id)
+    name = Map.get(source, "$name") || canvas.name
+
+    attrs = %{
+      "name" => "#{name} (fork)",
+      "description" => Map.get(source, "$description") || canvas.description,
+      "cells" => Map.drop(source, ["$name", "$description"]),
+      "notes_mode" => canvas.notes_mode,
+      "agent_config" => canvas.agent_config
+    }
+
+    if Keyword.get(opts, :keep_history, false) do
+      fork_with_history(canvas_id, pivot, head_id, user_id, attrs)
+    else
+      version = pivot.name || "Unnamed changes"
+
+      create_unstr_canvas(user_id, attrs, %{
+        name: version,
+        rationale: "Forked from \"#{name}\" at \"#{version}\"."
+      })
+    end
+  end
+
+  def fork_pivot(_canvas, _pivot, _user_id, _opts), do: {:error, :not_found}
+
+  # The fork's root takes the original root's name, reason and snapshot; the
+  # rest of the lineage is copied under it, authors and kinds included.
+  defp fork_with_history(canvas_id, pivot, head_id, user_id, attrs) do
+    [first | rest] = lineage(pivot)
+
+    Repo.transaction(fn ->
+      {:ok, fork} =
+        create_unstr_canvas(user_id, attrs, %{
+          name: first.name || "Initial version",
+          rationale: first.rationale || "The canvas as it was created."
+        })
+
+      root =
+        UnstrCanvasPivot
+        |> Repo.get!(fork.head_pivot_id)
+        |> Ecto.Changeset.change(
+          author_id: first.author_id,
+          cells: version_cells(canvas_id, first, head_id)
+        )
+        |> Repo.update!()
+
+      copied =
+        Enum.reduce(rest, root, fn version, parent ->
+          Repo.insert!(%UnstrCanvasPivot{
+            unstr_canvas_id: fork.id,
+            parent_id: parent.id,
+            author_id: version.author_id,
+            name: version.name,
+            rationale: version.rationale,
+            kind: version.kind,
+            cells: version_cells(canvas_id, version, head_id)
+          })
+        end)
+
+      fork |> Ecto.Changeset.change(head_pivot_id: copied.id) |> Repo.update!()
+    end)
+  end
+
+  # A version and its ancestors, root first.
+  defp lineage(%UnstrCanvasPivot{parent_id: nil} = pivot), do: [pivot]
+
+  defp lineage(pivot) do
+    case Repo.get(UnstrCanvasPivot, pivot.parent_id) do
+      nil -> [pivot]
+      parent -> lineage(parent) ++ [pivot]
+    end
+  end
+
+  # The version the canvas holds is the live content; any other is its snapshot.
+  defp version_cells(canvas_id, %UnstrCanvasPivot{id: id}, id),
+    do: get_unstr_canvas_content(canvas_id)
+
+  defp version_cells(_canvas_id, pivot, _head_id), do: pivot.cells
+
+  @doc """
+  Forks in place: starts a draft directly under a version, in this canvas,
+  and loads it. The draft being left keeps its content. Returns the draft and
+  the `replace_cells` operation for the caller to apply, as `load_pivot/2`.
+  """
+  def fork_in_place(canvas_id, %UnstrCanvasPivot{unstr_canvas_id: canvas_id} = pivot, user_id) do
+    Repo.transaction(fn ->
+      canvas = lock_canvas!(canvas_id)
+      cells = version_cells(canvas_id, pivot, canvas.head_pivot_id)
+      freeze_head_draft(canvas)
+
+      draft =
+        Repo.insert!(%UnstrCanvasPivot{
+          unstr_canvas_id: canvas_id,
+          author_id: user_id,
+          parent_id: pivot.id,
+          kind: "draft",
+          cells: cells
+        })
+
+      canvas |> Ecto.Changeset.change(head_pivot_id: draft.id) |> Repo.update!()
+      {draft, %{"type" => "replace_cells", "cells" => cells}}
+    end)
+    |> tap(fn _result -> broadcast_pivots(canvas_id) end)
+  end
+
+  def fork_in_place(_canvas_id, _pivot, _user_id), do: {:error, :not_found}
+
+  defp lock_canvas!(canvas_id) do
+    from(c in UnstrCanvas, where: c.id == ^canvas_id, lock: "FOR UPDATE") |> Repo.one!()
+  end
+
+  # The draft being left keeps the content it had, so it can be loaded again.
+  defp freeze_head_draft(%UnstrCanvas{head_pivot_id: nil}), do: :ok
+
+  defp freeze_head_draft(canvas) do
+    case Repo.get(UnstrCanvasPivot, canvas.head_pivot_id) do
+      %UnstrCanvasPivot{kind: "draft"} = draft ->
+        draft
+        |> Ecto.Changeset.change(cells: get_unstr_canvas_content(canvas.id))
+        |> Repo.update!()
+
+      _named ->
+        :ok
+    end
+  end
+
+  # Other open editors refresh their History tab and their idea of the head.
+  defp broadcast_pivots(canvas_id) do
+    Phoenix.PubSub.broadcast(Psc.PubSub, pubsub_topic_unstr(canvas_id), {:pivots_changed})
   end
 end

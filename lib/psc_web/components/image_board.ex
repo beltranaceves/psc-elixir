@@ -163,7 +163,8 @@ defmodule PscWeb.Components.ImageBoard do
   end
 
   attr :cells, :map, required: true
-  attr :board_id, :string, required: true
+  # A nil id (a read-only preview) also drops the hook and the cell ids.
+  attr :board_id, :any, required: true
   attr :class, :any, default: nil
 
   slot :cell, required: true
@@ -179,7 +180,7 @@ defmodule PscWeb.Components.ImageBoard do
     ~H"""
     <div
       id={@board_id}
-      phx-hook="ImageBoard"
+      phx-hook={@board_id && "ImageBoard"}
       data-image-board
       class={[
         "image-board relative w-full overflow-hidden rounded-xl border border-base-content/20 bg-base-200",
@@ -206,7 +207,7 @@ defmodule PscWeb.Components.ImageBoard do
 
       <div
         :for={card <- @cards}
-        id={"image-cell-" <> card.key}
+        id={@board_id && "image-cell-" <> card.key}
         data-image-cell
         data-image-size={Structure.image_size_label(card.w, card.h)}
         title={"Cell placement: #{Structure.image_size_label(card.w, card.h)} of the picture"}

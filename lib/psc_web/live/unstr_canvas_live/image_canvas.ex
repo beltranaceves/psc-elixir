@@ -19,6 +19,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   import PscWeb.UnstrCanvasLive.CellColors, only: [colors_button: 1, colors_panel: 1]
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
+  alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.Structure
   alias PscWeb.Components.ImageBoard, as: ImageFrame
   alias PscWeb.Components.UI.Button, as: UIButton
@@ -35,22 +36,34 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
+  # Read-only: no toolbar, ids, hooks or forms (the History tab preview).
+  attr :read_only?, :boolean, default: false
+  # Cell key to the colours of the highlighted fulcrums that include it.
+  attr :highlights, :map, default: %{}
 
   def board(assigns) do
     assigns = assign(assigns, :cards, Structure.cards(assigns.cells))
 
     ~H"""
     <div
-      id="canvas-image"
+      id={!@read_only? && "canvas-image"}
       class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
     >
-      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
+      <div
+        :if={!@read_only?}
+        class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2"
+      >
         <div class="min-w-[8rem] flex-1">
           <.title_field c_name={@c_name} />
         </div>
 
         <div :if={@status_row?} class="hidden sm:flex">
-          <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+          <.canvas_status
+            presence={@presence}
+            status={@status}
+            can_share?={@can_share?}
+            fulcrums?={Fulcrums.enabled?(@cells)}
+          />
         </div>
 
         <div class="ml-auto flex items-center gap-2">
@@ -109,19 +122,22 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
       </div>
 
       <div class="canvas-image-scroll min-h-0 flex-1 overflow-auto p-3">
-        <ImageFrame.board cells={@cells} board_id="image-board">
+        <ImageFrame.board cells={@cells} board_id={!@read_only? && "image-board"}>
           <:cell :let={card}>
             <div class="relative h-full">
               <%= if card.kind == "text" do %>
                 <Cell.text
                   cell_key={card.key}
+                  highlight={@highlights[card.key]}
                   cell_data={Map.get(@cells, card.key, %{})}
                   edit_structure?={@edit_structure?}
                   class="h-full"
+                  read_only?={@read_only?}
                 />
               <% else %>
                 <Cell.card
                   cell_key={card.key}
+                  highlight={@highlights[card.key]}
                   cell_data={Map.get(@cells, card.key, %{})}
                   edit_structure?={@edit_structure?}
                   user_id={@user_id}
@@ -133,6 +149,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                   colors_control?={false}
                   nav={Structure.neighbours(@cells, card.key)}
                   colors_picker={@colors_picker}
+                  read_only?={@read_only?}
                 />
               <% end %>
 

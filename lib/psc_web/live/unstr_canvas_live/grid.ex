@@ -7,6 +7,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   import PscWeb.CoreComponents, only: [icon: 1]
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
+  alias Psc.Canvas.Fulcrums
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
 
@@ -38,22 +39,34 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
+  # Read-only: no toolbar, ids, hooks or forms (the History tab preview).
+  attr :read_only?, :boolean, default: false
+  # Cell key to the colours of the highlighted fulcrums that include it.
+  attr :highlights, :map, default: %{}
 
   def grid(assigns) do
     ~H"""
     <div
-      id="canvas-grid"
+      id={!@read_only? && "canvas-grid"}
       class="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200"
     >
       <%!-- Structure editing is available to everyone with access to the
               canvas: the toggle, and — while it is on — the add actions. --%>
-      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
+      <div
+        :if={!@read_only?}
+        class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2"
+      >
         <div class="min-w-[8rem] flex-1">
           <.title_field c_name={@c_name} />
         </div>
 
         <div :if={@status_row?} class="hidden sm:flex">
-          <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+          <.canvas_status
+            presence={@presence}
+            status={@status}
+            can_share?={@can_share?}
+            fulcrums?={Fulcrums.enabled?(@cells)}
+          />
         </div>
 
         <div class="ml-auto flex items-center gap-2">
@@ -98,7 +111,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
             <.icon name="hero-squares-2x2" class="size-8 text-base-content/30" />
             <p class="text-sm text-base-content/60">This canvas has no structure yet.</p>
 
-            <div class="flex gap-2">
+            <div :if={!@read_only?} class="flex gap-2">
               <UIButton.button
                 type="button"
                 id="empty-add-row"
@@ -140,7 +153,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                   <th class="border border-base-content/20 bg-base-content/5 p-0 align-bottom font-medium text-base-content/70 text-sm">
                     <div class="flex flex-col">
                       <.accent_bar
-                        id={"accent-bar-column-#{column["id"]}"}
+                        id={!@read_only? && "accent-bar-column-#{column["id"]}"}
                         token={column["accent"]}
                       />
                       <div class="px-2 py-1">
@@ -241,7 +254,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                 <tr>
                   <td class="relative border border-base-content/20 bg-base-content/5 p-0 align-top">
                     <.accent_bar
-                      id={"accent-bar-row-#{row["id"]}"}
+                      id={!@read_only? && "accent-bar-row-#{row["id"]}"}
                       token={row["accent"]}
                       orientation={:left}
                     />
@@ -349,6 +362,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                           get_in(@cells, ["cells", cell_key]) || @cells[cell_key] || %{} %>
                         <Cell.card
                           cell_key={cell_key}
+                          highlight={@highlights[cell_key]}
                           cell_data={cell_data}
                           edit_structure?={@edit_structure?}
                           user_id={@user_id}
@@ -357,6 +371,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                           accent_left={row["accent"]}
                           colors_picker={@colors_picker}
                           colors_palette?
+                          read_only?={@read_only?}
                         />
                       <% end %>
                     </td>

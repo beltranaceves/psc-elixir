@@ -36,6 +36,7 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
   attr :presence, :map, default: %{}
   attr :status, :map, default: nil
   attr :can_share?, :boolean, default: false
+  attr :fulcrums?, :boolean, default: true
 
   def panel(assigns) do
     assigns = assign(assigns, :suggestions, @suggestions)
@@ -116,7 +117,12 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
             <%!-- The canvas's presence, save state and Share live in this bar on
             a desktop; on a phone the app header carries the compact cluster. --%>
             <div :if={@status} class="hidden min-w-0 sm:flex sm:shrink-0">
-              <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+              <.canvas_status
+                presence={@presence}
+                status={@status}
+                can_share?={@can_share?}
+                fulcrums?={@fulcrums?}
+              />
             </div>
 
             <%!-- On a phone the controls get their own line and share its width;
