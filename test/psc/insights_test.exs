@@ -136,4 +136,53 @@ defmodule Psc.InsightsTest do
     assert is_binary(saved.touch_map["r1_c1"])
     refute Map.has_key?(saved.touch_map, "r1_c2")
   end
+
+  test "a save folds the pruned edits into edit_stats", %{user: user, canvas: canvas} do
+    for value <- ["Teams need a faster onboarding path now", "Short"] do
+      {:ok, _seq} =
+        Canvas.apply_unstr_canvas_operation(canvas.id, user.id, %{
+          "type" => "update_cell",
+          "cell_key" => "r1_c1",
+          "field" => "content",
+          "value" => value
+        })
+    end
+
+    # Before the save the pending tail is folded on the fly.
+    pending = Canvas.unstr_canvas_edit_stats(Canvas.get_unstr_canvas(canvas.id))
+    assert pending["cells"]["r1_c1"] == 2
+
+    assert {:ok, saved} = Canvas.save_unstr_canvas_content_to_db(canvas.id, canvas.cells)
+    assert saved.edit_stats["cells"]["r1_c1"] == 2
+    assert %{"edits" => 2} = saved.edit_stats["users"][to_string(user.id)]
+    assert is_binary(saved.edit_stats["since"])
+
+    # The events are pruned, and reading again does not count them twice.
+    assert Canvas.unstr_canvas_edit_stats(saved)["cells"]["r1_c1"] == 2
+  end
+
+  test "the overview names the editors and respects access", %{
+    user: user,
+    scope: scope,
+    canvas: canvas
+  } do
+    {:ok, _seq} =
+      Canvas.apply_unstr_canvas_operation(canvas.id, user.id, %{
+        "type" => "update_cell",
+        "cell_key" => "r1_c2",
+        "field" => "content",
+        "value" => "A risk"
+      })
+
+    canvas = Canvas.get_unstr_canvas(canvas.id)
+
+    assert {:ok, %{tiles: tiles, since: %DateTime{}}} =
+             Insights.overview(scope, canvas, canvas.cells, %{})
+
+    most = Enum.find(tiles, &(&1.id == "most_edits"))
+    assert most.value == user.email |> String.split("@") |> hd()
+
+    other = Scope.for_user(AccountsFixtures.user_fixture())
+    assert {:error, :unauthorized} = Insights.overview(other, canvas, canvas.cells, %{})
+  end
 end

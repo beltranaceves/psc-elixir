@@ -30,57 +30,55 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
     canvas
   end
 
-  describe "the empty state" do
-    test "explains the feature and offers a run", %{conn: conn, user: user} do
+  describe "opening the tab" do
+    test "shows the overview and runs the heuristic checks", %{conn: conn, user: user} do
       canvas = canvas_for(user)
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
 
-      assert has_element?(lv, "#canvas-analysis-empty")
-      assert has_element?(lv, "#canvas-analysis-run")
-      assert has_element?(lv, "#canvas-analysis-ai-hint")
-      refute has_element?(lv, "#canvas-analysis-ai")
-    end
-  end
+      assert has_element?(lv, "#canvas-analysis-tiles")
 
-  describe "running the analysis" do
-    test "renders findings and a summary", %{conn: conn, user: user} do
-      canvas = canvas_for(user)
+      for id <-
+            ~w(oldest most_changed longest shortest most_edits fewest_edits net_added net_removed) do
+        assert has_element?(lv, "#overview-#{id}")
+      end
 
-      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
+      assert has_element?(lv, "#overview-longest", "Problem")
+      assert has_element?(lv, "#canvas-analysis-since", "Edit counts start with the next save")
 
-      lv |> element("#canvas-analysis-run") |> render_click()
-
+      # The heuristic checks ran without a click and were stored.
       assert has_element?(lv, "#canvas-analysis-results")
-      assert has_element?(lv, "#canvas-analysis-findings li")
-      assert has_element?(lv, "#canvas-analysis-summary", "finding")
+      assert has_element?(lv, "#canvas-analysis-findings li details")
+      assert has_element?(lv, "#canvas-analysis-summary", "AI review not run")
       assert has_element?(lv, "#canvas-analysis-copy")
-      refute has_element?(lv, "#canvas-analysis-empty")
+
+      report = Insights.get_report(Scope.for_user(user), canvas.id)
+      assert report.stats["cells"] == 2
 
       assert render(element(lv, "#canvas-analysis-report-text")) =~ "Analysis — Analysis test"
-
-      report = Insights.get_report(Scope.for_user(user), canvas.id)
-      assert report
-      assert report.stats["cells"] == 2
+      assert render(element(lv, "#canvas-analysis-report-text")) =~ "## Overview"
     end
 
-    test "a finding's cell chip links back to the editor", %{conn: conn, user: user} do
+    test "a cell tile and a finding's cell chip link back to the editor", %{
+      conn: conn,
+      user: user
+    } do
       canvas = canvas_for(user)
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
-      lv |> element("#canvas-analysis-run") |> render_click()
-
-      report = Insights.get_report(Scope.for_user(user), canvas.id)
-
-      key =
-        report.findings
-        |> Enum.find(&(&1["cell_keys"] != []))
-        |> Map.get("cell_keys")
-        |> hd()
 
       assert has_element?(
                lv,
-               ~s{a[href="/canvas/#{canvas.id}?tab=editor&cell=#{key}"]}
+               ~s{#overview-longest[href="/canvas/#{canvas.id}?tab=editor&cell=r1_c1"]}
+             )
+
+      report = Insights.get_report(Scope.for_user(user), canvas.id)
+      finding = Enum.find(report.findings, &(&1["cell_keys"] != []))
+      key = hd(finding["cell_keys"])
+
+      assert has_element?(
+               lv,
+               ~s{##{Finding.dom_id(finding)} a[href="/canvas/#{canvas.id}?tab=editor&cell=#{key}"]}
              )
     end
 
@@ -92,21 +90,30 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
       assert html =~ ~s{data-cell-focused="true"}
     end
 
-    test "editing the canvas marks the report stale", %{conn: conn, user: user} do
+    test "an edit marks the checks out of date and Refresh reruns them", %{
+      conn: conn,
+      user: user
+    } do
       canvas = canvas_for(user)
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
-      lv |> element("#canvas-analysis-run") |> render_click()
-
-      refute has_element?(lv, "#canvas-analysis-stale")
+      refute has_element?(lv, "#canvas-analysis-changed")
 
       render_hook(lv, "update_cell", %{
-        "cell_key" => "r1_c1",
+        "cell_key" => "r1_c2",
         "field" => "content",
-        "value" => "A different problem"
+        "value" => "Budget overrun"
       })
 
-      assert has_element?(lv, "#canvas-analysis-stale")
+      assert has_element?(lv, "#canvas-analysis-changed")
+      # There is no AI review yet, so there is nothing for it to be stale against.
+      refute has_element?(lv, "#canvas-analysis-stale")
+
+      lv |> element("#canvas-analysis-refresh") |> render_click()
+
+      refute has_element?(lv, "#canvas-analysis-changed")
+      assert has_element?(lv, "#overview-most_changed", "Risks")
+      assert has_element?(lv, "#overview-most_edits", user.email |> String.split("@") |> hd())
     end
 
     test "low coverage is part of the Empty filter, not a kind of its own", %{
@@ -124,7 +131,6 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
         })
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
-      lv |> element("#canvas-analysis-run") |> render_click()
 
       report = Insights.get_report(Scope.for_user(user), canvas.id)
       coverage = Enum.find(report.findings, &(&1["cell_keys"] == []))
@@ -143,7 +149,6 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
       canvas = canvas_for(user)
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
-      lv |> element("#canvas-analysis-run") |> render_click()
 
       report = Insights.get_report(Scope.for_user(user), canvas.id)
       finding = report.findings |> Enum.find(&(&1["kind"] == "empty"))
@@ -164,10 +169,8 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
     end
   end
 
-  describe "the AI toggle" do
-    test "appears only when the user has a connection", %{conn: conn, user: user} do
-      canvas = canvas_for(user)
-
+  describe "the AI review" do
+    defp connect_provider(user) do
       {:ok, _connection} =
         Connections.create(user, %{
           "name" => "Test key",
@@ -175,27 +178,58 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
           "model_id" => "gpt-4.1-mini",
           "api_key" => "sk-test-12345678"
         })
+    end
+
+    test "runs on demand and its findings join the list", %{conn: conn, user: user} do
+      canvas = canvas_for(user)
+      connect_provider(user)
+
+      Application.put_env(:psc, :insights_llm, fn _prompt ->
+        {:ok,
+         ~s({"findings":[{"kind":"contradiction","severity":"warning","cell_keys":["r1_c1"],"title":"Speed versus cost","detail":"The cells disagree."}]})}
+      end)
+
+      on_exit(fn -> Application.delete_env(:psc, :insights_llm) end)
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
 
-      assert has_element?(lv, "#canvas-analysis-ai")
-      refute has_element?(lv, "#canvas-analysis-ai-hint")
-      refute has_element?(lv, "#canvas-analysis-notes")
-
-      lv |> element("#canvas-analysis-ai") |> render_click()
+      refute has_element?(lv, "#canvas-analysis-findings", "Speed versus cost")
       assert has_element?(lv, "#canvas-analysis-connection")
-      assert has_element?(lv, "#canvas-analysis-ai[aria-pressed=\"true\"]")
-      assert has_element?(lv, "#canvas-analysis-notes")
+
+      lv |> element("#canvas-analysis-ai-run") |> render_click()
+      _ = render_async(lv)
+
+      assert has_element?(lv, "#canvas-analysis-findings", "Speed versus cost")
+      assert has_element?(lv, "#canvas-analysis-summary", "AI review just now")
+      assert has_element?(lv, "#canvas-analysis-ai-run", "Run AI review again")
+
+      render_hook(lv, "update_cell", %{
+        "cell_key" => "r1_c2",
+        "field" => "content",
+        "value" => "Budget overrun"
+      })
+
+      assert has_element?(lv, "#canvas-analysis-stale")
+    end
+
+    test "the notes toggle appears with a connection", %{conn: conn, user: user} do
+      canvas = canvas_for(user)
+      connect_provider(user)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
+
+      assert has_element?(lv, "#canvas-analysis-ai-run")
+      refute has_element?(lv, "#canvas-analysis-ai-hint")
 
       lv |> element("#canvas-analysis-notes") |> render_click()
       assert has_element?(lv, "#canvas-analysis-notes[aria-pressed=\"true\"]")
     end
 
-    test "is hidden without a connection", %{conn: conn, user: user} do
+    test "is replaced by a settings hint without a connection", %{conn: conn, user: user} do
       canvas = canvas_for(user)
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
 
-      refute has_element?(lv, "#canvas-analysis-ai")
+      refute has_element?(lv, "#canvas-analysis-ai-run")
       refute has_element?(lv, "#canvas-analysis-notes")
       assert has_element?(lv, "#canvas-analysis-ai-hint")
     end

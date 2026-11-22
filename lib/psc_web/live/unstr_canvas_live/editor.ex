@@ -83,7 +83,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:tabs, Tabs.tabs())
         |> assign(:insight_report, nil)
         |> assign(:insight_filter, "all")
-        |> assign(:insight_ai?, false)
         |> assign(:insight_ai_enabled?, Insights.ai_available?(socket.assigns.current_scope.user))
         |> assign(
           :insight_ai_label,
@@ -92,6 +91,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:insight_ai_running?, false)
         |> assign(:insight_include_notes?, false)
         |> assign(:insight_stale?, false)
+        |> assign(:insight_ai_stale?, false)
+        |> assign(:insight_overview, nil)
         |> assign(:insight_touch_map, canvas.touch_map || %{})
         |> assign(:agent_session, nil)
         |> assign(:agent_messages, [])
@@ -922,45 +923,29 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   # ─── Analysis tab ───
 
-  def handle_event("run_analysis", _params, %{assigns: %{insight_ai_running?: true}} = socket) do
+  # The overview and the heuristic checks are cheap and run whenever the tab
+  # opens; Refresh reruns both on demand. The AI review only runs when asked.
+  def handle_event("refresh_analysis", _params, socket) do
+    {:noreply, socket |> load_overview() |> run_heuristics()}
+  end
+
+  def handle_event("run_ai_review", _params, %{assigns: %{insight_ai_running?: true}} = socket) do
     {:noreply, socket}
   end
 
-  def handle_event("run_analysis", _params, socket) do
-    opts = [touch_map: socket.assigns.insight_touch_map]
+  def handle_event("run_ai_review", _params, socket) do
+    socket =
+      if socket.assigns.insight_report, do: socket, else: run_heuristics(socket)
 
-    case Insights.run(
-           socket.assigns.current_scope,
-           socket.assigns.canvas,
-           socket.assigns.cells,
-           opts
-         ) do
-      {:ok, report} ->
-        socket =
-          socket
-          |> assign(:insight_report, report)
-          |> assign(:insight_stale?, false)
-          |> assign(:insight_filter, "all")
+    cond do
+      not socket.assigns.insight_ai_enabled? ->
+        {:noreply, put_flash(socket, :error, ai_error(:no_connection))}
 
-        socket =
-          if socket.assigns.insight_ai? and socket.assigns.insight_ai_enabled? do
-            start_ai_review(socket)
-          else
-            socket
-          end
-
+      is_nil(socket.assigns.insight_report) ->
         {:noreply, socket}
 
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Could not run the analysis")}
-    end
-  end
-
-  def handle_event("toggle_analysis_ai", _params, socket) do
-    if socket.assigns.insight_ai_enabled? do
-      {:noreply, assign(socket, :insight_ai?, not socket.assigns.insight_ai?)}
-    else
-      {:noreply, socket}
+      true ->
+        {:noreply, start_ai_review(socket)}
     end
   end
 
@@ -2120,15 +2105,56 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp pivot_label(%{name: nil}), do: "Unnamed changes"
   defp pivot_label(%{name: name}), do: name
 
-  # The Analysis view reads the cached report when it is opened; it never runs
-  # on its own, because a run costs user attention (and, with AI, money).
+  # Opening the Analysis view rebuilds the overview and, when the canvas has
+  # changed since the stored report, reruns the heuristic checks. The AI review
+  # is never started here: it costs the user money.
   defp load_insights(socket) do
     report = Insights.get_report(socket.assigns.current_scope, socket.assigns.canvas_id)
 
-    assign(socket,
-      insight_report: report,
-      insight_stale?: Insights.stale?(report, socket.assigns.cells)
-    )
+    socket =
+      socket
+      |> assign(:insight_report, report)
+      |> load_overview()
+
+    if is_nil(report) or Insights.stale?(report, socket.assigns.cells) do
+      run_heuristics(socket)
+    else
+      assign(socket,
+        insight_stale?: false,
+        insight_ai_stale?: Insights.ai_stale?(report, socket.assigns.cells)
+      )
+    end
+  end
+
+  defp load_overview(socket) do
+    case Insights.overview(
+           socket.assigns.current_scope,
+           socket.assigns.canvas,
+           socket.assigns.cells,
+           socket.assigns.insight_touch_map
+         ) do
+      {:ok, overview} -> assign(socket, :insight_overview, overview)
+      {:error, _reason} -> assign(socket, :insight_overview, nil)
+    end
+  end
+
+  defp run_heuristics(socket) do
+    case Insights.run(
+           socket.assigns.current_scope,
+           socket.assigns.canvas,
+           socket.assigns.cells,
+           touch_map: socket.assigns.insight_touch_map
+         ) do
+      {:ok, report} ->
+        assign(socket,
+          insight_report: report,
+          insight_stale?: false,
+          insight_ai_stale?: Insights.ai_stale?(report, socket.assigns.cells)
+        )
+
+      {:error, _reason} ->
+        put_flash(socket, :error, "Could not run the analysis")
+    end
   end
 
   # The notes of the canvas, most recently touched first. The snippet is
@@ -2376,6 +2402,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply,
      socket
      |> assign(:insight_report, report)
+     |> assign(:insight_ai_stale?, Insights.ai_stale?(report, socket.assigns.cells))
      |> assign(:insight_ai_running?, false)}
   end
 
@@ -2635,10 +2662,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   defp mark_insight_stale(%{assigns: %{insight_report: nil}} = socket), do: socket
 
   defp mark_insight_stale(socket) do
-    assign(
-      socket,
-      :insight_stale?,
-      Insights.stale?(socket.assigns.insight_report, socket.assigns.cells)
+    report = socket.assigns.insight_report
+
+    assign(socket,
+      insight_stale?: Insights.stale?(report, socket.assigns.cells),
+      insight_ai_stale?: Insights.ai_stale?(report, socket.assigns.cells)
     )
   end
 
@@ -2856,7 +2884,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               filter={@insight_filter}
               stale?={@insight_stale?}
               ai_enabled?={@insight_ai_enabled?}
-              ai?={@insight_ai?}
+              ai_stale?={@insight_ai_stale?}
+              overview={@insight_overview}
               ai_label={@insight_ai_label}
               include_notes?={@insight_include_notes?}
               ai_running?={@insight_ai_running?}

@@ -71,6 +71,36 @@ defmodule Psc.Insights.LLMTest do
     assert Enum.any?(assisted.findings, &(&1["source"] == "heuristic"))
   end
 
+  test "a heuristic re-run keeps the AI findings; a new review replaces them", %{
+    scope: scope,
+    canvas: canvas
+  } do
+    answer = fn title ->
+      fn _prompt ->
+        {:ok,
+         ~s({"findings":[{"kind":"contradiction","severity":"warning","cell_keys":["r1_c1"],"title":"#{title}","detail":"x"}]})}
+      end
+    end
+
+    Application.put_env(:psc, :insights_llm, answer.("First opinion"))
+    {:ok, report} = Insights.run(scope, canvas, canvas.cells)
+    {:ok, assisted} = Insights.enhance(scope, canvas, canvas.cells, report)
+    assert %DateTime{} = assisted.ai_computed_at
+    refute Insights.ai_stale?(assisted, canvas.cells)
+
+    {:ok, rerun} = Insights.run(scope, canvas, canvas.cells)
+    assert Enum.any?(rerun.findings, &(&1["title"] == "First opinion"))
+    assert rerun.ai_computed_at == assisted.ai_computed_at
+
+    Application.put_env(:psc, :insights_llm, answer.("Second opinion"))
+    {:ok, again} = Insights.enhance(scope, canvas, canvas.cells, rerun)
+    titles = again.findings |> Enum.filter(&(&1["source"] == "ai")) |> Enum.map(& &1["title"])
+    assert titles == ["Second opinion"]
+
+    edited = put_in(canvas.cells, ["r1_c2", "content"], "Changed")
+    assert Insights.ai_stale?(again, edited)
+  end
+
   test "a finding about a cell that does not exist is dropped", %{scope: scope, canvas: canvas} do
     Application.put_env(:psc, :insights_llm, fn _prompt ->
       {:ok,

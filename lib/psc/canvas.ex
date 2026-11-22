@@ -9,6 +9,7 @@ defmodule Psc.Canvas do
   alias Psc.Repo
   alias Psc.Canvas.UnstrCanvas
   alias Psc.Canvas.UnstrCanvasPivot
+  alias Psc.Canvas.EditStats
   alias Psc.Canvas.Layout
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
@@ -1232,13 +1233,20 @@ defmodule Psc.Canvas do
             canvas.snapshot_seq || 0
           )
 
-        # The per-cell edit times are folded from the same events this save is
-        # about to prune. They live outside `cells` so the CRDT state and the
-        # templates keep their shape; the insights stale detector reads them.
+        # The per-cell edit times and the edit statistics are folded from the
+        # same events this save is about to prune. They live outside `cells` so
+        # the CRDT state and the templates keep their shape; the Analysis tab
+        # reads them.
+        events = pending_events(canvas)
+
         changeset =
           canvas
           |> UnstrCanvas.changeset(%{cells: cells, snapshot_seq: max_seq})
-          |> Ecto.Changeset.put_change(:touch_map, merged_touch_map(canvas))
+          |> Ecto.Changeset.put_change(:touch_map, merged_touch_map(canvas, events))
+          |> Ecto.Changeset.put_change(
+            :edit_stats,
+            EditStats.fold(canvas.edit_stats, canvas.cells, events)
+          )
 
         # The snapshot, the touch map and the prune commit together: a failed
         # update must never drop events the saved snapshot does not represent.
@@ -1260,16 +1268,29 @@ defmodule Psc.Canvas do
     end
   end
 
-  defp merged_touch_map(canvas) do
-    events =
-      from(e in Psc.Canvas.UnstrCanvasEvent,
-        where: e.unstr_canvas_id == ^canvas.id and e.seq > ^(canvas.snapshot_seq || 0),
-        select: {e.operation, e.inserted_at}
-      )
-      |> Repo.all()
+  @doc """
+  The canvas's edit statistics, including edits that are not saved yet.
 
+  The stored map covers everything up to `snapshot_seq`; the pending tail is
+  folded on the fly, the same way the next save will fold it.
+  """
+  def unstr_canvas_edit_stats(%UnstrCanvas{} = canvas) do
+    EditStats.fold(canvas.edit_stats, canvas.cells, pending_events(canvas))
+  end
+
+  # The events after the snapshot, in order, as `{operation, user_id, inserted_at}`.
+  defp pending_events(canvas) do
+    from(e in Psc.Canvas.UnstrCanvasEvent,
+      where: e.unstr_canvas_id == ^canvas.id and e.seq > ^(canvas.snapshot_seq || 0),
+      order_by: [asc: e.seq],
+      select: {e.operation, e.user_id, e.inserted_at}
+    )
+    |> Repo.all()
+  end
+
+  defp merged_touch_map(canvas, events) do
     touches =
-      Enum.reduce(events, %{}, fn {operation, at}, acc ->
+      Enum.reduce(events, %{}, fn {operation, _user_id, at}, acc ->
         case operation do
           %{"type" => "update_cell", "cell_key" => key} when is_binary(key) ->
             stamp = iso8601(at)

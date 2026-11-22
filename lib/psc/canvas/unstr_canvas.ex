@@ -31,6 +31,10 @@ defmodule Psc.Canvas.UnstrCanvas do
     # written by the context during a save, never cast from a request.
     field :touch_map, :map, default: %{}
 
+    # Edit counts per cell and edit/character totals per user, folded at save
+    # time by `Psc.Canvas.EditStats`. Written by the context, never cast.
+    field :edit_stats, :map, default: %{}
+
     has_many :events, Psc.Canvas.UnstrCanvasEvent, foreign_key: :unstr_canvas_id
 
     # A note belongs to a canvas and inherits its access rules.

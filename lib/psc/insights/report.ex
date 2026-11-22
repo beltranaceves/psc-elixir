@@ -28,6 +28,8 @@ defmodule Psc.Insights.Report do
     field :findings, {:array, :map}, default: []
     field :dismissed, {:array, :string}, default: []
     field :stats, :map, default: %{}
+    field :ai_fingerprint, :string
+    field :ai_computed_at, :utc_datetime_usec
 
     belongs_to :canvas, Psc.Canvas.UnstrCanvas, type: :binary_id
 
@@ -47,7 +49,9 @@ defmodule Psc.Insights.Report do
       :model,
       :findings,
       :dismissed,
-      :stats
+      :stats,
+      :ai_fingerprint,
+      :ai_computed_at
     ])
     |> validate_required([:canvas_id, :fingerprint, :computed_at])
     |> validate_inclusion(:mode, ["heuristic", "assisted"])
