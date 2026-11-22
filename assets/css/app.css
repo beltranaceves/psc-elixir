@@ -695,8 +695,10 @@
 
   /* An image cell is a fixed percentage of the picture, so it must not escape
      that rectangle when a field is focused (the table's focus-within rule
-     would make it absolute and full width). Its body scrolls instead: a small
-     note on a picture may still hold more Markdown than fits. */
+     would make it absolute and full width). In read mode its body fades out
+     like a table cell's; a tap opens it full screen (see .canvas-cell.is-expanded).
+     Only while a cell is being edited does its body scroll, so a long note
+     stays reachable without a scrollbar inside every small card. */
   .image-board {
     /* A broken or very slow picture must still leave a frame to work in. */
     min-height: 12rem;
@@ -721,7 +723,15 @@
       var(--tw-ring-shadow);
   }
 
-  .image-cell .canvas-cell .cell-body,
+  .image-cell .canvas-cell .cell-body {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+  }
+
   .image-cell .canvas-cell:focus-within .cell-body {
     position: absolute;
     inset: 0;

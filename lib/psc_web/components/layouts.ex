@@ -276,7 +276,7 @@ defmodule PscWeb.Layouts do
       <main class={[
         "flex min-h-0 flex-1 flex-col bg-transparent text-base-content",
         @main_class,
-        @fill_height && "overflow-y-auto"
+        @fill_height && "overflow-hidden"
       ]}>
         <div class={@container_class}>
           {render_slot(@inner_block)}

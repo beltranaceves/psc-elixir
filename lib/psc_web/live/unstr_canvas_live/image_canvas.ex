@@ -108,7 +108,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
         <ImageFrame.backdrop_controls cells={@cells} id_prefix="image-backdrop" />
       </div>
 
-      <div class="canvas-image-scroll min-h-0 flex-1 overflow-auto p-3">
+      <div class="canvas-image-scroll min-h-0 flex-1 overflow-auto p-3 lg:flex-none lg:overflow-visible">
         <ImageFrame.board cells={@cells} board_id="image-board">
           <:cell :let={card}>
             <div class="relative h-full">

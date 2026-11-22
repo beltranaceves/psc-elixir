@@ -461,12 +461,12 @@ defmodule PscWeb.Components.AgentConfigEditor do
         <p class="text-xs font-medium text-base-content/70">Add reference files</p>
 
         <div class="grid gap-2 sm:grid-cols-3">
-          <label class="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-2 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
+          <label class="relative inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-2 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
             <.live_file_input upload={@uploads.agent_files} class="sr-only" />
             <.icon name="hero-document-plus" class="size-4" /> Choose files
           </label>
 
-          <label class="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-2 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
+          <label class="relative inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-base-content/15 bg-base-100 px-2.5 py-2 text-xs font-medium text-base-content/70 transition hover:bg-base-200">
             <.live_file_input upload={@uploads.agent_folder} webkitdirectory class="sr-only" />
             <.icon name="hero-folder-plus" class="size-4" /> Choose folder
           </label>

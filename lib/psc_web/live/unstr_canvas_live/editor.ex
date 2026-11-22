@@ -2332,7 +2332,15 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       current_scope={@current_scope}
       header_title="Canvas Editor"
       fill_height
-      main_class="px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3"
+      main_class={
+        # A freeform board (bento or image) grows with its content on a desktop,
+        # so the page is its one scroller there. Everywhere else every panel
+        # scrolls inside itself and the page must not scroll too.
+        if(@active_tab == "editor" and Structure.freeform?(@cells),
+          do: "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3 lg:overflow-y-auto",
+          else: "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3"
+        )
+      }
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <:header_nav>
