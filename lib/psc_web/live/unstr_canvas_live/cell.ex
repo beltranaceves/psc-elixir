@@ -9,6 +9,8 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
   import PscWeb.UnstrCanvasLive.CellColors,
     only: [colors_button: 1, colors_panel: 1]
 
+  alias PscWeb.Components.Hint
+
   # One cell's body: the label, its fields and the Markdown editors. Shared by
   # the table grid and the bento board so the two layouts cannot drift - the
   # ids (`cell-card-<key>`, `cell-<key>-label`, `md-<key>-<field>`) are the
@@ -135,6 +137,14 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
             </.form>
           </div>
 
+          <Hint.hint_input
+            id={"cell-" <> @cell_key <> "-hint-form"}
+            event="update_cell_hint"
+            params={%{"cell_key" => @cell_key}}
+            value={Map.get(@cell_data, "hint")}
+            class="mb-1"
+          />
+
           <div
             :if={@colors_palette? and @colors_picker == @cell_key}
             id={"cell-colors-panel-" <> @cell_key}
@@ -144,10 +154,15 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
             <.colors_panel cell_key={@cell_key} background={@background} outline?={false} />
           </div>
         <% else %>
-          <div class="mb-1">
-            <div class="text-sm font-medium text-base-content break-words">
+          <div class="mb-1 flex items-start gap-1">
+            <div class="min-w-0 text-sm font-medium text-base-content break-words">
               {cell_title(@cell_data, @cell_key)}
             </div>
+            <Hint.hint
+              id={hint_id(@read_only?, @cell_key)}
+              item={@cell_data}
+              label={cell_title(@cell_data, @cell_key)}
+            />
           </div>
         <% end %>
 
@@ -261,6 +276,13 @@ defmodule PscWeb.UnstrCanvasLive.Cell do
     </div>
     """
   end
+
+  @doc """
+  The id of a cell's tooltip. The History preview can sit beside the live
+  board, and a tooltip's hook is bound to its id, so the preview has its own.
+  """
+  def hint_id(read_only?, cell_key),
+    do: if(read_only?, do: "pivot-hint-cell-" <> cell_key, else: "hint-cell-" <> cell_key)
 
   # The heading of a cell: its label, the legacy name/title aliases, or the key
   # itself when it has none.

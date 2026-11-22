@@ -84,13 +84,14 @@ defmodule Psc.Canvas.Structure do
   @metadata_keys Enum.uniq(@bento_metadata ++ @image_metadata)
 
   # Cell keys that are metadata, not content, in every mode. `placement`,
-  # `accent` and `background` are how a free-form cell is drawn, and `kind` is
-  # whether an image cell is a card or a bare text box; they are never editable
-  # fields.
+  # `accent` and `background` are how a free-form cell is drawn, `kind` is
+  # whether an image cell is a card or a bare text box, and `hint` is the
+  # tooltip text explaining the cell; they are never editable fields.
   @reserved_cell_keys [
     "row",
     "column",
     "label",
+    "hint",
     "name",
     "semantics",
     "titles",
@@ -351,6 +352,39 @@ defmodule Psc.Canvas.Structure do
 
   @doc "The kinds an image cell may be."
   def kinds, do: ["card", "text"]
+
+  ## Hints
+
+  @max_hint 500
+
+  @doc "The longest hint a cell, row or column may carry."
+  def max_hint, do: @max_hint
+
+  @doc """
+  The tooltip text of a cell, a row or a column: what the concept means or how
+  to fill it in. A missing or blank hint is `nil`.
+  """
+  def hint(%{"hint" => hint}) when is_binary(hint) do
+    if String.trim(hint) == "", do: nil, else: hint
+  end
+
+  def hint(_item), do: nil
+
+  @doc """
+  Set the hint of a cell, a row or a column map. A blank hint removes the key,
+  and a long one is cut to `max_hint/0` characters, so every client that applies
+  the same operation stores the same value.
+  """
+  def put_hint(item, hint) when is_map(item) and is_binary(hint) do
+    if String.trim(hint) == "" do
+      Map.delete(item, "hint")
+    else
+      Map.put(item, "hint", String.slice(hint, 0, @max_hint))
+    end
+  end
+
+  def put_hint(item, nil) when is_map(item), do: Map.delete(item, "hint")
+  def put_hint(item, _hint), do: item
 
   @doc """
   Set an image cell's kind. Missing cells and unknown kinds are a no-op.
@@ -1335,7 +1369,8 @@ defmodule Psc.Canvas.Structure do
          :ok <- validate_backdrop(map),
          :ok <- validate(map),
          :ok <- validate_fields(map),
-         :ok <- validate_accents(map) do
+         :ok <- validate_accents(map),
+         :ok <- validate_hints(map) do
       :ok
     end
   end
@@ -1618,6 +1653,25 @@ defmodule Psc.Canvas.Structure do
         :ok
     end
   end
+
+  defp validate_hints(map) do
+    structure = Enum.filter((map["rows"] || []) ++ (map["columns"] || []), &is_map/1)
+
+    cards =
+      map
+      |> cells()
+      |> Enum.filter(fn {_key, cell} -> is_map(cell) end)
+      |> Enum.map(fn {_key, cell} -> cell end)
+
+    if Enum.all?(structure ++ cards, &valid_hint?(&1["hint"])) do
+      :ok
+    else
+      {:error, :layout_map, "hints must be text of at most #{@max_hint} characters"}
+    end
+  end
+
+  defp valid_hint?(nil), do: true
+  defp valid_hint?(hint), do: is_binary(hint) and String.length(hint) <= @max_hint
 
   defp invalid_notes_mode?(nil), do: false
   defp invalid_notes_mode?(mode), do: mode not in Psc.Canvas.NotesMode.modes()

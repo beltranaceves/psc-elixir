@@ -70,6 +70,11 @@ class TooltipComponent extends Component {
             trigger: {
               mouseover: "delayOpen",
               focusin: "delayOpen",
+              // Leaving before the open delay runs out cancels the pending
+              // open; without this a quick pass over the trigger opened the
+              // tooltip after the cursor had gone, and it stayed open.
+              mouseout: "cancelOpen",
+              focusout: "cancelOpen",
             },
           },
         },
@@ -113,8 +118,22 @@ class TooltipComponent extends Component {
   delayOpen() {
     this.clearTimers();
     this.openTimer = setTimeout(() => {
+      this.openTimer = null;
+      // A missed mouseout (the trigger re-rendered by a LiveView patch under
+      // the cursor, say) must not open a tooltip nobody is pointing at.
+      if (!this.triggerEngaged()) return;
       this.transition("open");
     }, this.config.openDelay);
+  }
+
+  cancelOpen(event) {
+    if (event?.currentTarget?.contains(event.relatedTarget)) return;
+    this.clearTimers();
+  }
+
+  triggerEngaged() {
+    if (!this.trigger || !this.trigger.isConnected) return false;
+    return this.trigger.matches(":hover") || this.trigger.contains(document.activeElement);
   }
 
   // Touch devices have no hover-out: a tap opens the tooltip and the next tap

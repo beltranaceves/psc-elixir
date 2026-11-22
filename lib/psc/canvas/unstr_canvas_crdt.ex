@@ -17,6 +17,8 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
     * `%{"type" => "update_row_label", "id" => id, "label" => label}` (and `update_column_label`)
     * `%{"type" => "set_row_accent", "id" => id, "accent" => token}` (and `set_column_accent`)
     * `%{"type" => "update_cell_label", "cell_key" => key, "label" => label}`
+    * `%{"type" => "update_cell_hint", "cell_key" => key, "hint" => hint}`
+    * `%{"type" => "update_row_hint", "id" => id, "hint" => hint}` (and `update_column_hint`)
     * `%{"type" => "add_cell_field", "cell_key" => key, "field" => field}`
     * `%{"type" => "remove_cell_field", "cell_key" => key, "field" => field}`
     * `%{"type" => "update_cell_field_title", "cell_key" => key, "field" => field, "title" => title}`
@@ -206,6 +208,21 @@ defmodule Psc.Canvas.UnstrCanvasCRDT do
         cells
       ) do
     update_cell_data(cells, key, fn cell -> Map.put(cell, "label", label) end)
+  end
+
+  # A hint is the tooltip explaining a cell, a row or a column. A blank one
+  # removes the key; `Structure.put_hint/2` owns the length cap so every client
+  # stores the same value.
+  def apply_operation(%{"type" => "update_cell_hint", "cell_key" => key, "hint" => hint}, cells) do
+    update_cell_data(cells, key, &Structure.put_hint(&1, hint))
+  end
+
+  def apply_operation(%{"type" => "update_row_hint", "id" => id, "hint" => hint}, cells) do
+    update_structure_def(cells, "rows", id, &Structure.put_hint(&1, hint))
+  end
+
+  def apply_operation(%{"type" => "update_column_hint", "id" => id, "hint" => hint}, cells) do
+    update_structure_def(cells, "columns", id, &Structure.put_hint(&1, hint))
   end
 
   def apply_operation(%{"type" => "add_cell_field", "cell_key" => key, "field" => field}, cells) do

@@ -8,6 +8,7 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
   alias Psc.Canvas.Structure
+  alias PscWeb.Components.Hint
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
 
@@ -207,6 +208,14 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                             </div>
                           </div>
 
+                          <Hint.hint_input
+                            id={"column-" <> column["id"] <> "-hint-form"}
+                            event="update_column_hint"
+                            params={%{"structure_id" => column["id"]}}
+                            value={column["hint"]}
+                            class="mt-0.5"
+                          />
+
                           <div
                             :if={@structure_accent_picker == {:column, column["id"]}}
                             data-color-picker
@@ -240,7 +249,15 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                             </button>
                           </div>
                         <% else %>
-                          {column["label"]}
+                          <div class="flex items-center justify-center gap-1">
+                            <span class="min-w-0 break-words">{column["label"]}</span>
+                            <Hint.hint
+                              id={hint_id(@read_only?, "column", column["id"])}
+                              item={column}
+                              label={column["label"]}
+                              side="bottom"
+                            />
+                          </div>
                         <% end %>
                       </div>
                     </div>
@@ -310,6 +327,14 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                           </div>
                         </div>
 
+                        <Hint.hint_input
+                          id={"row-" <> row["id"] <> "-hint-form"}
+                          event="update_row_hint"
+                          params={%{"structure_id" => row["id"]}}
+                          value={row["hint"]}
+                          class="mt-0.5"
+                        />
+
                         <div
                           :if={@structure_accent_picker == {:row, row["id"]}}
                           data-color-picker
@@ -343,11 +368,19 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
                           </button>
                         </div>
                       <% else %>
-                        <div
-                          class="truncate text-center font-medium text-base-content/70 text-sm"
-                          title={row["label"]}
-                        >
-                          {row["label"]}
+                        <div class="flex items-center justify-center gap-1">
+                          <div
+                            class="min-w-0 truncate text-center font-medium text-base-content/70 text-sm"
+                            title={row["label"]}
+                          >
+                            {row["label"]}
+                          </div>
+                          <Hint.hint
+                            id={hint_id(@read_only?, "row", row["id"])}
+                            item={row}
+                            label={row["label"]}
+                            side="right"
+                          />
                         </div>
                       <% end %>
                     </div>
@@ -395,22 +428,36 @@ defmodule PscWeb.UnstrCanvasLive.Grid do
     """
   end
 
+  # A tooltip's hook is bound to its id, so the History preview, which can sit
+  # beside the live grid, uses its own prefix.
+  defp hint_id(read_only?, group, id),
+    do: if(read_only?, do: "pivot-hint-#{group}-#{id}", else: "hint-#{group}-#{id}")
+
+  # The ⓘ (20px) and the gap before it.
+  @hint_icon_px 24
+
   defp table_min_width(cells, edit_structure?) do
     columns = length(cells["columns"] || [])
     "calc(#{row_label_width(cells, edit_structure?)} + #{columns * @min_column_width_rem}rem)"
   end
 
   defp row_label_width(cells, edit_structure?) do
-    width = cells |> longest_row_label() |> label_text_px() |> Kernel.+(@row_label_padding_px)
+    width = widest_row_label_px(cells, edit_structure?) + @row_label_padding_px
     width = max(width, if(edit_structure?, do: @row_label_edit_min_px, else: @row_label_min_px))
     "#{width}px"
   end
 
-  defp longest_row_label(cells) do
+  # The widest row header: its label plus, outside structure mode, the ⓘ of a
+  # row with a hint, so the icon never truncates the name beside it.
+  defp widest_row_label_px(cells, edit_structure?) do
     cells
     |> Map.get("rows", [])
-    |> Enum.map(fn row -> row |> Map.get("label", "") |> to_string() end)
-    |> Enum.max_by(&String.length/1, fn -> "" end)
+    |> Enum.map(fn row ->
+      label_px = row |> Map.get("label", "") |> to_string() |> label_text_px()
+      icon_px = if not edit_structure? and Structure.hint(row), do: @hint_icon_px, else: 0
+      label_px + icon_px
+    end)
+    |> Enum.max(fn -> 0 end)
   end
 
   defp label_text_px(label) do

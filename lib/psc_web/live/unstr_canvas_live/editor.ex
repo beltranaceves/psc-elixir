@@ -133,6 +133,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:edit_structure?, false)
         |> assign(:structure_accent_picker, nil)
         |> assign(:structure_colors_picker, nil)
+        |> assign(:hint_editor, nil)
         |> assign(:structure_remove_confirm, nil)
         |> assign(:pivots, [])
         |> assign(:selected_pivot_id, nil)
@@ -1227,6 +1228,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      |> assign(:edit_structure?, not socket.assigns.edit_structure?)
      |> assign(:structure_accent_picker, nil)
      |> assign(:structure_colors_picker, nil)
+     |> assign(:hint_editor, nil)
      |> assign(:structure_remove_confirm, nil)}
   end
 
@@ -1306,13 +1308,38 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
      )}
   end
 
+  # An image board's text label has no room for an inline hint field, so its
+  # tooltip text is edited in a small panel under the label.
+  def handle_event("toggle_hint_editor", %{"cell_key" => key}, socket) do
+    editor = if socket.assigns.hint_editor == key, do: nil, else: key
+    {:noreply, assign(socket, hint_editor: editor, structure_colors_picker: nil)}
+  end
+
+  # Hints are the tooltips of cells, rows and columns. Like a label, each one
+  # is a whole value and the last write wins.
+  def handle_event("update_cell_hint", %{"cell_key" => key, "hint" => hint}, socket) do
+    {:noreply,
+     process_operation(socket, %{"type" => "update_cell_hint", "cell_key" => key, "hint" => hint})}
+  end
+
+  def handle_event("update_row_hint", %{"structure_id" => id, "hint" => hint}, socket) do
+    {:noreply,
+     process_operation(socket, %{"type" => "update_row_hint", "id" => id, "hint" => hint})}
+  end
+
+  def handle_event("update_column_hint", %{"structure_id" => id, "hint" => hint}, socket) do
+    {:noreply,
+     process_operation(socket, %{"type" => "update_column_hint", "id" => id, "hint" => hint})}
+  end
+
   # A click outside the pickers closes them (the client hook reports it), so
   # the panel can be dismissed without finding its trigger again.
   def handle_event("dismiss_color_pickers", _params, socket) do
     {:noreply,
      assign(socket,
        structure_colors_picker: nil,
-       structure_accent_picker: nil
+       structure_accent_picker: nil,
+       hint_editor: nil
      )}
   end
 
@@ -2684,7 +2711,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         id="canvas-workspace"
         phx-hook="DismissPicker"
         data-picker-open={
-          to_string(not is_nil(@structure_colors_picker) or not is_nil(@structure_accent_picker))
+          to_string(
+            not is_nil(@structure_colors_picker) or not is_nil(@structure_accent_picker) or
+              not is_nil(@hint_editor)
+          )
         }
         class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2"
       >
@@ -2774,6 +2804,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               edit_structure?={@edit_structure?}
               structure_accent_picker={@structure_accent_picker}
               colors_picker={@structure_colors_picker}
+              hint_editor={@hint_editor}
               presence={@presence}
               status={@status}
               can_share?={@canvas.author_id == @user_id}
@@ -3006,6 +3037,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
   attr :colors_picker, :string, default: nil
+  attr :hint_editor, :string, default: nil
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true

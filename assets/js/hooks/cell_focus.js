@@ -183,6 +183,8 @@ export default {
 
     if (!window.matchMedia(MOBILE_QUERY).matches) return
     if (this.isExpanded()) return
+    // A hint's ⓘ button opens its tooltip; it must not expand the cell.
+    if (event.target.closest("[data-hint-trigger]")) return
 
     // First tap: fullscreen only, do not let the display start editing.
     event.preventDefault()

@@ -22,6 +22,7 @@ defmodule PscWeb.CanvasLayoutLive.ImageEditor do
 
   alias Psc.Canvas.Accent
   alias Psc.Canvas.Structure
+  alias PscWeb.Components.Hint
   alias PscWeb.Components.ImageBoard, as: ImageFrame
   alias PscWeb.Components.UI.Button, as: UIButton
 
@@ -209,6 +210,15 @@ defmodule PscWeb.CanvasLayoutLive.ImageEditor do
                     None
                   </button>
                 </div>
+
+                <Hint.hint_input
+                  id={"image-" <> card.key <> "-hint-form"}
+                  event="update_cell_hint"
+                  params={%{"cell_key" => card.key}}
+                  value={Structure.hint(Map.get(Structure.cells(@layout_map), card.key))}
+                  disabled={!@can_edit?}
+                  class="mb-1 shrink-0"
+                />
 
                 <div class="min-h-0 flex-1">
                   <div

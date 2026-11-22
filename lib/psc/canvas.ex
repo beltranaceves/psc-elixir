@@ -775,10 +775,19 @@ defmodule Psc.Canvas do
               "field_order" => fields
             })
             |> maybe_put_titles(meta["titles"])
+            |> maybe_put_hint(meta)
 
           Map.put(a, key, data)
       end)
     end)
+  end
+
+  # A cell's hint (its tooltip) is copied like its label.
+  defp maybe_put_hint(data, meta) do
+    case Structure.hint(meta) do
+      nil -> data
+      hint -> Structure.put_hint(data, hint)
+    end
   end
 
   defp maybe_put_titles(data, titles) when titles in [nil, %{}], do: data
@@ -812,6 +821,7 @@ defmodule Psc.Canvas do
             "field_order" => fields
           })
           |> maybe_put_titles(meta["titles"])
+          |> maybe_put_hint(meta)
           |> maybe_put_accent(meta["accent"])
 
         {key, data}
@@ -847,6 +857,7 @@ defmodule Psc.Canvas do
             "field_order" => fields
           })
           |> maybe_put_titles(meta["titles"])
+          |> maybe_put_hint(meta)
           |> maybe_put_accent(meta["accent"])
 
         {key, data}

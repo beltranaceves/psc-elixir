@@ -26,6 +26,7 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
   alias PscWeb.AgentUploads
   alias PscWeb.Components.AgentConfigEditor
   alias PscWeb.Components.FulcrumEditor
+  alias PscWeb.Components.Hint
   alias PscWeb.Markdown
   alias PscWeb.CanvasLayoutLive.BentoEditor
   alias PscWeb.CanvasLayoutLive.ImageEditor
@@ -218,6 +219,33 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
 
   def handle_event("update_row_label", %{"index" => index, "label" => label}, socket) do
     {:noreply, update_layout(socket, &update_row_label(&1, String.to_integer(index), label))}
+  end
+
+  # ─── Hints (tooltips) ───
+
+  def handle_event("update_column_hint", %{"index" => index, "hint" => hint}, socket) do
+    idx = String.to_integer(index)
+
+    {:noreply,
+     update_layout(socket, fn lm ->
+       Map.put(lm, "columns", List.update_at(lm["columns"], idx, &Structure.put_hint(&1, hint)))
+     end)}
+  end
+
+  def handle_event("update_row_hint", %{"index" => index, "hint" => hint}, socket) do
+    idx = String.to_integer(index)
+
+    {:noreply,
+     update_layout(socket, fn lm ->
+       Map.put(lm, "rows", List.update_at(lm["rows"], idx, &Structure.put_hint(&1, hint)))
+     end)}
+  end
+
+  def handle_event("update_cell_hint", %{"cell_key" => cell_key, "hint" => hint}, socket) do
+    {:noreply,
+     update_layout(socket, fn lm ->
+       put_cell_meta(lm, cell_key, Structure.put_hint(cell_meta(lm, cell_key), hint))
+     end)}
   end
 
   # ─── Accent colors ───
@@ -1473,6 +1501,15 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                     <% end %>
                                   </div>
 
+                                  <Hint.hint_input
+                                    id={"column-#{col["id"]}-hint-form"}
+                                    event="update_column_hint"
+                                    params={%{"index" => ci}}
+                                    value={col["hint"]}
+                                    disabled={!@can_edit?}
+                                    class="mt-0.5"
+                                  />
+
                                   <div
                                     :if={@can_edit? and @accent_picker == {:column, ci}}
                                     id={"accent-picker-column-#{col["id"]}"}
@@ -1567,6 +1604,15 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                   <% end %>
                                 </div>
 
+                                <Hint.hint_input
+                                  id={"row-#{row_meta["id"]}-hint-form"}
+                                  event="update_row_hint"
+                                  params={%{"index" => ri}}
+                                  value={row_meta["hint"]}
+                                  disabled={!@can_edit?}
+                                  class="mt-0.5"
+                                />
+
                                 <div
                                   :if={@can_edit? and @accent_picker == {:row, ri}}
                                   id={"accent-picker-row-#{row_meta["id"]}"}
@@ -1621,6 +1667,14 @@ defmodule PscWeb.CanvasLayoutLive.Editor do
                                       class="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-base-content placeholder-base-content/40 hover:border-base-content/10 focus:border-primary focus:outline-none"
                                     />
                                   </form>
+
+                                  <Hint.hint_input
+                                    id={"cell-#{cell_key}-hint-form"}
+                                    event="update_cell_hint"
+                                    params={%{"cell_key" => cell_key}}
+                                    value={get_in(@layout_map, ["cells", cell_key, "hint"])}
+                                    disabled={!@can_edit?}
+                                  />
 
                                   <ul class="mt-2 space-y-1">
                                     <%= for field <- get_in(@layout_map, ["cells", cell_key, "fields"]) || [] do %>

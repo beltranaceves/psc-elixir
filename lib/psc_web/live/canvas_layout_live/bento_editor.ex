@@ -20,6 +20,7 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
 
   alias Psc.Canvas.Accent
   alias Psc.Canvas.Structure
+  alias PscWeb.Components.Hint
   alias PscWeb.Components.UI.Button, as: UIButton
 
   attr :layout_map, :map, required: true
@@ -221,6 +222,15 @@ defmodule PscWeb.CanvasLayoutLive.BentoEditor do
                   None
                 </button>
               </div>
+
+              <Hint.hint_input
+                id={"card-#{card.key}-hint-form"}
+                event="update_cell_hint"
+                params={%{"cell_key" => card.key}}
+                value={Structure.hint(Map.get(Structure.cells(@layout_map), card.key))}
+                disabled={!@can_edit?}
+                class="mb-1"
+              />
 
               <ul class="space-y-1">
                 <li

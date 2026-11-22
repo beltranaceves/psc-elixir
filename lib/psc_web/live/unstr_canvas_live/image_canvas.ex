@@ -20,6 +20,7 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
   alias Psc.Canvas.Structure
+  alias PscWeb.Components.Hint
   alias PscWeb.Components.ImageBoard, as: ImageFrame
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
@@ -29,6 +30,8 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
   attr :edit_structure?, :boolean, required: true
   attr :structure_accent_picker, :any, default: nil
   attr :colors_picker, :string, default: nil
+  # The text label whose tooltip panel is open in structure mode.
+  attr :hint_editor, :string, default: nil
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
@@ -133,6 +136,14 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                   class="h-full"
                   read_only?={@read_only?}
                 />
+                <%!-- A text label is one input from edge to edge, so its ⓘ sits
+                on the corner instead of beside a title. --%>
+                <Hint.hint
+                  id={Cell.hint_id(@read_only?, card.key)}
+                  item={Map.get(@cells, card.key, %{})}
+                  label={card.label}
+                  class="absolute -left-2 -top-2 z-20 rounded-full bg-base-100 shadow-sm"
+                />
               <% else %>
                 <Cell.card
                   cell_key={card.key}
@@ -194,6 +205,27 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                   {if card.kind == "text", do: "Card", else: "Text"}
                 </button>
 
+                <button
+                  :if={card.kind == "text"}
+                  type="button"
+                  data-color-picker
+                  id={"image-hint-" <> card.key}
+                  phx-click="toggle_hint_editor"
+                  phx-value-cell_key={card.key}
+                  aria-pressed={to_string(@hint_editor == card.key)}
+                  class={[
+                    "inline-flex size-6 items-center justify-center rounded hover:bg-base-content/10",
+                    if(Structure.hint(Map.get(@cells, card.key, %{})),
+                      do: "text-primary",
+                      else: "text-base-content/60"
+                    )
+                  ]}
+                  title="Tooltip text"
+                  aria-label={"Tooltip for #{card.label}"}
+                >
+                  <.icon name="hero-information-circle" class="size-3.5" />
+                </button>
+
                 <.colors_button
                   cell_key={card.key}
                   background={Map.get(@cells, card.key, %{})["background"]}
@@ -212,6 +244,20 @@ defmodule PscWeb.UnstrCanvasLive.ImageCanvas do
                 >
                   <.icon name="hero-x-mark" class="size-3" />
                 </button>
+              </div>
+
+              <div
+                :if={@edit_structure? and card.kind == "text" and @hint_editor == card.key}
+                id={"image-hint-panel-" <> card.key}
+                data-color-picker
+                class="absolute left-0 top-full z-40 mt-1 w-64 max-w-[80vw] rounded-md border border-base-content/10 bg-base-100 p-2 shadow-lg"
+              >
+                <Hint.hint_input
+                  id={"cell-" <> card.key <> "-hint-form"}
+                  event="update_cell_hint"
+                  params={%{"cell_key" => card.key}}
+                  value={Map.get(@cells, card.key, %{})["hint"]}
+                />
               </div>
 
               <div
