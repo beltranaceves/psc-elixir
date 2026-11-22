@@ -69,6 +69,9 @@ defmodule PscWeb.Router do
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
 
+    # An image board's backdrop, fetched by the server for the PNG/SVG export.
+    get "/canvas/:id/backdrop", CanvasBackdropController, :show
+
     # Old canvas URLs, kept alive for bookmarks from earlier releases.
     get "/canvases", RedirectController, :canvases
     get "/canvases/:id", RedirectController, :canvas

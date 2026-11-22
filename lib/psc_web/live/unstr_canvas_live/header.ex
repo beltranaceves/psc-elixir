@@ -68,6 +68,64 @@ defmodule PscWeb.UnstrCanvasLive.Header do
     """
   end
 
+  # The Export button: hovering it (or focusing it, which a tap does) shows the
+  # formats. Each one asks the LiveView to render the board off screen, and the
+  # `CanvasExport` hook turns that render into a file.
+  attr :compact?, :boolean, default: false
+
+  defp export_menu(assigns) do
+    assigns = assign(assigns, :suffix, if(assigns.compact?, do: "-compact", else: ""))
+
+    ~H"""
+    <div class="group/export relative shrink-0">
+      <UIButton.button
+        type="button"
+        id={"export-canvas-button" <> @suffix}
+        variant="outline"
+        size={if @compact?, do: "icon", else: "sm"}
+        class={if @compact?, do: "!size-8 rounded-full", else: "gap-1.5"}
+        aria-haspopup="menu"
+        aria-label="Export"
+        title="Export this canvas as an image"
+      >
+        <.icon name="hero-arrow-down-tray" class="size-4" />
+        <span :if={!@compact?}>Export</span>
+      </UIButton.button>
+
+      <div class={[
+        "invisible absolute right-0 top-full z-50 w-max pt-1.5 opacity-0 transition-opacity",
+        "group-hover/export:visible group-hover/export:opacity-100",
+        "group-focus-within/export:visible group-focus-within/export:opacity-100"
+      ]}>
+        <div
+          role="menu"
+          class="flex min-w-44 flex-col rounded-xl border border-base-content/10 bg-base-200 p-1 shadow-lg"
+        >
+          <button
+            :for={{format, label, detail} <- export_formats()}
+            type="button"
+            role="menuitem"
+            id={"export-" <> format <> @suffix}
+            phx-click="export_canvas"
+            phx-value-format={format}
+            class="flex flex-col items-start rounded-lg px-3 py-1.5 text-left hover:bg-base-content/5 focus:bg-base-content/5 focus:outline-none"
+          >
+            <span class="text-sm font-medium text-base-content">{label}</span>
+            <span class="text-xs text-base-content/55">{detail}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp export_formats do
+    [
+      {"png", "PNG image", "A picture of the whole board"},
+      {"svg", "SVG", "Sharp at any size; opens in browsers"}
+    ]
+  end
+
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
@@ -162,6 +220,8 @@ defmodule PscWeb.UnstrCanvasLive.Header do
 
       <.fulcrum_menu :if={@cells && Fulcrums.enabled?(@cells)} cells={@cells} />
 
+      <.export_menu />
+
       <%= if @can_share? do %>
         <div class="shrink-0">
           <.share_button id="share-canvas-button" label="Share" />
@@ -235,6 +295,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         others={@status.others}
         compact
       />
+      <.export_menu compact? />
       <%= if @can_share? do %>
         <UIButton.button
           type="button"

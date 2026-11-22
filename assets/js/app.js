@@ -30,6 +30,7 @@ import MarkdownEditorHook from "./hooks/markdown_editor_hook"
 import CellHook from "./hooks/cell_hook"
 import MarkdownField from "./hooks/markdown_field"
 import CellFocus from "./hooks/cell_focus"
+import CanvasExport from "./hooks/canvas_export"
 import CanvasTabs from "./hooks/canvas_tabs"
 import DismissPicker from "./hooks/dismiss_picker"
 import CanvasAgent from "./hooks/agent_panel"
@@ -59,7 +60,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: backpexParams({_csrf_token: csrfToken}),
-  hooks: {...colocatedHooks, CellHook, MarkdownField, CellFocus, CanvasTabs, DismissPicker, CanvasAgent, DetailsState, ModelSuggestions, ProviderSelect, BentoBoard, ImageBoard, MarkdownEditorHook, SaladUI: SaladUI.SaladUIHook, ...BackpexHooks},
+  hooks: {...colocatedHooks, CellHook, MarkdownField, CellFocus, CanvasExport, CanvasTabs, DismissPicker, CanvasAgent, DetailsState, ModelSuggestions, ProviderSelect, BentoBoard, ImageBoard, MarkdownEditorHook, SaladUI: SaladUI.SaladUIHook, ...BackpexHooks},
 })
 
 // Close native <details> menus when clicking outside or pressing Escape.

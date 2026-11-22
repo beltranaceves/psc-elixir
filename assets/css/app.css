@@ -439,6 +439,23 @@
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
   }
 
+  /* The PNG/SVG export renders the board off screen (UnstrCanvasLive.Editor's
+     export_board). Table and bento cells grow to their content there, so a
+     picture never cuts text off; image boards keep their clipping, because a
+     cell's box is registered with the picture behind it. */
+  .canvas-export:not([data-mode="image"]) .canvas-cell {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .canvas-export:not([data-mode="image"]) .canvas-cell .cell-body {
+    position: static;
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
   /* A highlighted fulcrum cell gets a soft wash of its colour under the text
      (the colour classes are set by PscWeb.Components.Accent). */
   .canvas-cell[data-fulcrum-highlight] {

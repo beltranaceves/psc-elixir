@@ -11,6 +11,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   alias Psc.Agent.Config, as: AgentConfig
   alias Psc.Agent.Files, as: AgentFiles
   alias Psc.Canvas
+  alias Psc.Canvas.BackdropFetch
   alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.NotesMode
   alias Psc.Canvas.Structure
@@ -134,6 +135,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:structure_accent_picker, nil)
         |> assign(:structure_colors_picker, nil)
         |> assign(:hint_editor, nil)
+        |> assign(:export_format, nil)
         |> assign(:structure_remove_confirm, nil)
         |> assign(:pivots, [])
         |> assign(:selected_pivot_id, nil)
@@ -1306,6 +1308,30 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
        structure_colors_picker: picker,
        structure_accent_picker: nil
      )}
+  end
+
+  # Export: the LiveView renders the board off screen (`export_board/1`) and the
+  # `CanvasExport` hook turns that render into a PNG or SVG download, then
+  # reports back so the render is removed. One export runs at a time.
+  def handle_event("export_canvas", %{"format" => format}, socket)
+      when format in ["png", "svg"] do
+    if socket.assigns.export_format do
+      {:noreply, socket}
+    else
+      {:noreply, assign(socket, :export_format, format)}
+    end
+  end
+
+  def handle_event("export_finished", params, socket) do
+    socket = assign(socket, :export_format, nil)
+
+    case params do
+      %{"ok" => true} ->
+        {:noreply, socket}
+
+      _failed ->
+        {:noreply, put_flash(socket, :error, "The export failed. Please try again.")}
+    end
   end
 
   # An image board's text label has no room for an inline hint field, so its
@@ -2959,6 +2985,16 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       <%!-- Below the header breakpoint the tabs live at the bottom of the
       screen, like a native app. --%>
       <Tabs.bar tabs={@tabs} active_tab={@active_tab} />
+
+      <.export_board
+        :if={@export_format}
+        format={@export_format}
+        canvas_id={@canvas.id}
+        cells={@cells}
+        c_name={@c_name}
+        c_desc={@c_desc}
+        user_id={@user_id}
+      />
     </Layouts.app>
     """
   end
@@ -3028,6 +3064,107 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       </UIDialog.dialog_content>
     </UIDialog.dialog>
     """
+  end
+
+  attr :format, :string, required: true
+  attr :canvas_id, :string, required: true
+  attr :cells, :map, required: true
+  attr :c_name, :string, required: true
+  attr :c_desc, :string, default: nil
+  attr :user_id, :integer, required: true
+
+  # The board as it is exported: off screen, read-only, at a fixed width, with
+  # the title on top. The `canvas-export` class lets table and bento cells grow
+  # to their content instead of clipping it (see app.css).
+  defp export_board(assigns) do
+    cells = export_cells(assigns.cells, assigns.canvas_id)
+
+    assigns =
+      assign(assigns,
+        export_cells: cells,
+        mode: cells |> Structure.mode() |> Atom.to_string(),
+        width: export_width(cells),
+        filename: export_filename(assigns.c_name, assigns.format)
+      )
+
+    ~H"""
+    <div
+      id="canvas-export"
+      phx-hook="CanvasExport"
+      data-format={@format}
+      data-filename={@filename}
+      aria-hidden="true"
+      class="pointer-events-none fixed top-0"
+      style={"left: -100000px; width: #{@width}px"}
+    >
+      <div
+        data-export-sheet
+        data-mode={@mode}
+        class="canvas-export flex flex-col gap-3 bg-base-100 p-6"
+      >
+        <div>
+          <h1 class="text-xl font-semibold text-base-content">{@c_name}</h1>
+          <p :if={@c_desc not in [nil, ""]} class="mt-1 text-sm text-base-content/70">{@c_desc}</p>
+        </div>
+        <.canvas_board
+          cells={@export_cells}
+          c_name={@c_name}
+          edit_structure?={false}
+          presence={%{}}
+          status={%{}}
+          can_share?={false}
+          user_id={@user_id}
+          read_only?
+        />
+      </div>
+    </div>
+    """
+  end
+
+  # A picture has no use for the ⓘ tooltips, and an external backdrop is
+  # fetched through our own origin so the browser may draw it.
+  defp export_cells(cells, canvas_id) do
+    cells
+    |> Map.new(fn
+      {key, list} when key in ["rows", "columns"] and is_list(list) ->
+        {key, Enum.map(list, &drop_hint/1)}
+
+      {key, value} ->
+        {key, drop_hint(value)}
+    end)
+    |> proxy_backdrop(canvas_id)
+  end
+
+  defp drop_hint(%{} = item), do: Map.delete(item, "hint")
+  defp drop_hint(item), do: item
+
+  defp proxy_backdrop(cells, canvas_id) do
+    if Structure.image?(cells) and BackdropFetch.external?(Structure.backdrop(cells).url) do
+      Map.update!(cells, "backdrop", &Map.put(&1, "url", ~p"/canvas/#{canvas_id}/backdrop"))
+    else
+      cells
+    end
+  end
+
+  defp export_width(cells) do
+    case Structure.mode(cells) do
+      :table -> max(1100, 180 + length(cells["columns"] || []) * 300)
+      :bento -> 1280
+      :image -> 1600
+    end
+  end
+
+  @doc false
+  def export_filename(name, format) do
+    slug =
+      name
+      |> to_string()
+      |> String.downcase()
+      |> String.replace(~r/[^\p{L}\p{N}]+/u, "-")
+      |> String.trim("-")
+      |> String.slice(0, 80)
+
+    if(slug == "", do: "canvas", else: slug) <> "." <> format
   end
 
   # The canvas in its layout mode. The Editor tab renders the live cells; the
