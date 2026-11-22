@@ -430,7 +430,6 @@ defmodule PscWeb.UnstrCanvasLive.AnalysisPanel do
   defp label_for("stale"), do: "Stale"
   defp label_for("duplicate"), do: "Duplicates"
   defp label_for("relevance"), do: "Relevance"
-  defp label_for("coverage"), do: "Coverage"
   defp label_for("contradiction"), do: "Contradictions"
   defp label_for(kind), do: String.capitalize(kind)
 

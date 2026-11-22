@@ -30,7 +30,7 @@ defmodule Psc.Insights.DetectorsTest do
       cells = InsightsFixtures.cells([{"Problem", ""}, {"Risks", ""}])
       findings = Empty.run(Context.new(cells, now: @now))
 
-      assert Enum.any?(findings, &(&1["kind"] == "coverage" and &1["cell_keys"] == []))
+      assert Enum.any?(findings, &(&1["kind"] == "empty" and &1["cell_keys"] == []))
     end
 
     test "stays silent for a well-filled canvas" do

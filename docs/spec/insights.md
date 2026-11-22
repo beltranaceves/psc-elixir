@@ -32,7 +32,8 @@ One row per canvas, not one row per finding: the deployed free tier caps every
 table at 10k rows. Findings are JSON maps with a stable id, kind, severity,
 confidence, `cell_keys`, optional `field`, title/detail/evidence, `source` and
 attribution. `Psc.Insights.Finding` owns validation; ids are derived from the
-kind, cells and field so a re-run preserves dismissals.
+kind, cells and field so a re-run preserves dismissals. Cell-level missing
+content and canvas-level low coverage share the single `empty` kind.
 
 Staleness uses `unstr_canvases.touch_map`: a per-cell map of the latest
 `update_cell` timestamp, folded from the events a save is about to prune (in the
@@ -48,7 +49,7 @@ description, `touch_map`, `now`).
 
 | Detector | Finding | Severity |
 |---|---|---|
-| `Empty` | a cell with no content; a cell with some fields empty; canvas coverage below 30% | warning / info |
+| `Empty` | a cell with no content; a cell with some fields empty; canvas coverage below 30% (all `empty`) | warning / info |
 | `Stale` | a filled cell older than `max(21 days, 2 × the youngest touched cell)` | warning |
 | `Duplicate` | two fields with Jaccard similarity ≥ 0.6 over four-word shingles | warning |
 | `Relevance` | a cell with ≥ 12 tokens that shares almost no vocabulary with its peers or the description (TF-IDF cosine < 0.08) | info, capped at 3 |
@@ -62,8 +63,9 @@ cells have enough text.
 `Psc.Insights.LLM` performs one non-streaming completion through the user's own
 provider connection (`Psc.Agent.Connections`), not the ReAct loop of the Agent
 tab. It asks for one JSON object, validates every finding (`contradiction`,
-`relevance`, `coverage`, `duplicate` only), drops unknown cell keys, caps the
-output at eight findings and labels every result with provider and model. The
+`relevance`, `empty`, `duplicate` only; a legacy `coverage` answer is folded
+into `empty`), drops unknown cell keys, caps the output at eight findings and
+labels every result with provider and model. The
 prompt carries the canvas title, description and cell text; the **Include
 notes** toggle adds the canvas's Markdown notes as supplemental context (at
 most ten notes, truncated).

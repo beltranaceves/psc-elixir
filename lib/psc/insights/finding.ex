@@ -9,8 +9,8 @@ defmodule Psc.Insights.Finding do
   deduplicates against the heuristic one.
   """
 
-  @kinds ~w(empty stale duplicate relevance coverage contradiction)
-  @ai_kinds ~w(duplicate relevance coverage contradiction)
+  @kinds ~w(empty stale duplicate relevance contradiction)
+  @ai_kinds ~w(duplicate relevance contradiction empty)
   @severities ~w(info warning critical)
   @max_title 120
   @max_detail 600
@@ -52,6 +52,7 @@ defmodule Psc.Insights.Finding do
   """
   def from_ai(attrs, attribution) when is_map(attrs) do
     kind = attrs["kind"] || attrs[:kind]
+    kind = normalize_ai_kind(kind)
     title = attrs["title"] || attrs[:title]
 
     if kind in @ai_kinds and is_binary(title) and String.trim(title) != "" do
@@ -60,6 +61,11 @@ defmodule Psc.Insights.Finding do
   end
 
   def from_ai(_attrs, _attribution), do: nil
+
+  # `coverage` was a separate kind before the empty and coverage categories
+  # were merged; an older scripted answer is folded into `empty`.
+  defp normalize_ai_kind("coverage"), do: "empty"
+  defp normalize_ai_kind(kind), do: kind
 
   @doc "An HTML-id-safe form of the finding id."
   def dom_id(%{"id" => id}) when is_binary(id) do
@@ -81,7 +87,7 @@ defmodule Psc.Insights.Finding do
     anchor =
       cond do
         cells != [] -> Enum.join(cells, "+") <> ":" <> (field || "")
-        kind == "coverage" -> "canvas"
+        kind == "empty" -> "canvas"
         true -> "canvas:" <> slug(title)
       end
 

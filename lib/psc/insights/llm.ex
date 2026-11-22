@@ -108,12 +108,13 @@ defmodule Psc.Insights.LLM do
     #{notes}
 
     Return only a JSON object with this shape:
-    {"findings":[{"kind":"contradiction|relevance|coverage|duplicate","severity":"info|warning|critical","cell_keys":["cell_key"],"field":"field_name_or_null","title":"short title","detail":"one or two sentences","confidence":0.0}]}
+    {"findings":[{"kind":"contradiction|relevance|empty|duplicate","severity":"info|warning|critical","cell_keys":["cell_key"],"field":"field_name_or_null","title":"short title","detail":"one or two sentences","confidence":0.0}]}
 
     Rules:
     - Use only cell keys that appear above.
     - Report contradictions between cells, content that drifts from the canvas
-      framing, coverage gaps, and duplicated statements.
+      framing, missing or thin content, and duplicated statements.
+    - Use "empty" for coverage or missing-content problems.
     - Use the notes only as context; every finding must be about the cells.
     - At most #{@max_findings} findings.
     - If there is nothing worth reporting, return {"findings":[]}.

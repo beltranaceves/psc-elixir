@@ -3,9 +3,12 @@ defmodule Psc.Insights.Detectors.Empty do
   Finds fields that are still blank.
 
   A cell with no content at all is a warning; a cell that is only missing some
-  fields is informational. A canvas-level coverage finding summarises the
-  whole structure, so a canvas that is mostly untouched says so once instead
-  of only cell by cell.
+  fields is informational. A canvas-level finding covers the structure as a
+  whole (nothing filled, or less than 30% of the fields filled), so a canvas
+  that is mostly untouched says so once instead of only cell by cell.
+
+  Cell findings and the canvas-level finding share the `empty` kind: "empty"
+  is the single category for both missing content and low coverage.
   """
 
   @behaviour Psc.Insights.Detector
@@ -73,7 +76,7 @@ defmodule Psc.Insights.Detectors.Empty do
         nil
 
       filled == 0 ->
-        Finding.new("coverage", %{
+        Finding.new("empty", %{
           "severity" => "warning",
           "confidence" => 1.0,
           "title" => "This canvas is still empty",
@@ -82,7 +85,7 @@ defmodule Psc.Insights.Detectors.Empty do
         })
 
       filled / total < @low_coverage ->
-        Finding.new("coverage", %{
+        Finding.new("empty", %{
           "severity" => "info",
           "confidence" => 1.0,
           "title" => "Only #{round(filled / total * 100)}% of the canvas is filled",

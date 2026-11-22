@@ -117,6 +117,15 @@ defmodule Psc.Insights.LLMTest do
       assert {:ok, [%{"kind" => "relevance"}]} = LLM.parse(text, %{})
     end
 
+    test "folds an AI coverage finding into the empty kind" do
+      text =
+        ~s({"findings":[{"kind":"coverage","severity":"info","title":"Thin content","detail":"x"}]})
+
+      assert {:ok, [finding]} = LLM.parse(text, %{})
+      assert finding["kind"] == "empty"
+      assert finding["id"] == "v1:empty:canvas"
+    end
+
     test "rejects text that is not JSON" do
       assert {:error, _reason} = LLM.parse("I think the canvas is fine.", %{})
     end

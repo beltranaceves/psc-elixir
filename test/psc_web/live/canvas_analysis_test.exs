@@ -108,6 +108,34 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
 
       assert has_element?(lv, "#canvas-analysis-stale")
     end
+
+    test "low coverage is part of the Empty filter, not a kind of its own", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, canvas} =
+        Canvas.create_unstr_canvas(user.id, %{
+          "name" => "Mostly empty",
+          "cells" =>
+            InsightsFixtures.cells(
+              [{"A", "Only this one"}, {"B", ""}, {"C", ""}, {"D", ""}],
+              name: "Mostly empty"
+            )
+        })
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=analysis")
+      lv |> element("#canvas-analysis-run") |> render_click()
+
+      report = Insights.get_report(Scope.for_user(user), canvas.id)
+      coverage = Enum.find(report.findings, &(&1["cell_keys"] == []))
+      assert coverage["kind"] == "empty"
+
+      refute has_element?(lv, "#canvas-analysis-filter-coverage")
+      assert has_element?(lv, "#canvas-analysis-filter-empty")
+
+      lv |> element("#canvas-analysis-filter-empty") |> render_click()
+      assert has_element?(lv, "##{Finding.dom_id(coverage)}")
+    end
   end
 
   describe "dismissing" do
