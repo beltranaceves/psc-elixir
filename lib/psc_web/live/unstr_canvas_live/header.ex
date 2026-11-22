@@ -86,7 +86,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         class={if @compact?, do: "!size-8 rounded-full", else: "gap-1.5"}
         aria-haspopup="menu"
         aria-label="Export"
-        title="Export this canvas as an image"
+        title="Export this canvas"
       >
         <.icon name="hero-arrow-down-tray" class="size-4" />
         <span :if={!@compact?}>Export</span>
@@ -112,6 +112,19 @@ defmodule PscWeb.UnstrCanvasLive.Header do
           >
             <span class="text-sm font-medium text-base-content">{label}</span>
             <span class="text-xs text-base-content/55">{detail}</span>
+          </button>
+
+          <%!-- Markdown is a document, not a picture: a dialog asks which parts
+          of the canvas to include. --%>
+          <button
+            type="button"
+            role="menuitem"
+            id={"export-markdown" <> @suffix}
+            phx-click="open_markdown_export"
+            class="flex flex-col items-start rounded-lg px-3 py-1.5 text-left hover:bg-base-content/5 focus:bg-base-content/5 focus:outline-none"
+          >
+            <span class="text-sm font-medium text-base-content">Markdown</span>
+            <span class="text-xs text-base-content/55">Text, notes, analysis and more</span>
           </button>
         </div>
       </div>

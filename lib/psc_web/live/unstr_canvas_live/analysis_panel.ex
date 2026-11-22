@@ -46,7 +46,7 @@ defmodule PscWeb.UnstrCanvasLive.AnalysisPanel do
       |> assign(:dismissed_count, if(report, do: length(report.dismissed), else: 0))
 
     ~H"""
-    <div id="canvas-analysis" class="min-h-0 w-full flex-1 overflow-y-auto">
+    <div id="canvas-analysis" class="w-full">
       <div class="mx-auto w-full max-w-2xl space-y-8 pb-6 md:max-w-3xl lg:max-w-4xl 2xl:max-w-5xl">
         <section id="canvas-analysis-overview" aria-labelledby="canvas-analysis-overview-title">
           <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -71,17 +71,6 @@ defmodule PscWeb.UnstrCanvasLive.AnalysisPanel do
               >
                 Canvas changed
               </span>
-
-              <button
-                :if={@report}
-                type="button"
-                id="canvas-analysis-copy"
-                title="Copy the report as Markdown"
-                onclick="navigator.clipboard.writeText(document.getElementById('canvas-analysis-report-text').value)"
-                class={quiet_button()}
-              >
-                <.icon name="hero-clipboard-document" class="size-3.5" /> Copy
-              </button>
 
               <button
                 type="button"
@@ -331,15 +320,6 @@ defmodule PscWeb.UnstrCanvasLive.AnalysisPanel do
             </p>
           </div>
         </section>
-
-        <textarea
-          :if={@report}
-          id="canvas-analysis-report-text"
-          class="sr-only"
-          aria-hidden="true"
-          tabindex="-1"
-          readonly
-        >{report_markdown(@report, @labels, @cells, @overview)}</textarea>
       </div>
     </div>
     """
@@ -479,52 +459,6 @@ defmodule PscWeb.UnstrCanvasLive.AnalysisPanel do
 
   defp dismissed?(%{dismissed: dismissed}, finding), do: finding["id"] in dismissed
   defp dismissed?(_report, _finding), do: false
-
-  # The Markdown a user gets from the Copy button. It is the visible report:
-  # dismissed findings are left out, AI findings keep their attribution.
-  defp report_markdown(report, labels, cells, overview) do
-    name = cells["$name"] || "Canvas"
-    findings = Enum.reject(report.findings, &dismissed?(report, &1))
-    stamp = report.computed_at && Calendar.strftime(report.computed_at, "%Y-%m-%d %H:%M UTC")
-
-    heading = [
-      "# Analysis — #{name}",
-      "",
-      "#{length(findings)} #{plural(length(findings), "finding")} · #{report.stats["coverage"] || 0}% filled" <>
-        if(stamp, do: " · #{stamp}", else: "")
-    ]
-
-    body = Enum.map_join(findings, "\n", &markdown_finding(&1, labels))
-
-    Enum.join(heading, "\n") <>
-      "\n\n" <> markdown_overview(overview) <> body <> "\n"
-  end
-
-  defp markdown_overview(%{tiles: tiles}) do
-    lines =
-      Enum.map_join(tiles, "\n", fn tile ->
-        "- #{tile.label}: #{tile.value || "—"} (#{tile.detail})"
-      end)
-
-    "## Overview\n" <> lines <> "\n\n"
-  end
-
-  defp markdown_overview(_overview), do: ""
-
-  defp markdown_finding(finding, labels) do
-    cells =
-      finding["cell_keys"]
-      |> Enum.map_join(", ", &"#{cell_label(labels, &1)} (`#{&1}`)")
-
-    [
-      "## #{finding["title"]} (#{finding["severity"]})",
-      finding["detail"],
-      if(cells != "", do: "Cells: #{cells}", else: nil),
-      "Source: #{source_label(finding)}"
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join("\n")
-  end
 
   defp label_for("empty"), do: "Empty"
   defp label_for("stale"), do: "Stale"

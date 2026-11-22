@@ -7,6 +7,7 @@ defmodule PscWeb.UnstrCanvasLive.Index do
 
   alias Psc.Canvas
   alias Psc.Canvas.Structure
+  alias Psc.Export.Import
   alias PscWeb.Components.UI.Dialog, as: UIDialog
 
   @impl true
@@ -26,7 +27,36 @@ defmodule PscWeb.UnstrCanvasLive.Index do
      |> assign(:new_canvas_form, to_form(%{}))
      |> assign(:templates, templates)
      |> assign(:selected_template_id, "")
-     |> assign(:delete_canvas, nil)}
+     |> assign(:delete_canvas, nil)
+     # A Markdown export with its canvas data becomes a new canvas. The file
+     # uploads as soon as it is picked; `import_progress/3` creates the canvas.
+     |> allow_upload(:import,
+       accept: ~w(.md .markdown),
+       max_entries: 1,
+       max_file_size: Import.max_bytes(),
+       auto_upload: true,
+       progress: &import_progress/3
+     )}
+  end
+
+  @impl true
+  def handle_event("validate_import", _params, socket) do
+    # A wrong type or an oversized file never uploads: say why and clear it,
+    # so the next pick is not refused as a second file.
+    socket =
+      Enum.reduce(socket.assigns.uploads.import.entries, socket, fn entry, socket ->
+        case upload_errors(socket.assigns.uploads.import, entry) do
+          [] ->
+            socket
+
+          [error | _rest] ->
+            socket
+            |> cancel_upload(:import, entry.ref)
+            |> put_flash(:error, import_upload_error(error))
+        end
+      end)
+
+    {:noreply, socket}
   end
 
   # Picking a starting point is a click on its card. The id lands in the form's
@@ -122,6 +152,30 @@ defmodule PscWeb.UnstrCanvasLive.Index do
          |> put_flash(:error, "Unauthorized")}
     end
   end
+
+  defp import_progress(:import, %{done?: true} = entry, socket) do
+    markdown =
+      consume_uploaded_entry(socket, entry, fn %{path: path} -> {:ok, File.read!(path)} end)
+
+    case Import.import_markdown(socket.assigns.current_scope, markdown) do
+      {:ok, canvas} ->
+        {:noreply,
+         socket
+         |> put_flash(:success, "Canvas imported")
+         |> redirect(to: ~p"/canvas/#{canvas.id}")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, Import.error_message(reason))}
+    end
+  end
+
+  defp import_progress(:import, _entry, socket), do: {:noreply, socket}
+
+  defp import_upload_error(:not_accepted),
+    do: "Pick a Markdown (.md) file exported from a canvas."
+
+  defp import_upload_error(:too_large), do: Import.error_message(:too_large)
+  defp import_upload_error(_error), do: "That file could not be uploaded. Please try again."
 
   # The creation paths, routed by the picker's id: blank (the empty
   # structure) or a template instantiated through the context — which
@@ -234,7 +288,27 @@ defmodule PscWeb.UnstrCanvasLive.Index do
       <div class="mx-auto w-full max-w-6xl">
         <%!-- Start a canvas: templates first, so the structure is chosen before naming --%>
         <div class="mb-6 rounded-xl border border-base-content/10 bg-base-200 p-4 sm:p-6">
-          <h2 class="mb-4 text-lg font-medium text-base-content">Start a canvas</h2>
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-medium text-base-content">Start a canvas</h2>
+
+            <%!-- Its own form, outside the creation form: an upload needs a
+            phx-change form, and forms cannot nest. --%>
+            <form id="import-canvas-form" phx-change="validate_import" phx-submit="validate_import">
+              <label
+                for={@uploads.import.ref}
+                id="import-canvas-button"
+                title="Create a canvas from a Markdown file exported with its Canvas section"
+                class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-base-content/15 px-3 py-1.5 text-sm text-base-content/80 transition-colors hover:border-base-content/30 hover:text-base-content focus-within:ring-2 focus-within:ring-primary"
+              >
+                <%= if @uploads.import.entries == [] do %>
+                  <.icon name="hero-arrow-up-tray" class="size-4" /> Import
+                <% else %>
+                  <.icon name="hero-arrow-path" class="size-4 motion-safe:animate-spin" /> Importing…
+                <% end %>
+                <.live_file_input upload={@uploads.import} class="sr-only" />
+              </label>
+            </form>
+          </div>
           <.form
             for={@new_canvas_form}
             id="new-canvas-form"

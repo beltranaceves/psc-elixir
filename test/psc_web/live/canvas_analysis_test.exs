@@ -50,13 +50,9 @@ defmodule PscWeb.CanvasAnalysisLiveTest do
       assert has_element?(lv, "#canvas-analysis-results")
       assert has_element?(lv, "#canvas-analysis-findings li details")
       assert has_element?(lv, "#canvas-analysis-summary", "AI review not run")
-      assert has_element?(lv, "#canvas-analysis-copy")
 
       report = Insights.get_report(Scope.for_user(user), canvas.id)
       assert report.stats["cells"] == 2
-
-      assert render(element(lv, "#canvas-analysis-report-text")) =~ "Analysis — Analysis test"
-      assert render(element(lv, "#canvas-analysis-report-text")) =~ "## Overview"
     end
 
     test "a cell tile and a finding's cell chip link back to the editor", %{

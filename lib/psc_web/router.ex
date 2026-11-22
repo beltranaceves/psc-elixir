@@ -72,6 +72,9 @@ defmodule PscWeb.Router do
     # An image board's backdrop, fetched by the server for the PNG/SVG export.
     get "/canvas/:id/backdrop", CanvasBackdropController, :show
 
+    # The canvas as a Markdown download, with the sections the dialog picked.
+    get "/canvas/:id/export.md", CanvasExportController, :markdown
+
     # Old canvas URLs, kept alive for bookmarks from earlier releases.
     get "/canvases", RedirectController, :canvases
     get "/canvases/:id", RedirectController, :canvas

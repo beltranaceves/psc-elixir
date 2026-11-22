@@ -680,6 +680,63 @@ test.describe('canvas editor layout', () => {
     expect(end.gap).toBeLessThanOrEqual(12);
   });
 
+  // Short enough that the Analysis content is taller than the screen.
+  // Phones and tablets scroll it by touch without a bar; a desktop shows one.
+  for (const [device, viewport, scrollbar] of [
+    ['phones', { width: 390, height: 844 }, 'none'],
+    ['tablets', { width: 768, height: 640 }, 'none'],
+    ['desktops', { width: 1440, height: 640 }, 'auto'],
+  ] as const) {
+    test(`grows the Analysis tab with its content on ${device}, with one scroller`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      const url = await createCanvasAndOpen(page, uniqueName('Analysis Scroll'));
+
+      // The bottom tab bar is phone/tablet only; the URL works everywhere.
+      await page.goto(`${url.split('?')[0]}?tab=analysis`);
+      await expect(page.locator('#canvas-analysis-findings')).toBeVisible();
+
+      const metrics = await page.evaluate(() => {
+        const panel = document.querySelector('#canvas-analysis') as HTMLElement;
+        const main = document.querySelector('main') as HTMLElement;
+        const scrollers = [...document.querySelectorAll<HTMLElement>('body *')].filter((el) => {
+          const overflow = getComputedStyle(el).overflowY;
+          return (
+            (overflow === 'auto' || overflow === 'scroll') &&
+            el.offsetParent !== null &&
+            el.scrollHeight > el.clientHeight + 1
+          );
+        });
+
+        main.scrollTop = main.scrollHeight;
+        const last = document
+          .querySelector('#canvas-analysis-findings > li:last-child')!
+          .getBoundingClientRect();
+        const bar = document.querySelector('#canvas-tabs-bar')!.getBoundingClientRect();
+        const visibleBottom = bar.height > 0 ? bar.top : window.innerHeight;
+
+        return {
+          page: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+          panelOverflow: panel.scrollHeight - panel.clientHeight,
+          scrollers: scrollers.map((el) => el.tagName.toLowerCase()),
+          endGap: visibleBottom - last.bottom,
+          // Headless Chromium never paints scrollbars, so read the style.
+          scrollbar: getComputedStyle(main).scrollbarWidth,
+        };
+      });
+
+      // The panel is as tall as its content, the app's main area is the only
+      // scroller (no scroll box nested inside it), and the last finding can be
+      // scrolled clear of the bottom tab bar.
+      expect(metrics.page).toBeLessThanOrEqual(0);
+      expect(metrics.panelOverflow).toBeLessThanOrEqual(0);
+      expect(metrics.scrollers).toEqual(['main']);
+      expect(metrics.endGap).toBeGreaterThanOrEqual(0);
+      expect(metrics.scrollbar).toBe(scrollbar);
+    });
+  }
+
   test('keeps the agent chat and model selectors on screen on phones', async ({
     page,
   }) => {

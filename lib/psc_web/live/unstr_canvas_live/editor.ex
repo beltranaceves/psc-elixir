@@ -147,6 +147,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:pending_fork, nil)
         |> assign(:fork_form, nil)
         |> assign(:fulcrums_open, false)
+        |> assign(:markdown_export_form, nil)
         |> assign(:fulcrum_draft, nil)
         |> load_head()
         |> subscribe_to_canvas(id)
@@ -1305,6 +1306,21 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     else
       {:noreply, assign(socket, :export_format, format)}
     end
+  end
+
+  # Markdown export: a dialog picks the sections, then submits them as a plain
+  # GET to `CanvasExportController`, which sends the file. The LiveView only
+  # keeps the dialog's choices.
+  def handle_event("open_markdown_export", _params, socket) do
+    {:noreply, assign(socket, :markdown_export_form, markdown_export_form(%{"canvas" => "true"}))}
+  end
+
+  def handle_event("change_markdown_export", %{"sections" => sections}, socket) do
+    {:noreply, assign(socket, :markdown_export_form, markdown_export_form(sections))}
+  end
+
+  def handle_event("close_markdown_export", _params, socket) do
+    {:noreply, assign(socket, :markdown_export_form, nil)}
   end
 
   def handle_event("export_finished", params, socket) do
@@ -2739,12 +2755,19 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       fill_height
       main_class={
         # A freeform board (bento or image) grows with its content on a desktop,
-        # so the page is its one scroller there. Everywhere else every panel
-        # scrolls inside itself and the page must not scroll too.
-        if(@active_tab == "editor" and Structure.freeform?(@cells),
-          do: "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3 lg:overflow-y-auto",
-          else: "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3"
-        )
+        # and the Analysis tab does at every width, so the page is their one
+        # scroller. Everywhere else every panel scrolls inside itself and the
+        # page must not scroll too.
+        cond do
+          @active_tab == "analysis" ->
+            "canvas-page-scroll px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3 overflow-y-auto"
+
+          @active_tab == "editor" and Structure.freeform?(@cells) ->
+            "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3 lg:overflow-y-auto"
+
+          true ->
+            "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3"
+        end
       }
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
@@ -2770,7 +2793,14 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               not is_nil(@hint_editor)
           )
         }
-        class="flex min-h-0 w-full flex-1 flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2"
+        class={
+          [
+            "flex w-full flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2",
+            # The Analysis tab grows with its content and the page scrolls, so the
+            # bottom padding stays below the last row instead of under the tab bar.
+            if(@active_tab == "analysis", do: "flex-none", else: "min-h-0 flex-1")
+          ]
+        }
       >
         <Header.header
           presence={@presence}
@@ -2788,6 +2818,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         <PivotPanel.load_dialog pivot={@pending_load} />
         <PivotPanel.fork_dialog pivot={@pending_fork} form={@fork_form} />
         <.fulcrums_dialog open={@fulcrums_open} cells={@cells} />
+        <.markdown_export_dialog form={@markdown_export_form} canvas_id={@canvas_id} />
         <.fulcrums_edit_dialog draft={@fulcrum_draft} cells={@cells} />
         <%!-- Removing a row or column that holds content asks first: the
         operation is destructive, and the event log keeps the old values only
@@ -2831,7 +2862,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           id="canvas-tabpanel"
           phx-hook="CanvasTabs"
           data-active-tab={@active_tab}
-          class="flex min-h-0 w-full flex-1 flex-col"
+          class={[
+            "flex w-full flex-col",
+            if(@active_tab == "analysis", do: "flex-none", else: "min-h-0 flex-1")
+          ]}
         >
           <%!-- Every view is rendered so the client can switch instantly; the
           inactive ones are hidden. The server confirms the choice a moment
@@ -2873,7 +2907,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             role="tabpanel"
             aria-labelledby="canvas-tab-analysis"
             class={[
-              "flex min-h-0 w-full flex-1 flex-col",
+              "flex w-full flex-col",
               @active_tab != "analysis" && "hidden"
             ]}
           >
@@ -3093,6 +3127,80 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       </UIDialog.dialog_content>
     </UIDialog.dialog>
     """
+  end
+
+  # The Markdown export's choices. The form is a plain GET to the download
+  # route, so the browser saves the file and the editor stays where it is;
+  # Download also closes the dialog.
+  attr :form, :any, required: true
+  attr :canvas_id, :string, required: true
+
+  defp markdown_export_dialog(assigns) do
+    assigns =
+      assign(assigns,
+        none?:
+          assigns.form &&
+            Enum.all?(Psc.Export.Markdown.sections(), &(assigns.form[&1].value != "true"))
+      )
+
+    ~H"""
+    <UIDialog.dialog
+      :if={@form}
+      id="markdown-export-dialog"
+      open
+      on-close="close_markdown_export"
+    >
+      <UIDialog.dialog_content open class="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <UIDialog.dialog_header>
+          <UIDialog.dialog_title>Export as Markdown</UIDialog.dialog_title>
+          <UIDialog.dialog_description>
+            Choose what to include. Agent chats are only your own.
+          </UIDialog.dialog_description>
+        </UIDialog.dialog_header>
+
+        <.form
+          for={@form}
+          id="markdown-export-form"
+          action={~p"/canvas/#{@canvas_id}/export.md"}
+          method="get"
+          phx-change="change_markdown_export"
+        >
+          <div class="flex flex-col gap-1 py-2">
+            <.input
+              :for={section <- Psc.Export.Markdown.sections()}
+              type="checkbox"
+              field={@form[section]}
+              id={"markdown-export-" <> section}
+              label={Psc.Export.Markdown.section_label(section)}
+            />
+          </div>
+
+          <UIDialog.dialog_footer class="flex flex-row items-center justify-end gap-2 pt-2">
+            <p :if={@none?} class="mr-auto text-xs text-base-content/55">
+              Pick at least one section.
+            </p>
+            <UIButton.button type="button" variant="outline" phx-click="close_markdown_export">
+              Cancel
+            </UIButton.button>
+            <UIButton.button
+              type="submit"
+              id="markdown-export-download"
+              disabled={@none?}
+              phx-click="close_markdown_export"
+            >
+              <.icon name="hero-arrow-down-tray" class="size-4" /> Download
+            </UIButton.button>
+          </UIDialog.dialog_footer>
+        </.form>
+      </UIDialog.dialog_content>
+    </UIDialog.dialog>
+    """
+  end
+
+  defp markdown_export_form(sections) do
+    Psc.Export.Markdown.sections()
+    |> Map.new(&{&1, if(sections[&1] == "true", do: "true", else: "false")})
+    |> to_form(as: :sections)
   end
 
   attr :format, :string, required: true

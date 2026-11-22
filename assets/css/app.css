@@ -688,6 +688,19 @@
     }
   }
 
+  /* A tab that grows with its content (Analysis) makes <main> the page's one
+     scroller. Phones and tablets (below lg, where the bottom tab bar shows)
+     scroll it by touch without a bar; a desktop keeps its scrollbar. */
+  @media (width < 64rem) {
+    .canvas-page-scroll {
+      scrollbar-width: none;
+    }
+
+    .canvas-page-scroll::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   /* Bento board. The spatial arrangement is the point, so a phone does not
      collapse it into one column: columns keep a minimum width and the board
      pans horizontally instead. The cut-off card at the edge is the affordance,

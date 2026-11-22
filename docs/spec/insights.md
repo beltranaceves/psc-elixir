@@ -143,9 +143,6 @@ test reaches the network.
 * **Include notes** (`#canvas-analysis-notes`) appears with a connection and
   adds the canvas's notes to the AI prompt. Without a connection a settings
   hint (`#canvas-analysis-ai-hint`) takes the buttons' place.
-* **Copy** (`#canvas-analysis-copy`) copies the overview and the visible
-  findings as Markdown from the hidden `#canvas-analysis-report-text`;
-  dismissed findings are left out.
 * AI progress is announced in `#canvas-analysis-progress`; a failure flashes an
   error and keeps the heuristic findings.
 

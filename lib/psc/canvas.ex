@@ -1554,6 +1554,70 @@ defmodule Psc.Canvas do
     end)
   end
 
+  @doc """
+  Creates a canvas, owned by `user_id`, from an imported export
+  (`Psc.Export.Import`).
+
+  Without `versions` it starts at one "Imported" root version. With them
+  (oldest first, parents before children, as maps with `:id`, `:parent_id`,
+  `:name`, `:rationale`, `:kind`, `:cells` and `:inserted_at`) the history is
+  rebuilt under new ids: the first version becomes the root, a version whose
+  parent is unknown hangs off the root, every version is authored by the
+  importer, and the canvas holds the version that was `head_id`.
+  """
+  def import_unstr_canvas(user_id, attrs, versions \\ [], head_id \\ nil)
+
+  def import_unstr_canvas(user_id, attrs, [], _head_id) do
+    create_unstr_canvas(user_id, attrs, %{
+      name: "Imported",
+      rationale: "Imported from a Markdown export."
+    })
+  end
+
+  def import_unstr_canvas(user_id, attrs, [first | rest], head_id) do
+    Repo.transaction(fn ->
+      with {:ok, canvas} <-
+             create_unstr_canvas(user_id, attrs, %{
+               name: first.name || "Initial version",
+               rationale: first.rationale || "The canvas as it was created."
+             }) do
+        root =
+          UnstrCanvasPivot
+          |> Repo.get!(canvas.head_pivot_id)
+          |> Ecto.Changeset.change(
+            Enum.reject(
+              [kind: first.kind, cells: first.cells, inserted_at: first.inserted_at],
+              fn {_key, value} -> is_nil(value) end
+            )
+          )
+          |> Repo.update!()
+
+        ids =
+          Enum.reduce(rest, %{first.id => root.id}, fn version, ids ->
+            pivot =
+              Repo.insert!(%UnstrCanvasPivot{
+                unstr_canvas_id: canvas.id,
+                parent_id: Map.get(ids, version.parent_id, root.id),
+                author_id: user_id,
+                name: version.name,
+                rationale: version.rationale,
+                kind: version.kind,
+                cells: version.cells,
+                inserted_at: version.inserted_at
+              })
+
+            Map.put(ids, version.id, pivot.id)
+          end)
+
+        canvas
+        |> Ecto.Changeset.change(head_pivot_id: Map.get(ids, head_id, root.id))
+        |> Repo.update!()
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
   # A version and its ancestors, root first.
   defp lineage(%UnstrCanvasPivot{parent_id: nil} = pivot), do: [pivot]
 
