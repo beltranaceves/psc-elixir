@@ -14,6 +14,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
+  attr :fulcrums?, :boolean, default: true
   attr :controls?, :boolean, default: true
 
   def header(assigns) do
@@ -31,6 +32,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         presence={@presence}
         status={@status}
         can_share?={@can_share?}
+        fulcrums?={@fulcrums?}
       />
     </div>
     """
@@ -39,6 +41,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
+  attr :fulcrums?, :boolean, default: true
   attr :class, :any, default: nil
 
   @doc """
@@ -83,6 +86,34 @@ defmodule PscWeb.UnstrCanvasLive.Header do
           label={@status.label}
           others={@status.others}
         />
+      </div>
+
+      <div class="shrink-0">
+        <UIButton.button
+          type="button"
+          id="pivot-canvas-button"
+          phx-click="open_pivot"
+          variant="outline"
+          size="sm"
+          class="gap-1.5"
+          title="Save this version with the reason for the change"
+        >
+          <.icon name="hero-flag" class="size-4" /> <span>Pivot</span>
+        </UIButton.button>
+      </div>
+
+      <div :if={@fulcrums?} class="shrink-0">
+        <UIButton.button
+          type="button"
+          id="fulcrums-canvas-button"
+          phx-click="open_fulcrums"
+          variant="outline"
+          size="sm"
+          class="gap-1.5"
+          title="Named sets of cells that can be highlighted together"
+        >
+          <.icon name="hero-swatch" class="size-4" /> <span>Fulcrums</span>
+        </UIButton.button>
       </div>
 
       <%= if @can_share? do %>

@@ -20,6 +20,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
   import PscWeb.UnstrCanvasLive.CellColors, only: [colors_button: 1, colors_panel: 1]
   import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
+  alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.Structure
   alias PscWeb.Components.UI.Button, as: UIButton
   alias PscWeb.UnstrCanvasLive.Cell
@@ -35,6 +36,10 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
   attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
+  # Read-only: no toolbar, ids, hooks or forms (the History tab preview).
+  attr :read_only?, :boolean, default: false
+  # Cell key to the colours of the highlighted fulcrums that include it.
+  attr :highlights, :map, default: %{}
 
   def board(assigns) do
     bounds = Structure.bounds(assigns.cells)
@@ -50,7 +55,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
 
     ~H"""
     <div
-      id="canvas-bento"
+      id={!@read_only? && "canvas-bento"}
       class={
         [
           "flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-base-content/20 bg-base-200",
@@ -61,13 +66,21 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
         ]
       }
     >
-      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2">
+      <div
+        :if={!@read_only?}
+        class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2"
+      >
         <div class="min-w-[8rem] flex-1">
           <.title_field c_name={@c_name} />
         </div>
 
         <div :if={@status_row?} class="hidden sm:flex">
-          <.canvas_status presence={@presence} status={@status} can_share?={@can_share?} />
+          <.canvas_status
+            presence={@presence}
+            status={@status}
+            can_share?={@can_share?}
+            fulcrums?={Fulcrums.enabled?(@cells)}
+          />
         </div>
 
         <div class="ml-auto flex items-center gap-2">
@@ -157,13 +170,14 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
       <div class="canvas-bento-scroll min-h-0 flex-1 overflow-auto p-3 lg:flex-none lg:overflow-visible">
         <%= if @cards == [] do %>
           <div
-            id="bento-empty"
+            id={!@read_only? && "bento-empty"}
             class="flex min-h-0 h-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-base-content/20 p-8 text-center"
           >
             <.icon name="hero-squares-plus" class="size-8 text-base-content/30" />
             <p class="text-sm text-base-content/60">This board has no cards yet.</p>
 
             <UIButton.button
+              :if={!@read_only?}
               type="button"
               id="empty-add-card"
               variant="outline"
@@ -175,8 +189,8 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           </div>
         <% else %>
           <div
-            id="bento-board"
-            phx-hook="BentoBoard"
+            id={!@read_only? && "bento-board"}
+            phx-hook={!@read_only? && "BentoBoard"}
             data-columns={Structure.columns(@cells)}
             data-max-columns={Structure.column_range().last}
             data-unit-x={bento_unit_x(Structure.columns(@cells))}
@@ -186,7 +200,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
           >
             <div
               :for={card <- @cards}
-              id={"bento-card-#{card.key}"}
+              id={!@read_only? && "bento-card-#{card.key}"}
               class="bento-card relative min-h-0 rounded-lg"
               style={Structure.placement_style(card)}
               data-bento-size={Structure.size_label(card.w, card.h)}
@@ -194,6 +208,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
             >
               <Cell.card
                 cell_key={card.key}
+                highlight={@highlights[card.key]}
                 cell_data={Map.get(@cells, card.key, %{})}
                 edit_structure?={@edit_structure?}
                 user_id={@user_id}
@@ -205,6 +220,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
                 colors_control?={false}
                 nav={Structure.neighbours(@cells, card.key)}
                 colors_picker={@colors_picker}
+                read_only?={@read_only?}
               />
 
               <div

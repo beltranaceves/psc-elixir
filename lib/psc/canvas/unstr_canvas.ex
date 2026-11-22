@@ -23,6 +23,10 @@ defmodule Psc.Canvas.UnstrCanvas do
 
     field :snapshot_seq, :integer, default: 0
 
+    # The version the canvas currently holds (ADR-043). Moved by the context
+    # when a draft starts or a version is loaded, never cast from a request.
+    belongs_to :head_pivot, Psc.Canvas.UnstrCanvasPivot, type: :binary_id
+
     # Per-cell last-edit timestamps folded from the events being pruned. It is
     # written by the context during a save, never cast from a request.
     field :touch_map, :map, default: %{}

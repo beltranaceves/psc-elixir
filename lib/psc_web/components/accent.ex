@@ -80,6 +80,23 @@ defmodule PscWeb.Components.Accent do
   def outline_class(""), do: nil
   def outline_class(token), do: Map.get(@outline, token)
 
+  # A highlighted fulcrum cell: a heavier ring than an accent outline, in the
+  # stronger shade, so it reads as a selection rather than a decoration.
+  @highlight %{
+    "sky" => "ring-[3px] ring-inset ring-sky-500",
+    "violet" => "ring-[3px] ring-inset ring-violet-500",
+    "emerald" => "ring-[3px] ring-inset ring-emerald-500",
+    "amber" => "ring-[3px] ring-inset ring-amber-500",
+    "rose" => "ring-[3px] ring-inset ring-rose-500",
+    "teal" => "ring-[3px] ring-inset ring-teal-500",
+    "indigo" => "ring-[3px] ring-inset ring-indigo-500",
+    "slate" => "ring-[3px] ring-inset ring-slate-500"
+  }
+
+  @doc "The ring a cell takes while a fulcrum that includes it is highlighted."
+  def highlight_class(nil), do: nil
+  def highlight_class(token), do: Map.get(@highlight, token)
+
   @doc """
   A thin bar carrying the accent color.
 

@@ -15,6 +15,7 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
   import PscWeb.CoreComponents, only: [icon: 1]
 
   alias Psc.Agent.Config, as: AgentConfig
+  alias Psc.Canvas.Fulcrums
   alias Psc.Canvas.Structure
   alias PscWeb.Components.AgentConfigEditor
   alias PscWeb.Components.UI.Button, as: UIButton
@@ -138,6 +139,50 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
           />
         </.section>
 
+        <%!-- The canvas's own fulcrum setting. It starts as the template's and
+        changing it here is a setting, not an edit: it starts no version and
+        loading a version keeps it. --%>
+        <.section
+          id="canvas-info-fulcrums"
+          title="Fulcrums"
+          hint={fulcrums_hint(@cells)}
+        >
+          <p class="max-w-lg text-sm text-base-content/60">
+            {Fulcrums.blurb(Fulcrums.mode(@cells))}
+          </p>
+
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              :for={mode <- Fulcrums.modes()}
+              type="button"
+              id={"canvas-fulcrum-mode-" <> mode}
+              phx-click="set_fulcrum_mode"
+              phx-value-mode={mode}
+              aria-pressed={to_string(Fulcrums.mode(@cells) == mode)}
+              class={[
+                "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                Fulcrums.mode(@cells) == mode && "border-primary/50 bg-primary/10 text-base-content",
+                Fulcrums.mode(@cells) != mode &&
+                  "border-base-content/15 bg-base-200 text-base-content/60 hover:border-base-content/30 hover:text-base-content"
+              ]}
+            >
+              {Fulcrums.label(mode)}
+            </button>
+
+            <UIButton.button
+              :if={Fulcrums.enabled?(@cells)}
+              type="button"
+              id="canvas-info-edit-fulcrums"
+              variant="outline"
+              size="sm"
+              phx-click="open_fulcrums"
+              class="ml-auto gap-1.5"
+            >
+              <.icon name="hero-swatch" class="size-4" /> Edit fulcrums
+            </UIButton.button>
+          </div>
+        </.section>
+
         <.section id="canvas-info-about" title="About" hint="Layout, notes and ownership">
           <dl class="grid grid-cols-[minmax(5rem,auto)_1fr] items-baseline gap-x-4 gap-y-2 text-sm">
             <dt class="text-base-content/50">Layout</dt>
@@ -162,6 +207,17 @@ defmodule PscWeb.UnstrCanvasLive.InfoPanel do
       </div>
     </div>
     """
+  end
+
+  defp fulcrums_hint(cells) do
+    count = length(Fulcrums.list(cells))
+    label = Fulcrums.label(Fulcrums.mode(cells))
+
+    cond do
+      not Fulcrums.enabled?(cells) -> "Off"
+      count == 1 -> "1 fulcrum · #{label}"
+      true -> "#{count} fulcrums · #{label}"
+    end
   end
 
   defp agent_hint(config, files) do

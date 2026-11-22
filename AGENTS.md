@@ -40,6 +40,7 @@ SaladUI components (`lib/psc_web/components/ui/`), `Req` for HTTP.
 | Template | `canvas_layouts` | `Psc.Canvas.Layout` | designed at `/templates/:id` |
 | Canvas | `unstr_canvases` | `Psc.Canvas.UnstrCanvas` | edited at `/canvas/:id` |
 | Canvas event | `unstr_canvas_events` | `Psc.Canvas.UnstrCanvasEvent` | append-only edit log |
+| Pivot (version) | `unstr_canvas_pivots` | `Psc.Canvas.UnstrCanvasPivot` | version tree + `head_pivot_id`, History tab (ADR-043) |
 | Note | `notes` | `Psc.Notes.Note` | Markdown child of a canvas |
 | Note event | `note_events` | `Psc.Notes.NoteEvent` | append-only edit log |
 
@@ -95,7 +96,12 @@ SaladUI components (`lib/psc_web/components/ui/`), `Req` for HTTP.
   `#md-<key>-<field>`, `#active-users-tooltip`, `#cell-r1_c1` are used by LiveView and
   Playwright tests. Grep before renaming one. The free-form modes add `#canvas-bento` /
   `#bento-card-<key>` and `#canvas-image` / `#image-board` / `#image-cell-<key>` /
-  `#text-cell-<key>`; the designer's are `#designer-bento*` and `#designer-image*`.
+  `#text-cell-<key>`; the designer's are `#designer-bento*` and `#designer-image*`. The History
+  tab adds `#pivot-form`, `#pivot-node-<id>`, `#pivot-details`, `#pivot-preview`
+  `#pivot-name` / `#pivot-later`, `#pivot-load` / `#pivot-confirm-load`, and `#pivot-fork` /
+  `#pivot-fork-form` / `#fork-keep-history` / `#pivot-confirm-fork`. Fulcrums (ADR-044) add
+  `#fulcrum-picker`, `#fulcrum-chip-<id>`, `#fulcrums-canvas-button`, `#fulcrums-dialog`,
+  `#fulcrums-save`, `#fulcrum-mode-<mode>` and the editor's `#<id>-add` / `#<id>-<fulcrum>`.
 
 ## Code conventions (the essentials)
 
