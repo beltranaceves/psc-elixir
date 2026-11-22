@@ -1533,7 +1533,7 @@ the global bundle and is pre-1.0, so upgrades need review.
 
 ## Open issues
 
-1. **Version capture needs its own substrate.** The pruned operation tables cannot
+1. ~~**Version capture needs its own substrate.**~~ Resolved by ADR-043. The pruned operation tables cannot
    serve the proposal's delta-based, tree-like versioning with pivot reasons
    (ADR-001). A dedicated versions table is required.
 2. **Same-length replacements emit no operations** (ADR-003), so they are not
@@ -1824,3 +1824,95 @@ names the template and says what survives (canvases made from it keep working; a
 template leaves the catalog; shared readers lose access). `delete_template` requires the
 pending confirmation to match, re-reads the row, and reports built-ins instead of deleting
 them. One pattern, two libraries.
+
+---
+
+## ADR-043 — Canvas versions are a tree with a head, loaded like a git checkout
+
+**Context.** The proposal's Core MVP milestone 4 asks for versions of a canvas with the reason
+for each change ("pivots"), navigable as a tree, with the ability to go back and fork. The
+event tables cannot serve it: a save prunes the events it folds (ADR-001, open issue 1).
+
+**Decision.** Every node in the tree is a **version**: a row in `unstr_canvas_pivots` holding
+a **full copy** of the cells, its author and a `parent_id`. A canvas is small and versions are
+coarse, so copies stay well inside the free-tier row budget and need no replay. The canvas
+row points at the version it holds, `unstr_canvases.head_pivot_id` (git's HEAD); the canvas
+cells are the working copy. HEAD is per canvas: everyone shares it.
+
+- **Every canvas starts at a named root** ("Initial version"; instantiation and forks say
+  where the canvas came from), created with the canvas.
+- **Editing a named version starts a draft** (`kind: "draft"`, no name or reason) under it,
+  and HEAD moves to the draft. Further edits go into the same draft. The check runs in
+  `Canvas.start_draft/2` inside a transaction that locks the canvas row, so two editors
+  typing at once start one draft. Renaming the canvas is not a versioned edit.
+- **The person whose edit started the draft is asked to name it after the first save**, so
+  the sentence they were writing is finished first. **Later** closes the dialog; the draft
+  stays in the tree as "Unnamed changes" and can be named from the Pivot button or from
+  History. Naming freezes the current content into the version (`kind: "pivot"`); the next
+  edit starts a new draft under it.
+- **Loading a version is a checkout, not a restore.** It never creates a version. The draft
+  being left keeps its content (frozen into its row), HEAD moves, and the cells are swapped
+  with a `replace_cells` operation through the normal event path, so every open editor
+  converges and the save folds it like any edit. The canvas keeps its name and description.
+  Editing a loaded version starts a draft under it: that is how branches appear. Anyone who
+  can edit the canvas can load. There is no discard: drafts stay in the tree.
+- **Fork** asks where the copy goes. **Into a new canvas**, owned by the forker: without
+  history it starts at one root that names the source; with "keep history" it gets a copy
+  of the version's lineage (root to version, not the sibling branches) and holds the copy.
+  Notes and agent files are not copied, because a version covers cells only. **In this
+  canvas**: a draft is started right under the version and loaded, like a load followed by an
+  edit, and its author is asked to name it.
+
+The History tab draws the tree top-down (leaves take one slot, a parent is centred over its
+children) with SVG edges, computed in `PivotPanel.layout/1` and rendered in HEEx; no graph
+library. Drafts are dashed, and the version the canvas holds carries a dot. Below the tree,
+the **selected version is shown read-only** through the same renderers the Editor tab uses
+(`Grid`, `Bento`, `ImageCanvas`, `Cell`) with `read_only?`: no toolbar, forms or hooks,
+Markdown rendered on the server, and no element ids, so the preview never clashes with the
+live editor rendered beside it. The current version previews the live cells. There is no diff
+view yet.
+
+**Consequences.** Open issue 1 is closed. History survives event pruning, nothing is lost by
+loading, and branching needs no extra command. Cell editors own their DOM
+(`phx-update="ignore"`), so a load pushes every field as a `cell_updated` resync
+(`from_user_id: -1`). Versions are not deleted from the UI; a canvas's versions go with it.
+Rows of the legacy `"restore"` kind, from before loading replaced restoring, read as named
+versions.
+
+---
+
+## ADR-044 — Fulcrums are versioned cell sets; the highlight is a shared view choice
+
+**Context.** A canvas needs named sets of cells ("fulcrums") that anyone can pick from a
+list to highlight together. Templates define them, and a template decides whether one or
+several can be highlighted at once.
+
+**Decision.** Fulcrums live in the canvas cells map beside the structure, handled only by
+`Psc.Canvas.Fulcrums`:
+
+- `"fulcrums"`: a list of `%{"id", "name", "color", "cells"}`, where the colour is an
+  accent token and `cells` are cell keys. It is **content**: copied from the template at
+  instantiation like the cells, part of every version snapshot, and changed on the canvas
+  through one `set_fulcrums` operation (the Fulcrums dialog edits a draft and saves it), so
+  editing it starts a version like any edit.
+- `"fulcrum_mode"`: `"single"`, `"multiple"` or `"off"`, a template setting (designer →
+  Fulcrums) the canvas inherits. Off hides the picker and the Fulcrums button, highlights
+  nothing and ignores fulcrum events; the list is kept, so turning it back on restores it.
+  Each canvas can change its own setting in the Info tab (`set_fulcrum_mode`). Like the
+  highlight, that is a setting, not content: it starts no version and loading a version
+  keeps it.
+- `"$active_fulcrums"`: the highlighted ids, **shared by everyone** on the canvas. Like
+  `"$name"` it is a view choice: `set_active_fulcrums` is not a versioned operation, and
+  loading a version keeps it. Ids of fulcrums a version does not have are ignored.
+
+All three are structure metadata, so they are never mistaken for cells. The designer and the
+canvas dialog share `PscWeb.Components.FulcrumEditor`; the canvas shows a chip per fulcrum
+above the board (`FulcrumEditor.picker`). A highlighted cell gets a heavy ring in the
+fulcrum's colour (it replaces the accent outline), with a dot per fulcrum when several
+overlap. The renderers take a `highlights` map, so the History preview highlights what the
+version holds too.
+
+**Consequences.** Fulcrums need no table and no migration, travel through the event log and
+the versions for free, and highlighting never clutters the version tree. The cost is that a
+fulcrum list is last-write-wins as a whole: two people editing fulcrums at the same moment
+keep the later save.

@@ -29,6 +29,8 @@ erDiagram
     unstr_canvases ||--o{ notes : "owns"
     notes ||--o{ note_events : "event log"
     unstr_canvases ||--o{ unstr_canvas_events : "event log"
+    unstr_canvases ||--o{ unstr_canvas_pivots : "pivots"
+    unstr_canvas_pivots ||--o{ unstr_canvas_pivots : "parent of"
 
     users {
         bigint id PK
@@ -87,7 +89,18 @@ erDiagram
         string notes_mode
         map cells
         int snapshot_seq
+        uuid head_pivot_id FK "current version"
         int author_id FK
+    }
+    unstr_canvas_pivots {
+        uuid id PK
+        uuid unstr_canvas_id FK
+        uuid parent_id FK "nullable, tree"
+        int author_id FK
+        string name "null while draft"
+        text rationale
+        string kind "pivot | draft"
+        map cells "full snapshot"
     }
     unstr_canvas_events {
         uuid id PK

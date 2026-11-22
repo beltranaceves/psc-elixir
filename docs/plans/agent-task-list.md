@@ -95,7 +95,7 @@
 | Collaboration | PubSub broadcast + CRDT fold + presence; per-field LWW | `lib/psc/canvas/unstr_canvas_crdt.ex` |
 | Sharing | One `ShareDialog` for template/canvas/document | ADR-016 |
 | Documents | **Parked** — routes live, no nav entry | ADR-018 |
-| Pivot / version system | **Not started** (Core MVP milestone 4 missing) | `docs/project_proposal.md` §roadmap |
+| Pivot / version system | **Done** — versions with a head: auto drafts, naming, load, fork | ADR-043 |
 | Analytics / insights / telemetry | Placeholders only | `docs/spec/analytics.md` etc. |
 | CI | None (no `.github/workflows`) | — |
 | Health endpoint | None | `lib/psc_web/router.ex` |
@@ -110,10 +110,10 @@
 | [P0-1](#p0-1--fold-canvas-events-on-a-threshold) | Fold canvas events on a threshold | S | P0 | — | todo |
 | [P0-2](#p0-2--retire-the-legacy-fixed-psc-canvas) | Retire the legacy fixed-PSC canvas | M | P0 | — | todo |
 | [P0-3](#p0-3--add-a-consistency-resync-to-the-canvas-editor) | Add a consistency resync to the canvas editor | S | P0 | — | todo |
-| [P1-1](#p1-1--pivot-data-model-and-migration) | Pivot data model and migration | M | P1 | — | todo |
-| [P1-2](#p1-2--pivot-context-api) | Pivot context API | M | P1 | P1-1 | todo |
-| [P1-3](#p1-3--pivot-ui-create-browse-compare) | Pivot UI: create, browse, compare | L | P1 | P1-2 | todo |
-| [P1-4](#p1-4--restore-and-fork-from-a-pivot) | Restore and fork from a pivot | M | P1 | P1-3 | todo |
+| [P1-1](#p1-1--pivot-data-model-and-migration) | Pivot data model and migration | M | P1 | — | done |
+| [P1-2](#p1-2--pivot-context-api) | Pivot context API | M | P1 | P1-1 | done |
+| [P1-3](#p1-3--pivot-ui-create-browse-compare) | Pivot UI: create, browse, compare | L | P1 | P1-2 | done |
+| [P1-4](#p1-4--restore-and-fork-from-a-pivot) | Restore and fork from a pivot | M | P1 | P1-3 | done |
 | [P1-5](#p1-5--structure-editing-in-the-canvas-editor) | Structure editing in the canvas editor | L | P1 | — | todo |
 | [P2-1](#p2-1--password-reset-flow) | Password reset flow | M | P2 | — | todo |
 | [P2-2](#p2-2--ci-pipeline) | CI pipeline | M | P2 | — | todo |
