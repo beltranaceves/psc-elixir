@@ -67,6 +67,8 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         |> assign(:save_stats, Editor.Operations.initial_save_stats())
         |> assign(:share_open, false)
         |> assign(:active_tab, "editor")
+        |> assign(:split_tab, nil)
+        |> assign(:focus_pane, "primary")
         |> assign(:tabs, Tabs.tabs())
         |> Editor.StructureEditing.attach()
         |> Editor.Freeform.attach()
@@ -116,9 +118,29 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   end
 
   @impl true
-  def handle_event("select_tab", %{"tab" => tab}, socket) do
+  def handle_event("select_tab", %{"tab" => tab} = params, socket) do
+    %{active_tab: active, split_tab: split, focus_pane: focus} = socket.assigns
+    pane = if split, do: params["pane"] || focus, else: "primary"
+
+    if Tabs.tab?(tab) do
+      {active, split} = Tabs.place(active, split, pane, tab)
+      {:noreply, socket |> assign(:focus_pane, pane) |> patch_layout(active, split)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("toggle_split", _params, socket) do
+    %{active_tab: active, split_tab: split} = socket.assigns
+    split = if split, do: nil, else: Tabs.default_split(active)
+
+    {:noreply, socket |> assign(:focus_pane, "primary") |> patch_layout(active, split)}
+  end
+
+  def handle_event("focus_pane", %{"pane" => pane}, socket)
+      when pane in ["primary", "split"] do
     {:noreply,
-     push_patch(socket, to: ~p"/canvas/#{socket.assigns.canvas_id}?tab=#{tab}", replace: true)}
+     assign(socket, :focus_pane, if(socket.assigns.split_tab, do: pane, else: "primary"))}
   end
 
   @impl true
@@ -223,39 +245,84 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     {:noreply, socket}
   end
 
+  # The URL carries the layout; `handle_params/3` applies it and loads what came
+  # into view. A URL without `split` keeps split view open (see
+  # `layout_from_params/3`), so closing it clears `split_tab` first.
+  defp patch_layout(socket, active, split) do
+    id = socket.assigns.canvas_id
+
+    if split do
+      push_patch(socket, to: ~p"/canvas/#{id}?tab=#{active}&split=#{split}", replace: true)
+    else
+      socket
+      |> assign(:split_tab, nil)
+      |> push_patch(to: ~p"/canvas/#{id}?tab=#{active}", replace: true)
+    end
+  end
+
   @impl true
   def handle_params(params, _url, socket) do
+    previous = visible_tabs(socket.assigns[:active_tab], socket.assigns[:split_tab])
+
     tab = Tabs.find(params["tab"]) |> elem(0)
 
     # A snippet chip links to ?tab=editor&cell=r1_c1: open the editor tab and mark
     # the cell so it is obvious which one the agent meant.
     tab = if params["cell"], do: "editor", else: tab
 
-    socket = assign(socket, :active_tab, tab)
-    socket = assign(socket, :focus_cell, params["cell"])
+    {active, split, focus} = layout_from_params(params, tab, socket.assigns)
 
     socket =
-      cond do
-        tab == "notes" ->
-          socket
-          |> Editor.Notes.load_notes()
-          |> Editor.Notes.load_note(params["note"])
+      socket
+      |> assign(active_tab: active, split_tab: split, focus_pane: focus)
+      |> assign(:focus_cell, params["cell"])
 
-        tab == "agent" ->
-          Editor.AgentChat.load_agent(socket)
-
-        tab == "analysis" ->
-          Editor.Analysis.load_insights(socket)
-
-        tab == "history" ->
-          Editor.History.load_pivots(socket)
-
-        true ->
-          socket
-      end
+    # A tab loads when it comes into view, and again when the URL names it (a
+    # note link, say). A tab that stays open in the other pane is left alone, so
+    # switching one pane does not reset the other.
+    socket =
+      visible_tabs(active, split)
+      |> Enum.filter(&(&1 == tab or &1 not in previous))
+      |> Enum.reduce(socket, &load_tab(&2, &1, params))
 
     {:noreply, socket}
   end
+
+  # `split` in the URL sets the layout. A URL with only `tab` (a link inside a
+  # panel, such as a note) keeps split view and shows the tab in a pane.
+  defp layout_from_params(%{"split" => split}, tab, assigns) do
+    if Tabs.tab?(split) and split != tab,
+      do: {tab, split, assigns[:focus_pane] || "primary"},
+      else: {tab, nil, "primary"}
+  end
+
+  defp layout_from_params(_params, tab, %{split_tab: split} = assigns) when is_binary(split) do
+    %{active_tab: active, focus_pane: focus} = assigns
+
+    case Tabs.pane_of(tab, active, split) do
+      nil ->
+        {active, split} = Tabs.place(active, split, focus, tab)
+        {active, split, focus}
+
+      pane ->
+        {active, split, pane}
+    end
+  end
+
+  defp layout_from_params(_params, tab, _assigns), do: {tab, nil, "primary"}
+
+  defp visible_tabs(active, split), do: Enum.reject([active, split], &is_nil/1)
+
+  defp load_tab(socket, "notes", params) do
+    socket
+    |> Editor.Notes.load_notes()
+    |> Editor.Notes.load_note(params["note"])
+  end
+
+  defp load_tab(socket, "agent", _params), do: Editor.AgentChat.load_agent(socket)
+  defp load_tab(socket, "analysis", _params), do: Editor.Analysis.load_insights(socket)
+  defp load_tab(socket, "history", _params), do: Editor.History.load_pivots(socket)
+  defp load_tab(socket, _tab, _params), do: socket
 
   def handle_info({:operation, user_id, client_id, operation, _seq}, socket) do
     apply_remote_operation(socket, user_id, client_id, operation)
@@ -415,6 +482,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         # scroller. Everywhere else every panel scrolls inside itself and the
         # page must not scroll too.
         cond do
+          # Split view: each pane scrolls inside itself, the page never does.
+          @split_tab ->
+            "px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3"
+
           @active_tab == "analysis" ->
             "canvas-page-scroll px-2 pt-2 sm:px-6 sm:pt-3 lg:px-8 lg:pt-3 overflow-y-auto"
 
@@ -428,7 +499,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
       container_class="mx-auto flex min-h-0 w-full max-w-none flex-1 flex-col gap-3"
     >
       <:header_nav>
-        <Tabs.strip tabs={@tabs} active_tab={@active_tab} />
+        <Tabs.strip
+          tabs={@tabs}
+          active_tab={@active_tab}
+          split_tab={@split_tab}
+          focus_pane={@focus_pane}
+        />
       </:header_nav>
 
       <:header_actions>
@@ -454,7 +530,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
             "flex w-full flex-col gap-2 pb-[calc(var(--canvas-tab-bar-height)+var(--canvas-tab-bar-gap)+env(safe-area-inset-bottom))] lg:pb-2",
             # The Analysis tab grows with its content and the page scrolls, so the
             # bottom padding stays below the last row instead of under the tab bar.
-            if(@active_tab == "analysis", do: "flex-none", else: "min-h-0 flex-1")
+            if(@active_tab == "analysis" and is_nil(@split_tab),
+              do: "flex-none",
+              else: "min-h-0 flex-1"
+            )
           ]
         }
       >
@@ -463,7 +542,10 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           status={@status}
           can_share?={@canvas.author_id == @user_id}
           cells={@cells}
-          controls?={@active_tab != "editor" and (@active_tab != "agent" or is_nil(@agent_session))}
+          controls?={
+            not visible?(assigns, "editor") and
+              (not visible?(assigns, "agent") or is_nil(@agent_session))
+          }
         />
         <Header.share_dialog
           canvas={@canvas}
@@ -482,16 +564,40 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           id="canvas-tabpanel"
           phx-hook="CanvasTabs"
           data-active-tab={@active_tab}
+          data-split-tab={@split_tab}
+          data-focus-pane={@focus_pane}
+          data-split={to_string(not is_nil(@split_tab))}
           class={[
             "flex w-full flex-col",
-            if(@active_tab == "analysis", do: "flex-none", else: "min-h-0 flex-1")
+            if(@active_tab == "analysis" and is_nil(@split_tab),
+              do: "flex-none",
+              else: "min-h-0 flex-1"
+            )
           ]}
         >
+          <%!-- Split view (desktop): app.css lays the panes out on a grid and
+          places each visible panel by its `data-pane`; the header strip's
+          thumbs pick their tabs. Below `lg` only the left pane shows. --%>
+          <div
+            :if={@split_tab}
+            id="canvas-split-divider"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panes"
+            aria-valuemin="25"
+            aria-valuemax="75"
+            tabindex="0"
+            class="canvas-split-divider hidden"
+          >
+            <span></span>
+          </div>
+
           <%!-- Every view is rendered so the client can switch instantly; the
           inactive ones are hidden. The server confirms the choice a moment
           later and owns the URL. --%>
           <div
             id="canvas-panel-editor"
+            data-pane={pane(assigns, "editor")}
             data-fulcrums-active={to_string(Fulcrums.active_ids(@cells) != [])}
             role="tabpanel"
             aria-labelledby="canvas-tab-editor"
@@ -502,7 +608,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                 # (the page scrolls); the table keeps filling the viewport. A
                 # phone keeps the inner scroll for all three.
                 Structure.freeform?(@cells) && "lg:flex-none",
-                @active_tab != "editor" && "hidden"
+                is_nil(pane(assigns, "editor")) && "hidden"
               ]
             }
           >
@@ -516,7 +622,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               presence={@presence}
               status={@status}
               can_share?={@canvas.author_id == @user_id}
-              status_row?={@active_tab == "editor"}
+              status_row?={visible?(assigns, "editor")}
               focus_cell={@focus_cell}
               user_id={@user_id}
             />
@@ -524,11 +630,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
           <div
             id="canvas-panel-analysis"
+            data-pane={pane(assigns, "analysis")}
             role="tabpanel"
             aria-labelledby="canvas-tab-analysis"
             class={[
               "flex w-full flex-col",
-              @active_tab != "analysis" && "hidden"
+              is_nil(pane(assigns, "analysis")) && "hidden"
             ]}
           >
             <AnalysisPanel.panel
@@ -548,11 +655,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
           <div
             id="canvas-panel-notes"
+            data-pane={pane(assigns, "notes")}
             role="tabpanel"
             aria-labelledby="canvas-tab-notes"
             class={[
               "flex min-h-0 w-full flex-1 flex-col",
-              @active_tab != "notes" && "hidden"
+              is_nil(pane(assigns, "notes")) && "hidden"
             ]}
           >
             <NotesPanel.panel
@@ -571,12 +679,13 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
           <div
             id="canvas-panel-agent"
+            data-pane={pane(assigns, "agent")}
             role="tabpanel"
             aria-labelledby="canvas-tab-agent"
             phx-window-focus="agent_refresh"
             class={[
               "flex min-h-0 w-full flex-1 flex-col",
-              @active_tab != "agent" && "hidden"
+              is_nil(pane(assigns, "agent")) && "hidden"
             ]}
           >
             <AgentPanel.panel
@@ -596,7 +705,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               agent_connection={@agent_connection}
               agent_connection_list_open={@agent_connection_list_open}
               presence={@presence}
-              status={if @active_tab == "agent", do: @status, else: nil}
+              status={
+                if visible?(assigns, "agent") and not visible?(assigns, "editor"),
+                  do: @status,
+                  else: nil
+              }
               can_share?={@canvas.author_id == @user_id}
               cells={@cells}
             />
@@ -604,11 +717,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
           <div
             id="canvas-panel-history"
+            data-pane={pane(assigns, "history")}
             role="tabpanel"
             aria-labelledby="canvas-tab-history"
             class={[
               "flex min-h-0 w-full flex-1 flex-col",
-              @active_tab != "history" && "hidden"
+              is_nil(pane(assigns, "history")) && "hidden"
             ]}
           >
             <PivotPanel.panel
@@ -640,11 +754,12 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
           out of. --%>
           <div
             id="canvas-panel-info"
+            data-pane={pane(assigns, "info")}
             role="tabpanel"
             aria-labelledby="canvas-tab-info"
             class={[
               "flex min-h-0 w-full flex-1 flex-col overflow-y-auto",
-              @active_tab != "info" && "hidden"
+              is_nil(pane(assigns, "info")) && "hidden"
             ]}
           >
             <InfoPanel.panel
@@ -682,6 +797,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
     """
   end
 
+  # The pane a tab is shown in ("primary", "split") or nil when it is hidden.
+  defp pane(assigns, tab), do: Tabs.pane_of(tab, assigns.active_tab, assigns.split_tab)
+
+  defp visible?(assigns, tab), do: not is_nil(pane(assigns, tab))
+
   @doc false
   defdelegate export_filename(name, format), to: Editor.Export
 
@@ -689,19 +809,25 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
   # on the Editor tab, the open note on the Notes tab. The other surface's
   # figures are listed alongside, so nothing is lost.
   defp status_source(assigns) do
-    note_open? = assigns.active_tab == "notes" and assigns.note
+    # In split view the pill follows the pane the user is working in.
+    focused = if assigns.split_tab, do: assigns.focus_pane, else: "primary"
+    note_open? = pane(assigns, "notes") == focused and assigns.note
 
     canvas = %{label: "Canvas", state: assigns.save_state, stats: assigns.save_stats}
 
-    if note_open? do
-      %{
-        label: "Note",
-        state: assigns.note_save_state,
-        stats: assigns.note_save_stats,
-        others: [canvas]
-      }
-    else
-      %{label: "Canvas", state: canvas.state, stats: canvas.stats, others: []}
-    end
+    # The toolbar that shows the pill also holds the split view switch.
+    status =
+      if note_open? do
+        %{
+          label: "Note",
+          state: assigns.note_save_state,
+          stats: assigns.note_save_stats,
+          others: [canvas]
+        }
+      else
+        %{label: "Canvas", state: canvas.state, stats: canvas.stats, others: []}
+      end
+
+    Map.put(status, :split?, not is_nil(assigns.split_tab))
   end
 end

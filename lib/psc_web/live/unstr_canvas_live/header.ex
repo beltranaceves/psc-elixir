@@ -240,7 +240,47 @@ defmodule PscWeb.UnstrCanvasLive.Header do
           <.share_button id="share-canvas-button" label="Share" />
         </div>
       <% end %>
+
+      <.split_switch :if={Map.has_key?(@status, :split?)} on?={@status.split?} />
     </div>
+    """
+  end
+
+  attr :on?, :boolean, required: true
+
+  # Split view is a desktop layout, so the switch only shows from `lg` up. It
+  # is server state: the knob moves once the layout comes back.
+  defp split_switch(assigns) do
+    ~H"""
+    <button
+      type="button"
+      id="canvas-split-toggle"
+      role="switch"
+      aria-checked={to_string(@on?)}
+      phx-click="toggle_split"
+      title={if @on?, do: "Show one view", else: "Show two views side by side"}
+      class={[
+        "group hidden h-8 shrink-0 items-center gap-2 rounded-full border pl-3 pr-1.5 text-xs font-medium transition-colors lg:inline-flex",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        if(@on?,
+          do: "border-primary/40 text-base-content",
+          else:
+            "border-base-content/10 text-base-content/70 hover:border-base-content/20 hover:bg-base-content/5 hover:text-base-content"
+        )
+      ]}
+    >
+      <.icon name="hero-view-columns" class="size-4" />
+      <span>Split</span>
+      <span class={[
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+        if(@on?, do: "bg-primary", else: "bg-base-content/20")
+      ]}>
+        <span class={[
+          "absolute left-0.5 size-4 rounded-full bg-base-100 shadow-sm transition-transform",
+          @on? && "translate-x-4"
+        ]}></span>
+      </span>
+    </button>
     """
   end
 

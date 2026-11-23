@@ -439,6 +439,72 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert has_element?(lv, "#canvas-panel-info:not(.hidden)")
     end
 
+    test "split view shows two tabs side by side", %{conn: conn, user: user} do
+      template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
+      {:ok, canvas} = Canvas.instantiate_template(template, user.id)
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
+      refute has_element?(lv, "#canvas-tabpanel[data-split='true']")
+      assert has_element?(lv, "#canvas-tabs[data-split='false']")
+
+      # The switch sits in the canvas toolbar, next to Pivot and Export.
+      assert has_element?(lv, "#canvas-panel-editor #canvas-split-toggle[aria-checked='false']")
+
+      # Turning it on opens the agent beside the editor.
+      lv |> element("#canvas-split-toggle") |> render_click()
+      assert_patch(lv, ~p"/canvas/#{canvas.id}?tab=editor&split=agent")
+      assert has_element?(lv, "#canvas-split-toggle[aria-checked='true']")
+      assert has_element?(lv, "#canvas-tabpanel[data-split='true']")
+      assert has_element?(lv, "#canvas-panel-editor[data-pane='primary']:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-agent[data-pane='split']:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-notes.hidden")
+      assert has_element?(lv, "#canvas-split-divider[role='separator']")
+      assert has_element?(lv, "#canvas-tab-editor[data-pane-badge='L']")
+      assert has_element?(lv, "#canvas-tab-agent[data-pane-badge='R']")
+
+      # The header strip carries one thumb per pane; the client slides them.
+      assert has_element?(lv, "#canvas-tabs[data-split='true']")
+      assert has_element?(lv, "#canvas-tab-thumb-primary", "L")
+      assert has_element?(lv, "#canvas-tab-thumb-split", "R")
+
+      # Dragging a pane's thumb onto a tab shows that tab in the pane.
+      render_hook(lv, "select_tab", %{"tab" => "notes", "pane" => "split"})
+      assert_patch(lv, ~p"/canvas/#{canvas.id}?tab=editor&split=notes")
+      assert has_element?(lv, "#canvas-panel-notes[data-pane='split']:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-agent.hidden")
+      assert has_element?(lv, "#canvas-notes")
+
+      # A thumb dropped on the other pane's tab swaps the two.
+      render_hook(lv, "select_tab", %{"tab" => "notes", "pane" => "primary"})
+      assert_patch(lv, ~p"/canvas/#{canvas.id}?tab=notes&split=editor")
+      assert has_element?(lv, "#canvas-panel-notes[data-pane='primary']")
+      assert has_element?(lv, "#canvas-panel-editor[data-pane='split']")
+
+      # The header strip targets the focused pane.
+      render_hook(lv, "focus_pane", %{"pane" => "split"})
+      lv |> element("#canvas-tab-history") |> render_click()
+      assert_patch(lv, ~p"/canvas/#{canvas.id}?tab=notes&split=history")
+      assert has_element?(lv, "#canvas-tab-history[aria-selected='true']")
+
+      # With no editor open, the toolbar above the panes carries the switch.
+      assert has_element?(lv, "#canvas-header #canvas-split-toggle[aria-checked='true']")
+
+      # Turning it off keeps the left pane.
+      lv |> element("#canvas-split-toggle") |> render_click()
+      assert_patch(lv, ~p"/canvas/#{canvas.id}?tab=notes")
+      refute has_element?(lv, "#canvas-tabpanel[data-split='true']")
+      assert has_element?(lv, "#canvas-panel-notes:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-history.hidden")
+
+      # The layout is deep-linkable; a split naming the same tab is ignored.
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=info&split=history")
+      assert has_element?(lv, "#canvas-panel-info[data-pane='primary']:not(.hidden)")
+      assert has_element?(lv, "#canvas-panel-history[data-pane='split']:not(.hidden)")
+
+      {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}?tab=info&split=info")
+      refute has_element?(lv, "#canvas-tabpanel[data-split='true']")
+    end
+
     test "titles the header Canvas Editor and leaves the Canvases nav item unhighlighted", %{
       conn: conn,
       user: user
