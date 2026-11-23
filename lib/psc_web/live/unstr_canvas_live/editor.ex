@@ -538,14 +538,11 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
         }
       >
         <Header.header
+          c_name={@c_name}
           presence={@presence}
           status={@status}
           can_share?={@canvas.author_id == @user_id}
           cells={@cells}
-          controls?={
-            not visible?(assigns, "editor") and
-              (not visible?(assigns, "agent") or is_nil(@agent_session))
-          }
         />
         <Header.share_dialog
           canvas={@canvas}
@@ -620,9 +617,7 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               colors_picker={@structure_colors_picker}
               hint_editor={@hint_editor}
               presence={@presence}
-              status={@status}
               can_share?={@canvas.author_id == @user_id}
-              status_row?={visible?(assigns, "editor")}
               focus_cell={@focus_cell}
               user_id={@user_id}
             />
@@ -704,14 +699,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
               agent_connections={@agent_connections}
               agent_connection={@agent_connection}
               agent_connection_list_open={@agent_connection_list_open}
-              presence={@presence}
-              status={
-                if visible?(assigns, "agent") and not visible?(assigns, "editor"),
-                  do: @status,
-                  else: nil
-              }
-              can_share?={@canvas.author_id == @user_id}
-              cells={@cells}
             />
           </div>
 
@@ -738,7 +725,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
                   c_name={@c_name}
                   edit_structure?={false}
                   presence={@presence}
-                  status={@status}
                   can_share?={false}
                   user_id={@user_id}
                   read_only?
@@ -799,8 +785,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor do
 
   # The pane a tab is shown in ("primary", "split") or nil when it is hidden.
   defp pane(assigns, tab), do: Tabs.pane_of(tab, assigns.active_tab, assigns.split_tab)
-
-  defp visible?(assigns, tab), do: not is_nil(pane(assigns, tab))
 
   @doc false
   defdelegate export_filename(name, format), to: Editor.Export

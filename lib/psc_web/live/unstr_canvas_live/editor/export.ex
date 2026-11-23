@@ -181,7 +181,6 @@ defmodule PscWeb.UnstrCanvasLive.Editor.Export do
           c_name={@c_name}
           edit_structure?={false}
           presence={%{}}
-          status={%{}}
           can_share?={false}
           user_id={@user_id}
           read_only?

@@ -18,9 +18,7 @@ defmodule PscWeb.UnstrCanvasLive.Board do
   attr :colors_picker, :string, default: nil
   attr :hint_editor, :string, default: nil
   attr :presence, :map, required: true
-  attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
-  attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
   attr :read_only?, :boolean, default: false

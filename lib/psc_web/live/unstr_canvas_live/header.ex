@@ -139,30 +139,39 @@ defmodule PscWeb.UnstrCanvasLive.Header do
     ]
   end
 
+  attr :c_name, :string, required: true
   attr :presence, :map, required: true
   attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
   # The canvas's cells: the fulcrum button reads its mode and active fulcrums.
   attr :cells, :map, default: nil
-  attr :controls?, :boolean, default: true
 
+  @doc """
+  The canvas row above the panels: the title, then presence, save state and
+  the canvas actions (Pivot, Fulcrums, Export, Share, Split).
+
+  They act on the whole canvas, not on one view, so they live here on every
+  tab and in both panes of split view. A tab switch or a moved divider never
+  moves them; only the viewport's width can wrap the row. On a phone the row
+  holds the title alone: the app header carries the compact cluster.
+  """
   def header(assigns) do
     ~H"""
     <div
       id="canvas-header"
-      class={[
-        "shrink-0 items-center justify-end gap-2 px-2 sm:px-0",
-        @controls? && "hidden sm:flex",
-        not @controls? && "hidden"
-      ]}
+      class="flex shrink-0 flex-wrap items-center gap-2 px-2 sm:px-0"
     >
-      <.canvas_status
-        :if={@controls?}
-        presence={@presence}
-        status={@status}
-        can_share?={@can_share?}
-        cells={@cells}
-      />
+      <div class="min-w-[8rem] flex-1">
+        <.title_field c_name={@c_name} />
+      </div>
+      <div class="ml-auto hidden sm:flex">
+        <.canvas_status
+          presence={@presence}
+          status={@status}
+          can_share?={@can_share?}
+          cells={@cells}
+        />
+      </div>
     </div>
     """
   end
@@ -174,13 +183,8 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :class, :any, default: nil
 
   @doc """
-  Presence, save state and Share.
-
-  One instance is rendered at a time: the editor toolbar hosts it on the
-  Editor tab (from `sm` up), the Agent panel's own top bar hosts it from `sm`
-  up while a chat is open, and the header row above the panels hosts it on the
-  other tabs (and on the Agent start screen). Both use the same ids, so the
-  tests and the hooks do not need to know where it lives.
+  Presence, save state and the canvas actions, in the canvas row
+  (`header/1`) from `sm` up.
   """
   def canvas_status(assigns) do
     ~H"""
@@ -287,12 +291,10 @@ defmodule PscWeb.UnstrCanvasLive.Header do
   attr :c_name, :string, required: true
 
   @doc """
-  The canvas title, rendered as the first control of the layout toolbar.
+  The canvas title, the first control of the canvas row (`header/1`).
 
-  It keeps the `canvas-name-form` id and the `update_name` event, so the
-  title is renamed where it is read: in the grid, the bento board or the
-  image board. On a phone the field takes the toolbar's first line and the
-  structure controls wrap below it.
+  It keeps the `canvas-name-form` id and the `update_name` event; the Info tab
+  renames the canvas too.
   """
   def title_field(assigns) do
     ~H"""
@@ -305,7 +307,7 @@ defmodule PscWeb.UnstrCanvasLive.Header do
         title={@c_name}
         aria-label="Canvas name"
         placeholder="Untitled canvas"
-        class="field-sizing-content h-8 w-full min-w-0 rounded-lg border border-base-content/10 bg-base-200 px-3 text-sm font-semibold leading-8 text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary/50 focus:ring-2 focus:ring-primary/35 focus:ring-inset focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[28rem]"
+        class="field-sizing-content h-8 w-full min-w-0 rounded-lg border border-base-content/10 bg-base-200 px-3 text-sm font-semibold leading-8 text-base-content transition-colors placeholder-base-content/40 hover:border-base-content/20 focus:border-primary/50 focus:ring-2 focus:ring-primary/35 focus:ring-inset focus:outline-none sm:w-auto sm:min-w-[6rem] sm:max-w-[min(28rem,100%)]"
       />
     </.form>
     """

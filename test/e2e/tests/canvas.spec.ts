@@ -576,31 +576,34 @@ test.describe('canvas editor (multiplayer CRDT)', () => {
 });
 
 test.describe('canvas editor layout', () => {
-  test('puts the canvas title in the editor toolbar and the grid full-width', async ({
+  test('puts the canvas title in the canvas row and the grid full-width', async ({
     page,
   }) => {
     await createCanvasAndOpen(page, uniqueName('Layout Canvas'));
 
-    // The title is renamed where it is read: in the layout toolbar, above the
-    // table. The description is not part of the editing surface.
-    const name = page.locator('#canvas-grid #canvas-name-form input');
+    // The title leads the canvas row above the panels, with presence, save
+    // state and the canvas actions. The description is not part of the
+    // editing surface.
+    const name = page.locator('#canvas-header #canvas-name-form input');
     await expect(name).toBeVisible();
     await expect(page.locator('#canvas-panel-editor #canvas-description-form')).toHaveCount(0);
 
     const nameBox = await name.boundingBox();
     expect(nameBox).not.toBeNull();
 
-    // The title leads the row; the structure toggle sits on the right.
-    const toggleBox = await page.locator('#edit-structure-toggle').boundingBox();
-    expect(toggleBox).not.toBeNull();
-    expect(toggleBox!.x).toBeGreaterThan(nameBox!.x);
-
-    // The toolbar sits above the header row of the table, inside the grid card.
-    const grid = page.locator('#canvas-grid');
-    const gridBox = await grid.boundingBox();
+    // The row sits above the grid card, which keeps only the structure tools.
+    const gridBox = await page.locator('#canvas-grid').boundingBox();
     expect(gridBox).not.toBeNull();
-    expect(nameBox!.y).toBeGreaterThanOrEqual(gridBox!.y);
-    expect(nameBox!.y).toBeLessThan(gridBox!.y + 48);
+    expect(nameBox!.y + nameBox!.height).toBeLessThanOrEqual(gridBox!.y);
+    await expect(page.locator('#canvas-grid #edit-structure-toggle')).toBeVisible();
+
+    // Switching tabs does not move the row.
+    await page.locator('#canvas-tab-info').click();
+    await expect(page.locator('#canvas-info-details')).toBeVisible();
+    const afterBox = await name.boundingBox();
+    expect(afterBox!.y).toBe(nameBox!.y);
+    await page.locator('#canvas-tab-editor').click();
+    await expect(page.locator('#canvas-grid')).toBeVisible();
 
     // The editable grid itself stays visible.
     await expect(page.locator('#md-problem-content')).toBeVisible();

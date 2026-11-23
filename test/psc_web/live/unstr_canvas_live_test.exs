@@ -447,8 +447,8 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       refute has_element?(lv, "#canvas-tabpanel[data-split='true']")
       assert has_element?(lv, "#canvas-tabs[data-split='false']")
 
-      # The switch sits in the canvas toolbar, next to Pivot and Export.
-      assert has_element?(lv, "#canvas-panel-editor #canvas-split-toggle[aria-checked='false']")
+      # The switch sits in the canvas row, next to Pivot and Export.
+      assert has_element?(lv, "#canvas-header #canvas-split-toggle[aria-checked='false']")
 
       # Turning it on opens the agent beside the editor.
       lv |> element("#canvas-split-toggle") |> render_click()
@@ -486,7 +486,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       assert_patch(lv, ~p"/canvas/#{canvas.id}?tab=notes&split=history")
       assert has_element?(lv, "#canvas-tab-history[aria-selected='true']")
 
-      # With no editor open, the toolbar above the panes carries the switch.
+      # The switch stays in the canvas row whichever tabs are open.
       assert has_element?(lv, "#canvas-header #canvas-split-toggle[aria-checked='true']")
 
       # Turning it off keeps the left pane.
@@ -566,24 +566,25 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       refute html =~ ~s(name="values[semantics]")
     end
 
-    test "puts the title in the layout toolbar and the details in the Info view", %{
-      conn: conn,
-      user: user
-    } do
+    test "puts the title and canvas actions in the canvas row and the details in the Info view",
+         %{
+           conn: conn,
+           user: user
+         } do
       template = CanvasFixtures.canvas_layout_fixture(%{author_id: user.id})
       {:ok, canvas} = Canvas.instantiate_template(template, user.id)
 
       {:ok, lv, _html} = live(conn, ~p"/canvas/#{canvas.id}")
 
-      # The title is renamed where it is read: in the grid's toolbar. The
-      # presence, save state and Share share that row on the editor tab, so
-      # the header row above the panels is empty there.
-      assert has_element?(lv, "#canvas-grid #canvas-name-form")
+      # The title, presence, save state and canvas actions share one row
+      # above the panels on every tab, so they never move with the view.
+      assert has_element?(lv, "#canvas-header #canvas-name-form")
+      assert has_element?(lv, "#canvas-header #active-users-tooltip")
+      assert has_element?(lv, "#canvas-header #share-canvas-button")
+      refute has_element?(lv, "#canvas-tabpanel #canvas-name-form")
+      refute has_element?(lv, "#canvas-tabpanel #share-canvas-button")
       # The description is not part of the editing surface.
       refute has_element?(lv, "#canvas-panel-editor #canvas-description-form")
-      assert has_element?(lv, "#canvas-grid #active-users-tooltip")
-      assert has_element?(lv, "#canvas-grid #share-canvas-button")
-      refute has_element?(lv, "#canvas-header #active-users-tooltip")
 
       # The standalone "Canvas Structure" block is gone; the grid is the content.
       refute has_element?(lv, "#canvas-structure-tooltip")
@@ -599,8 +600,8 @@ defmodule PscWeb.UnstrCanvasLiveTest do
       lv |> element("#canvas-tab-info") |> render_click()
       assert has_element?(lv, "#canvas-panel-info #canvas-info-name-form")
       assert has_element?(lv, "#canvas-panel-info #canvas-description-form")
-      # With the editor toolbar hidden, the status cluster returns to the
-      # header row, so it stays available on every tab.
+      # The canvas row stays as it was.
+      assert has_element?(lv, "#canvas-header #canvas-name-form")
       assert has_element?(lv, "#canvas-header #active-users-tooltip")
       assert has_element?(lv, "#canvas-header #share-canvas-button")
     end
@@ -624,7 +625,7 @@ defmodule PscWeb.UnstrCanvasLiveTest do
 
       # Both write through the same CRDT operations as the toolbar title, so
       # the editor sees them without leaving the Info view.
-      assert has_element?(lv, "#canvas-grid #canvas-name-form input[value='Renamed from info']")
+      assert has_element?(lv, "#canvas-header #canvas-name-form input[value='Renamed from info']")
       assert has_element?(lv, "#canvas-description-form textarea", "Described from info")
     end
 

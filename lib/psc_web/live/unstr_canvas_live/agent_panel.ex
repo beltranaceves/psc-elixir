@@ -6,7 +6,6 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
 
   import Phoenix.HTML, only: [raw: 1]
   import PscWeb.CoreComponents, only: [icon: 1, input: 1]
-  import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1]
 
   alias PscWeb.Markdown
 
@@ -33,10 +32,6 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
   attr :agent_connections, :list, required: true
   attr :agent_connection, :map, default: nil
   attr :agent_connection_list_open, :boolean, default: false
-  attr :presence, :map, default: %{}
-  attr :status, :map, default: nil
-  attr :can_share?, :boolean, default: false
-  attr :cells, :map, default: nil
 
   def panel(assigns) do
     assigns = assign(assigns, :suggestions, @suggestions)
@@ -112,17 +107,6 @@ defmodule PscWeb.UnstrCanvasLive.AgentPanel do
                   )}
                 </p>
               </div>
-            </div>
-
-            <%!-- The canvas's presence, save state and Share live in this bar on
-            a desktop; on a phone the app header carries the compact cluster. --%>
-            <div :if={@status} class="hidden min-w-0 sm:flex sm:shrink-0">
-              <.canvas_status
-                presence={@presence}
-                status={@status}
-                can_share?={@can_share?}
-                cells={@cells}
-              />
             </div>
 
             <%!-- On a phone the controls get their own line and share its width;

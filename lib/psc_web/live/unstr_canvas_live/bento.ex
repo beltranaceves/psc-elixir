@@ -18,7 +18,6 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
 
   import PscWeb.CoreComponents, only: [icon: 1]
   import PscWeb.UnstrCanvasLive.CellColors, only: [colors_button: 1, colors_panel: 1]
-  import PscWeb.UnstrCanvasLive.Header, only: [canvas_status: 1, title_field: 1]
 
   alias Psc.Canvas.Structure
   alias PscWeb.Components.UI.Button, as: UIButton
@@ -30,9 +29,7 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
   attr :structure_accent_picker, :any, default: nil
   attr :colors_picker, :string, default: nil
   attr :presence, :map, required: true
-  attr :status, :map, required: true
   attr :can_share?, :boolean, required: true
-  attr :status_row?, :boolean, default: false
   attr :focus_cell, :string, default: nil
   attr :user_id, :integer, required: true
   # Read-only: no toolbar, ids, hooks or forms (the History tab preview).
@@ -69,19 +66,6 @@ defmodule PscWeb.UnstrCanvasLive.Bento do
         :if={!@read_only?}
         class="flex shrink-0 flex-wrap items-center gap-2 border-b border-base-content/10 px-3 py-2"
       >
-        <div class="min-w-[8rem] flex-1">
-          <.title_field c_name={@c_name} />
-        </div>
-
-        <div :if={@status_row?} class="hidden sm:flex">
-          <.canvas_status
-            presence={@presence}
-            status={@status}
-            can_share?={@can_share?}
-            cells={@cells}
-          />
-        </div>
-
         <div class="ml-auto flex items-center gap-2">
           <button
             type="button"
