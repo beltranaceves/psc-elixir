@@ -524,10 +524,17 @@ html[data-canvas-thumbs] #canvas-tabs[data-split="false"] [role="tab"][aria-sele
     grid-row: 1;
     min-height: 0;
     overflow-y: auto;
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     outline: 1px solid color-mix(in oklab, var(--pane-color) 25%, transparent);
     outline-offset: 2px;
     transition: outline-color 120ms;
+  }
+
+  /* The cards that fill a pane share its tighter corners, so the outline and
+     the card stay concentric. Single view keeps their own radius. */
+  #canvas-tabpanel[data-split="true"]
+    :is(#canvas-grid, #canvas-bento, #canvas-image, #canvas-agent-panel) {
+    border-radius: 0.5rem;
   }
 
   #canvas-tabpanel[data-split="true"] > [data-pane="primary"] {
