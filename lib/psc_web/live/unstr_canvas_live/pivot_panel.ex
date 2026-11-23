@@ -202,9 +202,9 @@ defmodule PscWeb.UnstrCanvasLive.PivotPanel do
         </div>
 
         <div :if={@selected} id="pivot-preview" class="space-y-2">
-          <p class="flex items-center gap-1.5 text-xs text-base-content/50">
-            <.icon name="hero-eye" class="size-3.5" /> The canvas at "{label(@selected)}" · read-only
-          </p>
+          <h2 class="flex items-center gap-1.5 text-sm font-medium uppercase tracking-wide text-base-content/50">
+            <.icon name="hero-eye" class="size-4" /> Version Preview
+          </h2>
           <div class="flex min-h-[28rem] flex-col">
             {render_slot(@preview, @selected)}
           </div>
